@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **A panic while the TUI was running left the terminal broken** — raw mode
+  and the alternate screen were only ever torn down on the normal exit
+  path, so a panic anywhere skipped that cleanup, leaving garbled input and
+  an invisible cursor until the user ran `reset`/`stty sane`. A panic hook
+  installed at the top of `main()` now restores the terminal before
+  letting the default panic report print. Matches Terapi/jsoned.
+
 ### Changed
 - **`q` now requires two presses to quit** — a single stray `q` used to
   close the app immediately with no way back. First press arms a
