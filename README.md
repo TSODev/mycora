@@ -123,8 +123,11 @@ names the part of the design that's actually differentiating: not the tree
 
 ## Status
 
-Design phase — see [ROADMAP.md](./ROADMAP.md) for the phased implementation
-plan, starting from the core tree data model through to a stable v1.0.
+Early but usable — v0.1 through v0.3 are done (in-memory tree, Markdown
+persistence, and full structural operations: move, copy, reorder, delete
+with confirmation and a trash, undo/redo). See [USAGE.md](./USAGE.md) for
+how to use it today, and [ROADMAP.md](./ROADMAP.md) for what's still ahead
+(search, cross-links, a richer layout) through to a stable v1.0.
 
 ## License
 
