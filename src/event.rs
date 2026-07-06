@@ -13,6 +13,17 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
         if key.kind != KeyEventKind::Press {
             return Ok(());
         }
+
+        // Crossterm raw mode disables SIGINT generation, so Ctrl+C would
+        // otherwise do nothing. Treat it as an immediate, unconditional
+        // quit — bypasses modals and the q/q confirm dance, since the whole
+        // point of Ctrl+C is being an emergency escape hatch (matches
+        // Terapi/jsoned).
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            app.should_quit = true;
+            return Ok(());
+        }
+
         if key.code != KeyCode::Char('q') {
             app.reset_quit_confirmation();
         }

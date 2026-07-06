@@ -13,6 +13,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   confirmation (status bar shows "Press q again to quit"); a second `q`
   right after actually quits, any other key cancels it. Matches Terapi's
   existing q/q convention.
+- **`Ctrl+C` quits immediately** — crossterm raw mode disables SIGINT
+  generation so it previously did nothing. Now handled unconditionally
+  before mode dispatch, bypassing the q/q confirm dance and the delete
+  confirmation prompt alike — matches Terapi/jsoned.
 
 ### Added
 - **Full tree operations (v0.3)** — move (Tab/Shift+Tab indent/outdent, with

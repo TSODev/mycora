@@ -159,6 +159,7 @@ session. Not persisted across restarts.
 | `u` | Undo |
 | `Ctrl+R` | Redo |
 | `q` `q` | Quit (press twice — any other key cancels) |
+| `Ctrl+C` | Quit immediately — bypasses any prompt or confirmation |
 
 ### Naming / renaming
 
