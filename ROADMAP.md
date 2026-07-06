@@ -68,6 +68,11 @@ Goal: notes can reference each other outside the tree.
 - [ ] Backlinks panel: "notes that link here"
 - [ ] Link autocompletion while typing `[[`
 - [ ] Handle broken links (target renamed/deleted) gracefully
+- [ ] Link-count badge on collapsed tree branches: aggregate link count
+      across the collapsed subtree (e.g. `▸ Research (12 links)`), computed
+      on the fly from the `links` table rather than cached — expected to
+      stay well under the 50ms search-latency budget even at thousands of
+      notes
 
 ## v0.6 — Search engine upgrade (tantivy)
 
