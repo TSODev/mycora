@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
+use crate::config::Config;
 use crate::note::NoteId;
 use crate::tree::Tree;
+use crate::vault::Vault;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -11,33 +13,55 @@ pub enum Mode {
 
 pub struct App {
     pub tree: Tree,
+    pub vault: Vault,
     pub expanded: HashSet<NoteId>,
     pub selected: Option<NoteId>,
     pub mode: Mode,
     pub input: String,
     pub should_quit: bool,
+    pub last_error: Option<String>,
 }
 
 impl App {
-    pub fn new() -> Self {
-        let mut tree = Tree::new();
-        let welcome = tree.create_note("Welcome to Mycora", None);
-        tree.set_body(
-            welcome,
-            "a: new child  o: new sibling  i: rename  d: delete  q: quit",
-        );
+    /// Loads config + vault from disk and returns the ready-to-run app along
+    /// with any load warnings (malformed files, orphaned/duplicate ids) for
+    /// the caller to print before the TUI takes over the terminal.
+    pub fn new() -> anyhow::Result<(Self, Vec<String>)> {
+        let config = Config::load()?;
+        let mut vault = Vault::open(config.vault_path)?;
+        let (mut tree, report) = vault.load()?;
+
+        let selected = if tree.roots().is_empty() {
+            let welcome = tree.create_note("Welcome to Mycora", None);
+            tree.set_body(
+                welcome,
+                "a: new child  o: new sibling  i: rename  d: delete  q: quit",
+            );
+            if let Some(note) = tree.get(welcome) {
+                vault.save_note(welcome, note)?;
+            }
+            Some(welcome)
+        } else {
+            tree.roots().first().copied()
+        };
 
         let mut expanded = HashSet::new();
-        expanded.insert(welcome);
+        if let Some(id) = selected {
+            expanded.insert(id);
+        }
 
-        Self {
+        let app = Self {
             tree,
+            vault,
             expanded,
-            selected: Some(welcome),
+            selected,
             mode: Mode::Normal,
             input: String::new(),
             should_quit: false,
-        }
+            last_error: None,
+        };
+
+        Ok((app, report.warnings))
     }
 
     /// Depth-first (id, depth) pairs for notes currently visible, respecting
@@ -110,6 +134,7 @@ impl App {
             self.expanded.insert(parent);
         }
         self.selected = Some(new_id);
+        self.persist(new_id);
         self.begin_naming();
     }
 
@@ -118,6 +143,7 @@ impl App {
             let new_id = self.tree.create_note("New note", Some(parent));
             self.expanded.insert(parent);
             self.selected = Some(new_id);
+            self.persist(new_id);
             self.begin_naming();
         }
     }
@@ -133,8 +159,15 @@ impl App {
     pub fn delete_selected(&mut self) {
         if let Some(id) = self.selected {
             let next = self.neighbor_after(id);
-            self.tree.delete(id);
-            self.expanded.remove(&id);
+            if let Some(reparented) = self.tree.delete(id) {
+                self.expanded.remove(&id);
+                if let Err(err) = self.vault.delete_note(id) {
+                    self.last_error = Some(format!("delete failed: {err}"));
+                }
+                for child_id in reparented {
+                    self.persist(child_id);
+                }
+            }
             self.selected = next;
         }
     }
@@ -160,10 +193,11 @@ impl App {
     }
 
     pub fn commit_rename(&mut self) {
-        if !self.input.trim().is_empty() {
-            if let Some(id) = self.selected {
-                self.tree.rename(id, self.input.clone());
-            }
+        if !self.input.trim().is_empty()
+            && let Some(id) = self.selected
+        {
+            self.tree.rename(id, self.input.clone());
+            self.persist(id);
         }
         self.input.clear();
         self.mode = Mode::Normal;
@@ -173,10 +207,14 @@ impl App {
         self.input.clear();
         self.mode = Mode::Normal;
     }
-}
 
-impl Default for App {
-    fn default() -> Self {
-        Self::new()
+    fn persist(&mut self, id: NoteId) {
+        let Some(note) = self.tree.get(id) else {
+            return;
+        };
+        match self.vault.save_note(id, note) {
+            Ok(()) => self.last_error = None,
+            Err(err) => self.last_error = Some(format!("save failed: {err}")),
+        }
     }
 }

@@ -13,3 +13,8 @@ categories = ["command-line-utilities"]
 anyhow = "1.0.103"
 crossterm = "0.29.0"
 ratatui = "0.30.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_yaml = "0.9.34"
+time = { version = "0.3.53", features = ["formatting", "parsing", "serde-well-known"] }
+toml = "1.1.2"
+uuid = { version = "1.23.4", features = ["v4", "serde"] }
