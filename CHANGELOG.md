@@ -8,6 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Full tree operations (v0.3)** — move (Tab/Shift+Tab indent/outdent, with
+  cycle detection), deep-copy a subtree (`y`), reorder siblings (`K`/`J`),
+  and delete with a y/n confirmation prompt. Delete no longer promotes
+  children to the grandparent — it now removes the whole confirmed
+  subtree together, moved to `<vault>/.trash/` rather than erased (trash
+  is never auto-emptied). Every one of these, plus rename, is undoable
+  (`u`) and redoable (`Ctrl+R`) for the rest of the session — undo/redo
+  always re-derives its inverse from the *current* live tree state, so a
+  chain of undo/redo stays correct even across intervening edits.
 - **Markdown persistence (v0.2)** — notes now survive a restart as one
   Markdown file per note in a flat vault directory: YAML frontmatter
   (`id`, `parent`, `order`, `tags`, `created`, `updated`) plus a leading

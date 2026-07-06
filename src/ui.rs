@@ -58,6 +58,20 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
+    if app.mode == Mode::ConfirmDelete {
+        let title = app.pending_delete_title().unwrap_or("this note");
+        let descendants = app.pending_delete_descendant_count().unwrap_or(0);
+        let text = if descendants > 0 {
+            format!("Delete '{title}' and its {descendants} descendant(s)? y/n")
+        } else {
+            format!("Delete '{title}'? y/n")
+        };
+        let paragraph = Paragraph::new(text)
+            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
     if let Some(err) = &app.last_error {
         let paragraph = Paragraph::new(format!("ERROR  {err}"))
             .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
@@ -67,9 +81,10 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
 
     let text = match app.mode {
         Mode::Normal => {
-            "NORMAL  j/k move  h/l or space collapse/expand  a child  o sibling  i rename  d delete  q quit"
+            "NORMAL  j/k move  h/l/space fold  a/o new  y copy  Tab/S-Tab move  K/J reorder  i rename  d delete  u undo  ^R redo  q quit"
         }
         Mode::Insert => "INSERT  Enter confirm  Esc cancel",
+        Mode::ConfirmDelete => unreachable!("handled above"),
     };
     frame.render_widget(Paragraph::new(text), area);
 }

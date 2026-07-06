@@ -10,39 +10,44 @@ itself against real usage — treat this as a plan, not a contract.
 
 Goal: prove the tree model in-memory, no persistence yet.
 
-- [ ] `cargo new mycora`, base crate layout (`app.rs`, `ui.rs`, `event.rs`,
+- [x] `cargo new mycora`, base crate layout (`app.rs`, `ui.rs`, `event.rs`,
       `tree.rs`, `note.rs`)
-- [ ] Core `Note` struct: id, title, body, parent_id, children ordering
-- [ ] In-memory tree: create / edit / delete a note
-- [ ] Minimal ratatui shell: single-pane tree view, keyboard navigation
+- [x] Core `Note` struct: id, title, body, parent_id, children ordering
+- [x] In-memory tree: create / edit / delete a note
+- [x] Minimal ratatui shell: single-pane tree view, keyboard navigation
       (up/down/expand/collapse)
-- [ ] Basic modal input (normal / insert modes, vim-inspired)
+- [x] Basic modal input (normal / insert modes, vim-inspired)
 
 ## v0.2 — Local persistence (Markdown source of truth)
 
 Goal: notes survive a restart, stored as plain text.
 
-- [ ] Define file format: one Markdown file per note, YAML frontmatter
+- [x] Define file format: one Markdown file per note, YAML frontmatter
       (`id`, `parent`, `order`, `tags`, `created`, `updated`)
-- [ ] Load a vault directory into the in-memory tree on startup
-- [ ] Write-through on every edit (no explicit "save" step)
-- [ ] Config file (`~/.config/mycora/config.toml`): vault path, editor
-      integration, keybindings
-- [ ] Handle file-system edge cases: orphaned files, broken parent
+- [x] Load a vault directory into the in-memory tree on startup
+- [x] Write-through on every edit (no explicit "save" step)
+- [x] Config file (`~/.config/mycora/config.toml`): vault path (editor
+      integration and keybindings aren't implemented features yet, so
+      left out of the config schema rather than stubbed unused)
+- [x] Handle file-system edge cases: orphaned files, broken parent
       references, duplicate IDs
 
 ## v0.3 — Full tree operations
 
 Goal: all CRUD + structural operations, safely.
 
-- [ ] Move: reparent a note or subtree (with cycle detection)
-- [ ] Copy: deep-copy a subtree vs. create a link-only reference (explicit
-      user choice between the two)
-- [ ] Reorder siblings
-- [ ] Delete with confirmation; soft-delete/trash option before permanent
-      removal
-- [ ] Undo/redo stack for all destructive or structural operations within a
-      session
+- [x] Move: reparent a note or subtree (with cycle detection). Exposed in
+      the TUI as Tab/Shift+Tab indent/outdent rather than an arbitrary
+      note-picker (that needs the search overlay, v0.4)
+- [x] Copy: deep-copy a subtree only (new ids, duplicated content). The
+      link-only reference variant is deferred to v0.5 — it's really a
+      cross-link with tree presence, and depends on the `links` table that
+      doesn't exist until then (resolved 2026-07-06, was blocking v0.3)
+- [x] Reorder siblings (`K`/`J`)
+- [x] Delete with confirmation; soft-delete/trash option before permanent
+      removal — moves to `<vault>/.trash/`, never auto-emptied
+- [x] Undo/redo stack for all destructive or structural operations within a
+      session (in-memory only, not persisted across restarts)
 
 ## v0.4 — SQLite index & baseline search
 
@@ -138,13 +143,12 @@ Goal: stability before a public release.
 
 ---
 
-## Open design questions (to resolve before v0.3)
+## Open design questions
 
-- **Copy semantics**: does "copy" always deep-copy content, or can a copied
-  node stay a live reference to the same underlying note (i.e. behave like
-  a link with tree presence)? This affects the data model materially and
-  should be settled early.
-- **Note identity**: UUID vs. content-hash vs. path-derived ID — affects
-  how robust wikilinks are to file renames.
+- ~~**Copy semantics**~~ — resolved 2026-07-06: v0.3 implements deep-copy
+  only. Link-only reference copy is really a cross-link with tree
+  presence, deferred to v0.5 once the `links` table exists (see v0.3).
+- ~~**Note identity**~~ — resolved in v0.2: UUID v4, generated at creation
+  and persisted in frontmatter. Stable across renames/moves.
 - **Multiple vaults**: single vault per instance, or support switching
   between several vaults without restarting?

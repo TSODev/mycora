@@ -45,6 +45,9 @@ impl Vault {
         for entry in entries {
             let entry = entry.context("reading vault directory entry")?;
             let path = entry.path();
+            if path.is_dir() {
+                continue;
+            }
             if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
                 continue;
             }
@@ -105,23 +108,43 @@ impl Vault {
         write_note_file(&path, id, note)
     }
 
-    pub fn delete_note(&mut self, id: NoteId) -> Result<()> {
-        if let Some(path) = self.paths.remove(&id) {
-            fs::remove_file(&path).with_context(|| format!("deleting {}", path.display()))?;
-        }
+    /// Moves a note's file into `<vault>/.trash/` rather than deleting it
+    /// outright — the safety net behind confirmed deletes. Trash is never
+    /// auto-emptied or scanned by `load`; restoring a note (e.g. via undo)
+    /// writes a fresh file at the vault root instead of moving this one
+    /// back, so entries here accumulate as a simple, inspectable history.
+    pub fn trash_note(&mut self, id: NoteId) -> Result<()> {
+        let Some(path) = self.paths.remove(&id) else {
+            return Ok(());
+        };
+        let trash_dir = self.root.join(".trash");
+        fs::create_dir_all(&trash_dir)
+            .with_context(|| format!("creating trash directory at {}", trash_dir.display()))?;
+
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("note");
+        let target = unique_path(&trash_dir, stem, "md");
+
+        fs::rename(&path, &target)
+            .with_context(|| format!("moving {} to trash", path.display()))?;
         Ok(())
     }
 
     fn allocate_path(&self, title: &str) -> PathBuf {
-        let base = slugify(title);
-        let mut candidate = self.root.join(format!("{base}.md"));
-        let mut n = 2;
-        while candidate.exists() {
-            candidate = self.root.join(format!("{base}-{n}.md"));
-            n += 1;
-        }
-        candidate
+        unique_path(&self.root, &slugify(title), "md")
     }
+}
+
+fn unique_path(dir: &Path, base: &str, ext: &str) -> PathBuf {
+    let mut candidate = dir.join(format!("{base}.{ext}"));
+    let mut n = 2;
+    while candidate.exists() {
+        candidate = dir.join(format!("{base}-{n}.{ext}"));
+        n += 1;
+    }
+    candidate
 }
 
 fn load_note_file(path: &Path) -> Result<(NoteId, Note)> {
@@ -336,6 +359,27 @@ mod tests {
 
         assert_eq!(report.warnings.len(), 1);
         assert_eq!(tree.roots().len(), 2);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn trash_note_moves_file_out_of_vault_root() {
+        let dir = temp_vault_dir();
+        let mut vault = Vault::open(dir.clone()).unwrap();
+        let note = Note::new("To Trash", None);
+        let id = NoteId::new();
+        vault.save_note(id, &note).unwrap();
+
+        vault.trash_note(id).unwrap();
+
+        assert!(!dir.join("to-trash.md").exists());
+        assert!(dir.join(".trash/to-trash.md").exists());
+
+        let mut reloaded = Vault::open(dir.clone()).unwrap();
+        let (tree, report) = reloaded.load().unwrap();
+        assert!(report.warnings.is_empty());
+        assert!(tree.roots().is_empty());
 
         fs::remove_dir_all(&dir).ok();
     }

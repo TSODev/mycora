@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::app::{App, Mode};
 
@@ -14,16 +14,22 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             return Ok(());
         }
         match app.mode {
-            Mode::Normal => handle_normal(app, key.code),
+            Mode::Normal => handle_normal(app, key),
             Mode::Insert => handle_insert(app, key.code),
+            Mode::ConfirmDelete => handle_confirm_delete(app, key.code),
         }
     }
 
     Ok(())
 }
 
-fn handle_normal(app: &mut App, code: KeyCode) {
-    match code {
+fn handle_normal(app: &mut App, key: KeyEvent) {
+    if key.code == KeyCode::Char('r') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.redo();
+        return;
+    }
+
+    match key.code {
         KeyCode::Char('q') => app.should_quit = true,
         KeyCode::Char('j') | KeyCode::Down => app.move_selection(1),
         KeyCode::Char('k') | KeyCode::Up => app.move_selection(-1),
@@ -32,8 +38,14 @@ fn handle_normal(app: &mut App, code: KeyCode) {
         KeyCode::Char(' ') => app.toggle_expand(),
         KeyCode::Char('o') => app.create_sibling(),
         KeyCode::Char('a') => app.create_child(),
-        KeyCode::Char('d') => app.delete_selected(),
-        KeyCode::Char('i') | KeyCode::Char('r') => app.begin_rename(),
+        KeyCode::Char('y') => app.copy_selected(),
+        KeyCode::Char('d') => app.request_delete(),
+        KeyCode::Char('i') => app.begin_rename(),
+        KeyCode::Tab => app.indent_selected(),
+        KeyCode::BackTab => app.outdent_selected(),
+        KeyCode::Char('K') => app.reorder_up(),
+        KeyCode::Char('J') => app.reorder_down(),
+        KeyCode::Char('u') => app.undo(),
         _ => {}
     }
 }
@@ -46,6 +58,14 @@ fn handle_insert(app: &mut App, code: KeyCode) {
             app.input.pop();
         }
         KeyCode::Char(c) => app.input.push(c),
+        _ => {}
+    }
+}
+
+fn handle_confirm_delete(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Char('y') | KeyCode::Enter => app.confirm_delete(),
+        KeyCode::Char('n') | KeyCode::Esc => app.cancel_delete(),
         _ => {}
     }
 }
