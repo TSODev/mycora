@@ -38,6 +38,9 @@ pub struct App {
     pub input: String,
     pub should_quit: bool,
     pub last_error: Option<String>,
+    /// Set by a first `q` press; a second press actually quits, any other
+    /// key resets it. Mirrors Terapi's q/q confirm dance.
+    pub confirm_quit: bool,
     /// Note pending a delete confirmation (`Mode::ConfirmDelete`).
     pending_delete: Option<NoteId>,
     undo_stack: Vec<UndoAction>,
@@ -81,6 +84,7 @@ impl App {
             input: String::new(),
             should_quit: false,
             last_error: None,
+            confirm_quit: false,
             pending_delete: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -301,6 +305,19 @@ impl App {
     pub fn cancel_delete(&mut self) {
         self.pending_delete = None;
         self.mode = Mode::Normal;
+    }
+
+    /// First `q` arms the confirmation; a second press actually quits.
+    pub fn request_quit(&mut self) {
+        if self.confirm_quit {
+            self.should_quit = true;
+        } else {
+            self.confirm_quit = true;
+        }
+    }
+
+    pub fn reset_quit_confirmation(&mut self) {
+        self.confirm_quit = false;
     }
 
     /// Number of descendants under the pending note, for the confirmation

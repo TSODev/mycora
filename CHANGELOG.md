@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- **`q` now requires two presses to quit** — a single stray `q` used to
+  close the app immediately with no way back. First press arms a
+  confirmation (status bar shows "Press q again to quit"); a second `q`
+  right after actually quits, any other key cancels it. Matches Terapi's
+  existing q/q convention.
+
 ### Added
 - **Full tree operations (v0.3)** — move (Tab/Shift+Tab indent/outdent, with
   cycle detection), deep-copy a subtree (`y`), reorder siblings (`K`/`J`),

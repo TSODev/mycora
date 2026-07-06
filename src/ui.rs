@@ -72,6 +72,13 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
+    if app.confirm_quit {
+        let paragraph = Paragraph::new("Press q again to quit")
+            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
     if let Some(err) = &app.last_error {
         let paragraph = Paragraph::new(format!("ERROR  {err}"))
             .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));

@@ -36,7 +36,8 @@ mycora
 
 No arguments yet. Mycora opens whichever vault is configured (see
 [Configuration](#configuration)) and creates it, with a starter "Welcome to
-Mycora" note, if it doesn't exist yet. Press `q` to quit.
+Mycora" note, if it doesn't exist yet. Press `q` twice to quit (a stray
+single `q` won't close the app).
 
 ## Configuration
 
@@ -157,7 +158,7 @@ session. Not persisted across restarts.
 | `d` | Delete (asks for confirmation) |
 | `u` | Undo |
 | `Ctrl+R` | Redo |
-| `q` | Quit |
+| `q` `q` | Quit (press twice — any other key cancels) |
 
 ### Naming / renaming
 

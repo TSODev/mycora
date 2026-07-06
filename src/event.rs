@@ -13,6 +13,9 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
         if key.kind != KeyEventKind::Press {
             return Ok(());
         }
+        if key.code != KeyCode::Char('q') {
+            app.reset_quit_confirmation();
+        }
         match app.mode {
             Mode::Normal => handle_normal(app, key),
             Mode::Insert => handle_insert(app, key.code),
@@ -30,7 +33,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
     }
 
     match key.code {
-        KeyCode::Char('q') => app.should_quit = true,
+        KeyCode::Char('q') => app.request_quit(),
         KeyCode::Char('j') | KeyCode::Down => app.move_selection(1),
         KeyCode::Char('k') | KeyCode::Up => app.move_selection(-1),
         KeyCode::Char('l') | KeyCode::Right | KeyCode::Enter => app.expand_selected(),
