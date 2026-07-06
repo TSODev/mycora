@@ -94,6 +94,11 @@ Goal: make daily use pleasant, not just functional.
 - [ ] Configurable keybindings
 - [ ] Theming (at minimum: light/dark, respecting terminal colors)
 - [ ] Split-pane layout: tree + note body + backlinks, resizable
+- [ ] Render note body as formatted markdown in the preview pane, built on
+      `pulldown-cmark` (already in the stack for wikilink extraction)
+      rather than a dedicated rendering crate — evaluated `ratatui-markdown`
+      (2026-07) and passed: too young (2 months old, 12 releases, API still
+      moving) and pinned to ratatui ^0.29 vs. our 0.30
 - [ ] Command palette (`:` command mode, à la vim/helix)
 - [ ] Session state: remember last open note, expanded/collapsed branches
 - [ ] 2-line status bar, harmonized with Terapi/jsoned: `Length(2)` band
