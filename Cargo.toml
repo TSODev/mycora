@@ -1,0 +1,9 @@
+[package]
+name = "mycora"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.103"
+crossterm = "0.29.0"
+ratatui = "0.30.2"
