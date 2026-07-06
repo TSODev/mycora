@@ -128,4 +128,5 @@ plan, starting from the core tree data model through to a stable v1.0.
 
 ## License
 
-TBD (likely MIT or Apache-2.0, matching the Terapi precedent).
+Dual-licensed under [MIT](./LICENSE-MIT) or [Apache-2.0](./LICENSE-APACHE),
+at your option.
