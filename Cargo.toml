@@ -18,3 +18,7 @@ serde_yaml = "0.9.34"
 time = { version = "0.3.53", features = ["formatting", "parsing", "serde-well-known"] }
 toml = "1.1.2"
 uuid = { version = "1.23.4", features = ["v4", "serde"] }
+
+[dev-dependencies]
+fake = "5.1.0"
+rand = "0.10.2"

@@ -6,15 +6,8 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
-mod app;
-mod config;
-mod event;
-mod note;
-mod tree;
-mod ui;
-mod vault;
-
-use app::App;
+use mycora::app::App;
+use mycora::{event, ui};
 
 fn main() -> anyhow::Result<()> {
     let (mut app, warnings) = App::new()?;
