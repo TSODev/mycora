@@ -1,5 +1,6 @@
 use std::io;
 
+use clap::Parser;
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -8,6 +9,11 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 
 use mycora::app::App;
 use mycora::{event, ui};
+
+/// Mycora — a tree-native, mycelium-linked note-taking TUI
+#[derive(Parser)]
+#[command(name = "mycora", version, about, long_about = None)]
+struct Cli;
 
 /// Restores the terminal (raw mode + alternate screen) before a panic's
 /// default report prints — otherwise a panic while the TUI is active leaves
@@ -24,6 +30,7 @@ fn install_panic_hook() {
 
 fn main() -> anyhow::Result<()> {
     install_panic_hook();
+    Cli::parse();
     let (mut app, warnings) = App::new()?;
     for warning in &warnings {
         eprintln!("mycora: {warning}");

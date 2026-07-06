@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **`--help` and `--version`** via `clap` — matches Terapi/jsoned's CLI
+  conventions. No other flags/arguments yet.
+
 ### Fixed
 - **A panic while the TUI was running left the terminal broken** — raw mode
   and the alternate screen were only ever torn down on the normal exit
