@@ -55,6 +55,9 @@ Goal: fast lookups without scanning the filesystem every time.
 - [ ] Incremental reindex on file change (watch vault directory)
 - [ ] SQLite FTS5 virtual table for full-text search over title + body
 - [ ] Search overlay in the TUI (fuzzy-ish substring search to start)
+- [ ] Tag filtering: filter notes by one or more tags with AND/OR boolean
+      logic (baseline set-filtering over the `notes`/tags index, no
+      relevance ranking yet — that's v0.6's job)
 
 ## v0.5 — Cross-links (the "mycelial" layer)
 
@@ -73,7 +76,8 @@ Goal: relevance-ranked search, not just substring matches.
 - [ ] Introduce tantivy as the primary full-text index, fed from the same
       Markdown source
 - [ ] BM25-ranked results; snippet/highlight generation
-- [ ] Faceted filters: by tag, by date range, by tree branch
+- [ ] Faceted filters combined with ranked results: tag (building on
+      v0.4's AND/OR tag filter), date range, tree branch
 - [ ] Benchmark tantivy vs. FTS5 on a realistic vault size before fully
       committing (keep FTS5 as fallback if tantivy adds too much overhead
       for small vaults)
@@ -87,6 +91,15 @@ Goal: make daily use pleasant, not just functional.
 - [ ] Split-pane layout: tree + note body + backlinks, resizable
 - [ ] Command palette (`:` command mode, à la vim/helix)
 - [ ] Session state: remember last open note, expanded/collapsed branches
+- [ ] 2-line status bar, harmonized with Terapi/jsoned: `Length(2)` band
+      split into two `Length(1)` rows, `Color::Indexed(236)` background.
+      Row 1: contextual breadcrumb (`vault › branch › note`). Row 2:
+      keybinding hints, styled per terapi's hint-parser (bold key tokens,
+      dim separators) rather than jsoned's plain concatenated string.
+- [ ] No top-level Tabs bar for now — Mycora's single-view-with-panels
+      layout (tree + editor + backlinks) matches jsoned's model, not
+      terapi's multi-view one. Revisit only if a genuinely separate
+      top-level view emerges (e.g. a tree view vs. a link/graph view).
 
 ## v0.8 — Import / export & interoperability
 
