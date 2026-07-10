@@ -168,6 +168,21 @@ Rewrites the whole file from a fresh parse (like `cargo add` rewriting
 `Cargo.toml`) rather than a surgical text edit — simple, but any hand-added
 comments or unusual formatting in `config.toml` won't survive.
 
+To also create the vault directory and mount it in one step:
+
+```sh
+mycora vault init <name> <path>
+```
+
+Same as `vault add` (always mounted, no `--no-mount` option — mounting is
+the point), plus creating `<path>` if it doesn't exist yet. Reports
+whether the new vault actually became the *active* (read-write) one:
+that only happens if it's named `"default"`, or ends up the only/first
+mounted entry (see [Configuration](#configuration) above) — if another
+vault is already named `"default"`, the new one is still created and
+mounted, just read-only in the TUI, and the command tells you so rather
+than silently renaming the existing `"default"` entry to make room.
+
 ## The vault format
 
 Notes are plain Markdown files, one per note, in a single flat directory —

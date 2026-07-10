@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`mycora vault init` CLI command** — creates a vault directory and
+  registers it in `config.toml`, always mounted, then reports whether it
+  actually became the active (read-write) vault (only true if it ends
+  up named `"default"`, or is the only/first mounted entry). If a
+  `"default"` vault already exists, the new one is still created and
+  mounted but stays read-only in the TUI — reported explicitly, rather
+  than silently renaming the existing `"default"` entry to make room.
 - **`mycora vault add` CLI command** — registers a new vault in
   `config.toml`'s registry (`mycora vault add <name> <path>
   [--no-mount]`) instead of hand-editing the TOML. Creates the file if

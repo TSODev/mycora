@@ -60,6 +60,16 @@ enum VaultCommand {
         #[arg(long)]
         no_mount: bool,
     },
+    /// Create a vault directory, register it (always mounted), and report
+    /// whether it became the active (read-write) vault.
+    Init {
+        /// Name for the vault — its index vault_id, must be unique in the
+        /// registry.
+        name: String,
+        /// Path to the vault's directory on disk; created if it doesn't
+        /// exist yet.
+        path: PathBuf,
+    },
 }
 
 /// Restores the terminal (raw mode + alternate screen) before a panic's
@@ -89,6 +99,9 @@ fn main() -> anyhow::Result<()> {
                 no_mount,
             },
         }) => return vault_add(&name, path, !no_mount),
+        Some(Command::Vault {
+            action: VaultCommand::Init { name, path },
+        }) => return vault_init(&name, path),
         None => {}
     }
 
@@ -135,6 +148,42 @@ fn vault_add(name: &str, path: PathBuf, mounted: bool) -> anyhow::Result<()> {
         path.display(),
         config_path.display()
     );
+    Ok(())
+}
+
+/// Creates the vault directory (`Vault::open`, same lazy `create_dir_all`
+/// every vault gets on first use), registers it always-mounted via
+/// `Config::add_vault`, then reports whether it actually became the
+/// active (read-write) vault. Doesn't force that: `Config::active_vault`
+/// only picks an entry named `"default"` (or the first mounted one if
+/// none is), so if another vault already holds that name, this one is
+/// still created and mounted but stays read-only in the TUI — the user
+/// is told so explicitly rather than an existing vault's registry entry
+/// being silently renamed to make room (confirmed with the user before
+/// implementing: creating and reporting honestly, not reassigning).
+fn vault_init(name: &str, path: PathBuf) -> anyhow::Result<()> {
+    Vault::open(path.clone())?;
+
+    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
+    let config_path = Config::default_path(&home);
+    Config::add_vault(&config_path, name, path.clone(), true)?;
+
+    let config = Config::load()?;
+    if config.active_vault().name == name {
+        println!(
+            "mycora: created and mounted \"{name}\" ({}) as the active (read-write) vault",
+            path.display()
+        );
+    } else {
+        println!(
+            "mycora: created and mounted \"{name}\" ({}), but \"{}\" is still the active \
+             (read-write) vault — \"{name}\" stays read-only in the TUI until you rename \
+             entries in {} so \"{name}\" is the one named \"default\"",
+            path.display(),
+            config.active_vault().name,
+            config_path.display()
+        );
+    }
     Ok(())
 }
 

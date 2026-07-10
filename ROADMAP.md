@@ -601,3 +601,23 @@ Goal: stability before a public release.
   config created it; adding a second preserved the first; adding a
   duplicate name errored without touching the file; adding to a
   `vault_path`-only config correctly migrated it alongside the new entry.
+  **Since extended again** (2026-07-10, user-requested): `mycora vault
+  init <name> <path>` creates the vault directory (`Vault::open`'s usual
+  lazy `create_dir_all`), registers it always-mounted (reuses
+  `Config::add_vault`), then reports whether it actually became the
+  active/editable vault — it only does if it ends up named `"default"`
+  (or is the sole/first mounted entry), per `Config::active_vault`'s
+  existing rule. Raised an ambiguous case explicitly with the user before
+  implementing (`AskUserQuestion`): what happens when a `"default"`
+  vault already exists? **Confirmed: create and mount it anyway,
+  report honestly that it's staying read-only and why, and never
+  silently rename/reassign the existing `"default"` entry to make
+  room** — the other two options considered (auto-demote the existing
+  default, or refuse to create anything at all) were both rejected as
+  either too surprising or too inconvenient. Manually verified: `vault
+  init default <path>` into an empty config became the active vault
+  (confirmed live in the TUI: `default` was the editable tree, its
+  breadcrumb showed the auto-seeded "Welcome to Mycora" note);
+  `vault init work <path>` afterward printed the "stays read-only"
+  message, and relaunching the TUI showed `work` stacked read-only below
+  `default`, exactly as the message said it would.
