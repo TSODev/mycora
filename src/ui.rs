@@ -488,23 +488,47 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
     let sep_style = bg.add_modifier(Modifier::DIM);
     let label_style = bg.fg(Color::Gray);
 
+    // In Normal mode with a read-only note selected, every mutating key
+    // dims out (same style as the separators) instead of its usual
+    // bold-key/muted-label styling — it'll still just report "this vault
+    // is read-only" if pressed (see `App::require_editable`), so the hint
+    // row says so before the user tries. Every other mode's hints are
+    // either non-mutating already (Search, Backlinks, TagResults, ...)
+    // or only ever reachable with an editable selection to begin with, so
+    // no dimming applies there.
+    let disabled_keys: &[&str] = if app.mode == Mode::Normal && app.selected_is_read_only() {
+        &["a/o", "y", "Tab/S-Tab", "K/J", "i", "e", "d"]
+    } else {
+        &[]
+    };
+
     let mut spans = vec![
         Span::styled(mode_label, mode_style),
         Span::styled("  ", sep_style),
     ];
-    spans.extend(spans_from_hints(hints, key_style, sep_style, label_style));
+    spans.extend(spans_from_hints(
+        hints,
+        key_style,
+        sep_style,
+        label_style,
+        disabled_keys,
+    ));
 
     frame.render_widget(Paragraph::new(Line::from(spans)).style(bg), area);
 }
 
 /// Splits a `"key: label  key: label  ..."` hint string (double-space
 /// separated) into styled spans — bold key, dim colon/separator, muted
-/// label — matching Terapi's hint-parser convention.
+/// label — matching Terapi's hint-parser convention. A token whose key
+/// exactly matches an entry in `disabled_keys` renders fully dimmed
+/// (`sep_style` for both key and label) instead, to mark it as currently
+/// unusable without removing it from the hint row entirely.
 fn spans_from_hints(
     text: &str,
     key_style: Style,
     sep_style: Style,
     label_style: Style,
+    disabled_keys: &[&str],
 ) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     for (i, token) in text.split("  ").filter(|t| !t.is_empty()).enumerate() {
@@ -513,9 +537,12 @@ fn spans_from_hints(
         }
         match token.split_once(": ") {
             Some((key, label)) => {
-                spans.push(Span::styled(key.to_string(), key_style));
+                let disabled = disabled_keys.contains(&key);
+                let this_key_style = if disabled { sep_style } else { key_style };
+                let this_label_style = if disabled { sep_style } else { label_style };
+                spans.push(Span::styled(key.to_string(), this_key_style));
                 spans.push(Span::styled(": ", sep_style));
-                spans.push(Span::styled(label.to_string(), label_style));
+                spans.push(Span::styled(label.to_string(), this_label_style));
             }
             None => spans.push(Span::styled(token.to_string(), key_style)),
         }

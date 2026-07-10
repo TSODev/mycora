@@ -765,3 +765,26 @@ Goal: stability before a public release.
   tmux: the marker appeared exactly when a read-only note was selected
   and disappeared exactly when selection returned to the active vault,
   with the breadcrumb's own text never shifting width.
+  **Since extended an eighth time** (2026-07-10, user-requested):
+  Normal mode's hint row (row 2) now dims the seven mutating hints —
+  `a/o: new`, `y: copy`, `Tab/S-Tab: move`, `K/J: reorder`, `i: rename`,
+  `e: edit`, `d: delete` — down to the same style as the row's own
+  separators whenever `App::selected_is_read_only()` is true, rather
+  than showing every hint at full brightness even though pressing one of
+  those seven would immediately bounce off `require_editable` and show
+  "this vault is read-only." `u: undo`/`^R: redo` deliberately stay
+  full-brightness — they aren't gated by `require_editable` at all
+  (the undo stack can never hold a foreign-vault action, so both always
+  work regardless of what's selected), so dimming them would have been
+  inaccurate, not just extra caution. `spans_from_hints` gained a
+  `disabled_keys: &[&str]` parameter (matched against each token's exact
+  key substring, e.g. `"Tab/S-Tab"`), passed as a hardcoded list from
+  `draw_hint_row` only when `Mode::Normal` and the selection is
+  read-only — every other mode's hints are either already non-mutating
+  or only ever reachable with an editable selection to begin with, so no
+  dimming logic was needed there. Manually verified in tmux (ANSI codes
+  inspected via `tmux capture-pane -e`): on the active vault's note, all
+  seven hints carried the normal bold-key/muted-label styling; on a
+  read-only note, those same seven rendered with no bold/color codes at
+  all (fully dimmed), while `j/k`, `u`, `^R`, `/`, `b`, and the resize
+  keys kept their normal styling throughout.

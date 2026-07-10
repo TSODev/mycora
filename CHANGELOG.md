@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Mutating hints dim out in the status bar when a read-only note is
+  selected** — `a/o: new`, `y: copy`, `Tab/S-Tab: move`, `K/J: reorder`,
+  `i: rename`, `e: edit`, and `d: delete` render at the same dim style
+  as the hint row's separators instead of full brightness, since
+  pressing any of them would just bounce off with "this vault is
+  read-only." `u: undo`/`^R: redo` stay full-brightness — they aren't
+  gated by vault ownership and always work.
 - **`READ-ONLY` marker on the status bar's breadcrumb row** — appears
   right-aligned whenever the current selection is in a read-only mounted
   vault, fixed-width so the breadcrumb text doesn't shift as you move in
