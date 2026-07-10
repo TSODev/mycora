@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **FTS5 full-text search (v0.4)** — `notes_fts` virtual table over title +
+  body (+ tags), populated by `reindex` alongside `notes`/`tree_edges`.
+  `Index::search(vault_id, query)` turns free-text input into an ANDed,
+  per-term prefix match rather than exposing raw FTS5 syntax, ranked
+  best-first. Not wired into the TUI yet — no way to trigger a search
+  outside tests until the search overlay lands.
 - **SQLite index & `mycora reindex` (start of v0.4)** — a disposable index
   (`notes`, `tree_edges`, `links`, each keyed by `vault_id`) at
   `~/.local/share/mycora/index.sqlite3`, rebuilt from the active vault's

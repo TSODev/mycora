@@ -64,7 +64,12 @@ Goal: fast lookups without scanning the filesystem every time.
       and regenerable from the Markdown files; rebuilds only the active
       vault's rows (`config.active_vault()`), scoped by `vault_id`
 - [ ] Incremental reindex on file change (watch vault directory)
-- [ ] SQLite FTS5 virtual table for full-text search over title + body
+- [x] SQLite FTS5 virtual table for full-text search over title + body —
+      `notes_fts` (title, body, tags), rebuilt alongside `notes`/`tree_edges`
+      in `reindex`. `Index::search()` turns free-text input into an ANDed,
+      per-term prefix match (`"term"*`) rather than exposing raw FTS5 query
+      syntax to callers; ranked by FTS5's built-in `rank`. No TUI hookup yet
+      — that's the next item
 - [ ] Search overlay in the TUI (fuzzy-ish substring search to start)
 - [ ] Tag filtering: filter notes by one or more tags with AND/OR boolean
       logic (baseline set-filtering over the `notes`/tags index, no

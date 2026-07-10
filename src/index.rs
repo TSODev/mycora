@@ -3,9 +3,17 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection};
 use time::format_description::well_known::Rfc3339;
+use uuid::Uuid;
 
+use crate::note::NoteId;
 use crate::tree::Tree;
 use crate::vault::Vault;
+
+/// One full-text search hit, ranked best-first.
+pub struct SearchHit {
+    pub note_id: NoteId,
+    pub title: String,
+}
 
 /// A disposable SQLite index over one or more vaults' notes, rebuilt from
 /// the Markdown source on demand (`reindex`) rather than treated as a
@@ -63,6 +71,13 @@ impl Index {
                 target   TEXT NOT NULL,
                 PRIMARY KEY (vault_id, source, target)
             );
+            CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+                title,
+                body,
+                tags,
+                vault_id UNINDEXED,
+                note_id UNINDEXED
+            );
             ",
         )
         .context("creating index schema")?;
@@ -77,6 +92,10 @@ impl Index {
         tx.execute("DELETE FROM notes WHERE vault_id = ?1", params![vault_id])?;
         tx.execute(
             "DELETE FROM tree_edges WHERE vault_id = ?1",
+            params![vault_id],
+        )?;
+        tx.execute(
+            "DELETE FROM notes_fts WHERE vault_id = ?1",
             params![vault_id],
         )?;
 
@@ -113,11 +132,65 @@ impl Index {
                     note.order
                 ],
             )?;
+            tx.execute(
+                "INSERT INTO notes_fts (title, body, tags, vault_id, note_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![note.title, note.body, tags, vault_id, id.0.to_string()],
+            )?;
             count += 1;
         }
 
         tx.commit()?;
         Ok(count)
+    }
+
+    /// Full-text search over title + body (+ tags) within `vault_id`,
+    /// best-match first. Baseline substring-ish matching for v0.4 — each
+    /// whitespace-separated term becomes an FTS5 prefix match, ANDed
+    /// together, rather than exposing raw FTS5 query syntax to the caller.
+    /// Relevance ranking upgrades to tantivy/BM25 in v0.6.
+    pub fn search(&self, vault_id: &str, query: &str) -> Result<Vec<SearchHit>> {
+        let match_query = Self::build_match_query(query);
+        if match_query.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut stmt = self.conn.prepare(
+            "SELECT note_id, title FROM notes_fts
+             WHERE notes_fts MATCH ?1 AND vault_id = ?2
+             ORDER BY rank
+             LIMIT 50",
+        )?;
+        let rows = stmt.query_map(params![match_query, vault_id], |row| {
+            let note_id: String = row.get(0)?;
+            let title: String = row.get(1)?;
+            Ok((note_id, title))
+        })?;
+
+        let mut hits = Vec::new();
+        for row in rows {
+            let (note_id, title) = row?;
+            let uuid = Uuid::parse_str(&note_id)
+                .with_context(|| format!("indexed note id {note_id} is not a valid UUID"))?;
+            hits.push(SearchHit {
+                note_id: NoteId(uuid),
+                title,
+            });
+        }
+        Ok(hits)
+    }
+
+    /// Turns free-text user input into an FTS5 MATCH expression: each term
+    /// is quoted (so punctuation/FTS5 operators in the input can't be
+    /// interpreted as query syntax) and suffixed with `*` for prefix
+    /// matching, ANDed together via FTS5's default bareword-adjacency
+    /// behavior.
+    fn build_match_query(query: &str) -> String {
+        query
+            .split_whitespace()
+            .map(|term| format!("\"{}\"*", term.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     pub fn note_count(&self, vault_id: &str) -> Result<i64> {
@@ -197,5 +270,53 @@ mod tests {
         std::fs::remove_file(&db_path).ok();
         std::fs::remove_dir_all(&vault_a_dir).ok();
         std::fs::remove_dir_all(&vault_b_dir).ok();
+    }
+
+    #[test]
+    fn search_finds_notes_by_title_or_body_prefix() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let rust_note = tree.create_note("Rust ownership", None);
+        tree.set_body(rust_note, "Notes about borrowing and lifetimes.");
+        let other_note = tree.create_note("Grocery list", None);
+        tree.set_body(other_note, "Milk, eggs, bread.");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let hits = index.search("default", "borrow").unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].note_id, rust_note);
+        assert_eq!(hits[0].title, "Rust ownership");
+
+        let title_hits = index.search("default", "Rust").unwrap();
+        assert_eq!(title_hits.len(), 1);
+        assert_eq!(title_hits[0].note_id, rust_note);
+
+        assert!(index.search("default", "xyzzy").unwrap().is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn search_is_scoped_to_its_vault_id() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree_a = Tree::new();
+        tree_a.create_note("Shared Topic", None);
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+        index.reindex("a", &tree_a, &vault_a).unwrap();
+
+        assert_eq!(index.search("a", "shared").unwrap().len(), 1);
+        assert!(index.search("b", "shared").unwrap().is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
     }
 }
