@@ -507,6 +507,21 @@ Goal: notes are never trapped in Mycora.
 
 - [ ] Import from an existing Obsidian-style vault (wikilinks + frontmatter)
 - [ ] Export a subtree to a single flattened Markdown document
+- [ ] Export a subtree to a PDF file — user-requested (2026-07-10). Most
+      likely built on top of the Markdown export just above (flatten the
+      subtree first, then render *that* to PDF) rather than a separate
+      pipeline, so it should land after/alongside it, not before.
+      Rendering approach not decided yet: shelling out to an
+      already-installed tool (`pandoc`, `wkhtmltopdf`) needs no new Rust
+      dependency but requires that tool to be present on the user's
+      machine; a pure-Rust PDF crate (e.g. `printpdf`, `typst-as-lib`) is
+      self-contained but adds real weight, and likely can't reuse
+      `markdown.rs`'s ratatui-specific renderer as-is (that one targets
+      `ratatui::text::Line`, not a page-layout output) — pick the
+      rendering approach before starting implementation, not while
+      mid-way through it. Command surface not scoped yet either — a `:`
+      command (`:export pdf`?) vs. a `mycora export` CLI subcommand are
+      both plausible, same open question as the Markdown export above.
 - [ ] Optional Postman/Terapi-style templating hooks (stretch — evaluate
       whether this belongs here or in a separate tool)
 
