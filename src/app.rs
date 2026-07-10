@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::PathBuf;
 
 use ratatui::widgets::{Block, Borders};
 use ratatui_textarea::TextArea;
@@ -6,8 +7,22 @@ use ratatui_textarea::TextArea;
 use crate::config::Config;
 use crate::index::{Index, IndexedNote, SearchHit};
 use crate::note::{Note, NoteId};
+use crate::session::Session;
 use crate::tree::Tree;
 use crate::vault::Vault;
+
+/// Expands every ancestor of `id` in `tree` so it's reachable in a
+/// depth-first, collapse-respecting traversal — shared by `App::reveal`
+/// (used after a search/backlinks jump) and `App::new`'s session restore
+/// (used before `App` itself exists, hence a free function rather than a
+/// method).
+fn reveal_ancestors(tree: &Tree, expanded: &mut HashSet<NoteId>, id: NoteId) {
+    let mut current = tree.get(id).and_then(|note| note.parent);
+    while let Some(ancestor) = current {
+        expanded.insert(ancestor);
+        current = tree.get(ancestor).and_then(|note| note.parent);
+    }
+}
 
 /// A vault mounted alongside the primary one: loaded and indexed (so its
 /// notes count toward search/backlinks/link-count badges under its own
@@ -98,6 +113,9 @@ pub struct App {
     /// just `selected` — navigation is disabled in `EditBody` mode so it
     /// can't change out from under the editor.
     body_editor: Option<TextArea<'static>>,
+    /// Where `save_session` writes on exit — computed once from
+    /// `config.home` so later saves don't need a `Config` around.
+    session_path: PathBuf,
 }
 
 impl App {
@@ -133,7 +151,7 @@ impl App {
             .expect("active_vault()'s name always exists among mounted_vaults()");
         let (_, mut tree, mut vault) = loaded.remove(primary_idx);
 
-        let selected = if tree.roots().is_empty() {
+        let mut selected = if tree.roots().is_empty() {
             let welcome = tree.create_note("Welcome to Mycora", None);
             tree.set_body(
                 welcome,
@@ -150,6 +168,26 @@ impl App {
         let mut expanded = HashSet::new();
         if let Some(id) = selected {
             expanded.insert(id);
+        }
+
+        // Restore last session's selection/expand state for this vault, if
+        // any was saved — ids that no longer resolve (the note was deleted
+        // or the vault changed since) are dropped rather than kept
+        // dangling. Falls back to the defaults just computed above when
+        // nothing was saved, or when the saved selection no longer exists.
+        let session_path = Session::default_path(&config.home);
+        let session = Session::load(&session_path);
+        if let Some((saved_selected, saved_expanded)) = session.for_vault(&active.name) {
+            expanded = saved_expanded
+                .into_iter()
+                .filter(|id| tree.get(*id).is_some())
+                .collect();
+            if let Some(id) = saved_selected.filter(|id| tree.get(*id).is_some()) {
+                selected = Some(id);
+                // Guarantee the restored selection is actually visible,
+                // regardless of what the saved expanded set had.
+                reveal_ancestors(&tree, &mut expanded, id);
+            }
         }
 
         let index_path = Index::default_path(&config.home);
@@ -218,9 +256,18 @@ impl App {
             backlinks_selected: 0,
             other_vaults,
             body_editor: None,
+            session_path,
         };
 
         Ok((app, warnings))
+    }
+
+    /// Saves this vault's current selection/expand state, for the next
+    /// `App::new()` to restore. Called once at shutdown (see `main.rs`),
+    /// not write-through — see `Session`'s doc comment for why.
+    pub fn save_session(&self) -> anyhow::Result<()> {
+        let mut session = Session::load(&self.session_path);
+        session.save(&self.vault_id, self.selected, &self.expanded)
     }
 
     /// Depth-first (id, depth) pairs for notes currently visible, respecting
@@ -700,11 +747,7 @@ impl App {
 
     /// Expands every ancestor of `id` so it's visible in `visible_notes()`.
     fn reveal(&mut self, id: NoteId) {
-        let mut current = self.tree.get(id).and_then(|note| note.parent);
-        while let Some(ancestor) = current {
-            self.expanded.insert(ancestor);
-            current = self.tree.get(ancestor).and_then(|note| note.parent);
-        }
+        reveal_ancestors(&self.tree, &mut self.expanded, id);
     }
 
     pub fn search_query(&self) -> &str {

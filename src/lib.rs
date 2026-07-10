@@ -5,6 +5,7 @@ pub mod index;
 pub mod link;
 pub mod markdown;
 pub mod note;
+pub mod session;
 pub mod tree;
 pub mod ui;
 pub mod vault;

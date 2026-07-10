@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Session state (v0.7)** — Mycora now remembers the last selected note
+  and which branches were expanded/collapsed, per vault, across restarts.
+  New `src/session.rs` reads/writes `~/.local/share/mycora/session.toml`.
+  Saved once at shutdown (covers both `q`/`q` and `Ctrl+C` uniformly, no
+  per-keystroke writes) and restored in `App::new` — ids that no longer
+  exist are dropped, and the restored selection's ancestors are always
+  expanded so it's actually visible.
+
 ### Changed
 - **2-line status bar (v0.7)**, harmonized with Terapi/jsoned — a
   `Length(2)` band split into two `Length(1)` rows, `Color::Indexed(236)`

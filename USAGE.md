@@ -89,6 +89,12 @@ No other arguments yet. Mycora opens whichever vault is configured (see
 Mycora" note, if it doesn't exist yet. Press `q` twice to quit (a stray
 single `q` won't close the app).
 
+Which note was selected and which branches were expanded/collapsed are
+remembered per vault and restored the next time you open it — whether you
+quit with `q`/`q` or `Ctrl+C`. Stored at
+`~/.local/share/mycora/session.toml`, safe to delete if you ever want to
+reset it.
+
 ## Configuration
 
 Config file at `~/.config/mycora/config.toml`. Mycora keeps a registry of

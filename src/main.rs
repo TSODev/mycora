@@ -71,10 +71,19 @@ fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let result = run(&mut app, &mut terminal);
+    // Save regardless of should_quit vs. an error from run(): the app is
+    // exiting either way, and this covers both q/q and Ctrl+C uniformly
+    // (both just set should_quit and let the loop exit here) without
+    // special-casing either path.
+    let session_result = app.save_session();
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
+
+    if let Err(err) = session_result {
+        eprintln!("mycora: failed to save session: {err}");
+    }
 
     result
 }

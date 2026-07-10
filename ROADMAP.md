@@ -311,7 +311,30 @@ Goal: make daily use pleasant, not just functional.
       bracketed text too — highlighting them specially is a separate,
       not-yet-scoped concern from "render the Markdown"
 - [ ] Command palette (`:` command mode, à la vim/helix)
-- [ ] Session state: remember last open note, expanded/collapsed branches
+- [x] Session state: remember last open note, expanded/collapsed branches
+      (2026-07-10) — new `src/session.rs`: `Session::load`/`save` read and
+      write `~/.local/share/mycora/session.toml` (XDG data dir alongside
+      the SQLite index, since this is generated state, not user-authored
+      config), keyed by vault name so switching which vault is `default`
+      doesn't clobber another vault's remembered position. Saved once at
+      shutdown (`App::save_session`, called from `main.rs` right after
+      `run()` returns) rather than write-through on every expand/collapse
+      or selection change — this is ephemeral navigation state, not user
+      content, so per-keystroke disk writes would be wasted I/O for no
+      benefit over saving once on exit. That single save point after
+      `run()` naturally covers both `q`/`q` and `Ctrl+C`, since both just
+      set `should_quit` and let the same loop-exit path handle the rest,
+      with no special-casing needed for either. Restored in `App::new`:
+      ids that no longer resolve (note deleted, vault changed) are
+      dropped rather than kept dangling, and the restored selection's
+      ancestors are always expanded to guarantee it's actually visible,
+      regardless of what the saved expanded set had (extracted the
+      existing `reveal`'s ancestor-walk into a free function,
+      `reveal_ancestors`, since `App::new` needs it before `self` exists).
+      Manually verified in tmux: collapsed a branch and selected a
+      different root, quit with `q`/`q`, relaunched, and both were
+      restored exactly; repeated with `Ctrl+C` instead of `q`/`q` and the
+      session was saved there too
 - [x] 2-line status bar, harmonized with Terapi/jsoned (2026-07-10):
       `Length(2)` band split into two `Length(1)` rows, `Color::Indexed(236)`
       background on both. Row 1 (`draw_breadcrumb`): `vault › branch › note`
