@@ -8,6 +8,17 @@ use ratatui::{
 
 use crate::app::{App, Mode};
 
+/// Split-pane border accents. Named ANSI colors, not RGB/indexed — the
+/// terminal maps these to whatever's actually configured (light theme,
+/// dark theme, Solarized, ...), so light/dark theming ("respecting
+/// terminal colors", per ROADMAP.md's v0.7 entry) comes for free rather
+/// than needing an explicit theme switch. The backlinks pane has no idle
+/// accent of its own; it only turns cyan when focused (see
+/// `draw_backlinks_pane`) — that color is reused, not clashing, with the
+/// status bar's own "this is the active thing" cyan (the mode label).
+const PANE_TREE_COLOR: Color = Color::Blue;
+const PANE_BODY_COLOR: Color = Color::Magenta;
+
 /// `Length(2)` status band at the bottom (see `draw_status`) below the
 /// main content — matches Terapi/jsoned's 2-line status bar convention.
 pub fn draw(frame: &mut Frame, app: &App) {
@@ -126,13 +137,18 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Mycora"));
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(PANE_TREE_COLOR))
+            .title("Mycora"),
+    );
     frame.render_widget(list, area);
 }
 
-/// Read-only preview of the selected note's body — plain text, not
-/// rendered Markdown (that's a separate, still-open ROADMAP item). Empty
-/// when nothing's selected or the note has no body yet.
+/// Read-only preview of the selected note's body, rendered as Markdown
+/// (see `crate::markdown`). Empty when nothing's selected or the note has
+/// no body yet.
 fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
     let note = app.selected.and_then(|id| app.tree.get(id));
     let title = note.map(|n| n.title.as_str()).unwrap_or("");
@@ -140,7 +156,12 @@ fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
 
     let paragraph = Paragraph::new(crate::markdown::render(body))
         .wrap(Wrap { trim: false })
-        .block(Block::default().borders(Borders::ALL).title(title));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(PANE_BODY_COLOR))
+                .title(title),
+        );
     frame.render_widget(paragraph, area);
 }
 

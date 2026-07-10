@@ -7,7 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Colored split-pane borders (v0.7)** — the tree pane's border is blue,
+  the body preview pane's is magenta; the backlinks pane keeps its
+  existing default-idle/cyan-when-focused behavior. Colors chosen to
+  avoid clashing with what's already meaningful elsewhere (cyan =
+  focused/active, yellow = confirmation prompts, red = errors, green =
+  markdown code).
+
 ### Changed
+- **Theming: light/dark now "just works" via named ANSI colors (v0.7)** —
+  every explicit color in the app uses a named ANSI color rather than RGB
+  or a 256-color index (one exception: the status bar's background, kept
+  as the already-shipped Terapi/jsoned harmonization it was). The
+  terminal maps named colors to whatever scheme it's configured with, so
+  light/dark support comes for free rather than needing an explicit
+  in-app theme switch — none was added.
 - **Dropped arbitrary configurable keybindings from the roadmap** — the
   current vim-inspired bindings already match the audience a terminal
   note-taking tool draws; full remapping would add a permanent

@@ -221,27 +221,33 @@ key in bold). A prompt — the delete confirmation, the quit-confirm notice,
 or an error — replaces the bottom row only, leaving the breadcrumb above
 it in place.
 
-- **Tree** (left) — the indented, collapsible note tree, same as before.
-  If other vaults are mounted alongside the default one (see
+- **Tree** (left, blue border) — the indented, collapsible note tree, same
+  as before. If other vaults are mounted alongside the default one (see
   [Configuration](#configuration)), their root notes appear stacked below
   it, each vault preceded by a dimmed `── name ──` separator. These rows
   are read-only: `j`/`k` never selects into them, and their link-count
   badges work the same as the default vault's, just computed against that
   vault's own notes.
-- **Body preview** (middle) — the selected note's body, rendered as
-  Markdown (headings, bold/italic, inline/block code, lists, blockquotes,
-  horizontal rules). Updates live as you move the selection. Read-only and
-  not interactive: links and `[[wikilinks]]` render as plain text, not as
-  something you can click or navigate from the preview itself.
-- **Backlinks** (right) — notes linking to the selected note, live. Press
-  `b` to move keyboard focus into it (cyan border, highlighted entry) —
-  see [Backlinks](#backlinks) below.
+- **Body preview** (middle, magenta border) — the selected note's body,
+  rendered as Markdown (headings, bold/italic, inline/block code, lists,
+  blockquotes, horizontal rules). Updates live as you move the selection.
+  Read-only and not interactive: links and `[[wikilinks]]` render as plain
+  text, not as something you can click or navigate from the preview
+  itself.
+- **Backlinks** (right) — notes linking to the selected note, live. No
+  border color while idle; press `b` to move keyboard focus into it (cyan
+  border, highlighted entry) — see [Backlinks](#backlinks) below.
 
 Column widths start at 40%/40%/20% and are adjustable: `[`/`]` shrink/grow
 the tree pane, `{`/`}` shrink/grow the backlinks pane — the body pane
 always absorbs whatever width the other two give up or take, down to a
 10% floor per pane. Not persisted: they reset to the default each time
 you launch Mycora.
+
+Every color Mycora uses is a named terminal color, not a fixed RGB value,
+so it adapts to whatever light/dark/Solarized/etc. theme your terminal
+emulator is configured with — there's no separate in-app theme setting to
+manage.
 
 Search (`/`) and the body editor (`e`) still take over the whole screen as
 full-pane overlays rather than living inside these columns. The backlinks

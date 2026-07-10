@@ -277,7 +277,29 @@ Goal: make daily use pleasant, not just functional.
       demand) over letting every key be individually rebound — covers the
       realistic case (someone's muscle memory doesn't match the default)
       without the maintenance burden of arbitrary per-key remapping.
-- [ ] Theming (at minimum: light/dark, respecting terminal colors)
+- [x] Theming, light/dark baseline (2026-07-10) — every explicit color in
+      the app is a named ANSI color (`Color::Blue`, `Cyan`, `Yellow`,
+      `Red`, `Green`, `Gray`, ...), not RGB or 256-color indices, with one
+      deliberate exception: the status bar's `Color::Indexed(236)`
+      background, kept as-is since it's an explicit, already-shipped
+      harmonization with Terapi/jsoned's own status bar convention (see
+      the "2-line status bar" entry above), not something to unpick here.
+      Named ANSI colors are mapped by the terminal emulator itself
+      according to whatever scheme it's configured with (light, dark,
+      Solarized, ...), so "respecting terminal colors" — the roadmap's own
+      bar for this item — comes for free from that choice rather than
+      needing an explicit theme-switcher Mycora manages itself; no config
+      option was added, and none is planned unless a real gap shows up
+      (e.g. the status band's fixed background actually looking wrong on
+      some real terminal theme). Added a bit of color to the split-pane
+      borders on request: tree = blue, body preview = magenta, backlinks
+      = its existing default-idle/cyan-when-focused (unchanged) — chosen
+      to avoid the colors already carrying other meaning elsewhere (cyan
+      = "focused/active," yellow = confirmation prompts, red = errors,
+      green = markdown code). Manually verified in tmux: tree and body
+      panes showed distinct blue/magenta borders simultaneously, and the
+      backlinks pane's existing cyan-on-focus behavior still worked
+      alongside them.
 - [x] Split-pane layout: tree + note body + backlinks (2026-07-10) — three
       columns in Normal/Insert/ConfirmDelete modes, fixed proportions
       (40/40/20) at the time. **Since made resizable**: interactive
