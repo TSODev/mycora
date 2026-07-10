@@ -219,6 +219,28 @@ every vault in the registry (including the active one) doesn't break
 anything — `active_vault` still self-heals to some vault, and Mycora
 loads it regardless of its `mounted` flag, so the app always starts.
 
+To see everything currently registered:
+
+```sh
+mycora vault list
+```
+
+Prints each vault's name, path, and status (`active`, `mounted`, or
+`not mounted`). To unregister one:
+
+```sh
+mycora vault remove <name>
+```
+
+**Only ever removes the `config.toml` entry — the vault's Markdown
+files on disk are never touched.** Refuses outright on `"default"`,
+since that's the vault Mycora treats as active; free up the name first:
+
+```sh
+mycora vault rename default old-default   # or: mycora vault promote <other-name>
+mycora vault remove old-default
+```
+
 ## The vault format
 
 Notes are plain Markdown files, one per note, in a single flat directory —

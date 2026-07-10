@@ -287,6 +287,37 @@ impl Config {
     pub fn unmount_vault(config_path: &Path, name: &str) -> Result<()> {
         Self::set_mounted(config_path, name, false)
     }
+
+    /// Unregisters `name` from `config_path` — `mycora vault remove`.
+    /// **Only ever touches the registry entry, never the vault's files on
+    /// disk** (confirmed with the user before implementing: notes are the
+    /// source of truth, the registry is just a pointer to them, so
+    /// "remove" here means "forget," not "delete" — consistent with
+    /// `Vault::trash_note` never permanently deleting a note either).
+    /// Errors if `name` isn't registered, or if `name` is `"default"` —
+    /// the vault `Config::active_vault` treats as the one to edit is
+    /// deliberately not removable directly; rename it out of the way
+    /// first with `rename_vault`, or `promote_vault` another entry to
+    /// take over the name, then remove the (now differently-named) old
+    /// one if that's still wanted.
+    pub fn remove_vault(config_path: &Path, name: &str) -> Result<()> {
+        let mut raw = read_raw(config_path)?;
+        migrate_legacy_vault_path(&mut raw);
+
+        if !raw.vaults.iter().any(|v| v.name == name) {
+            bail!("no vault named \"{name}\" in {}", config_path.display());
+        }
+        if name == "default" {
+            bail!(
+                "cannot remove \"default\" — rename it first with `mycora vault rename default \
+                 <new-name>`, or promote another vault to take over the \"default\" name with \
+                 `mycora vault promote <other-name>`, then remove it under its new name"
+            );
+        }
+
+        raw.vaults.retain(|v| v.name != name);
+        write_raw(config_path, &raw)
+    }
 }
 
 /// Reads and parses `config_path`, or an empty `RawConfig` if it doesn't
@@ -678,6 +709,68 @@ mod tests {
 
         let err = Config::unmount_vault(&path, "nope").unwrap_err();
         assert!(err.to_string().contains("no vault named"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn remove_vault_unregisters_the_entry() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "default", PathBuf::from("/vaults/default"), true).unwrap();
+        Config::add_vault(&path, "archive", PathBuf::from("/vaults/archive"), true).unwrap();
+
+        Config::remove_vault(&path, "archive").unwrap();
+
+        let config = config_at(&path);
+        assert_eq!(config.vaults.len(), 1);
+        assert_eq!(config.vaults[0].name, "default");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn remove_vault_does_not_touch_the_filesystem() {
+        let path = scratch_config_path();
+        let vault_dir = std::env::temp_dir().join(format!("mycora-config-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&vault_dir).unwrap();
+        std::fs::write(vault_dir.join("a-note.md"), "not touched").unwrap();
+        Config::add_vault(&path, "default", PathBuf::from("/vaults/default"), true).unwrap();
+        Config::add_vault(&path, "archive", vault_dir.clone(), true).unwrap();
+
+        Config::remove_vault(&path, "archive").unwrap();
+
+        assert!(vault_dir.join("a-note.md").exists());
+        assert_eq!(
+            std::fs::read_to_string(vault_dir.join("a-note.md")).unwrap(),
+            "not touched"
+        );
+
+        std::fs::remove_file(&path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn remove_vault_errors_if_name_not_found() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "default", PathBuf::from("/vaults/default"), true).unwrap();
+
+        let err = Config::remove_vault(&path, "nope").unwrap_err();
+        assert!(err.to_string().contains("no vault named"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn remove_vault_refuses_to_remove_default() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "default", PathBuf::from("/vaults/default"), true).unwrap();
+        Config::add_vault(&path, "archive", PathBuf::from("/vaults/archive"), true).unwrap();
+
+        let err = Config::remove_vault(&path, "default").unwrap_err();
+        assert!(err.to_string().contains("cannot remove \"default\""));
+
+        // Nothing was removed on failure.
+        assert_eq!(config_at(&path).vaults.len(), 2);
 
         std::fs::remove_file(&path).ok();
     }

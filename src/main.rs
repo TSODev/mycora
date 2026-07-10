@@ -96,6 +96,15 @@ enum VaultCommand {
         /// Name of the vault to unmount.
         name: String,
     },
+    /// Unregister a vault. Never touches its files on disk — only
+    /// forgets the config.toml entry. Refuses on "default"; rename or
+    /// promote another vault first.
+    Remove {
+        /// Name of the vault to remove.
+        name: String,
+    },
+    /// List every registered vault, its path, and its mount/active state.
+    List,
 }
 
 /// Restores the terminal (raw mode + alternate screen) before a panic's
@@ -144,6 +153,12 @@ fn main() -> anyhow::Result<()> {
         Some(Command::Vault {
             action: VaultCommand::Unmount { name },
         }) => return vault_set_mounted(&name, false),
+        Some(Command::Vault {
+            action: VaultCommand::Remove { name },
+        }) => return vault_remove(&name),
+        Some(Command::Vault {
+            action: VaultCommand::List,
+        }) => return vault_list(),
         None => {}
     }
 
@@ -264,6 +279,46 @@ fn vault_set_mounted(name: &str, mounted: bool) -> anyhow::Result<()> {
         "mycora: \"{name}\" is now {state} in {}",
         config_path.display()
     );
+    Ok(())
+}
+
+fn vault_remove(name: &str) -> anyhow::Result<()> {
+    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
+    let config_path = Config::default_path(&home);
+    Config::remove_vault(&config_path, name)?;
+    println!(
+        "mycora: removed vault \"{name}\" from {} (its files on disk were not touched)",
+        config_path.display()
+    );
+    Ok(())
+}
+
+/// Prints every registered vault, its path, and whether it's mounted/the
+/// active one — reads via `Config::load()` (not the raw file) so this
+/// reflects the same self-healing/legacy-migration view the TUI and every
+/// other command see, not a literal dump of config.toml.
+fn vault_list() -> anyhow::Result<()> {
+    let config = Config::load()?;
+    let active_name = config.active_vault().name.clone();
+
+    println!("mycora: {} vault(s) registered", config.vaults.len());
+    for entry in &config.vaults {
+        let mut state = Vec::new();
+        if entry.name == active_name {
+            state.push("active");
+        }
+        state.push(if entry.mounted {
+            "mounted"
+        } else {
+            "not mounted"
+        });
+        println!(
+            "  {:<16} {}  [{}]",
+            entry.name,
+            entry.path.display(),
+            state.join(", ")
+        );
+    }
     Ok(())
 }
 

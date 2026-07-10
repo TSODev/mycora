@@ -671,3 +671,24 @@ Goal: stability before a public release.
   `archive` as active with no panic; then unmounting `archive` too, so
   *every* entry was `mounted = false`, still loaded `default` cleanly
   via the self-heal path instead of crashing.
+  **Since extended a fifth time** (2026-07-10, user-requested): `mycora
+  vault remove <name>` and `mycora vault list`. Discussed `remove`'s
+  semantics with the user up front before implementing, rather than
+  guessing: **it only ever unregisters the `config.toml` entry, never
+  touches the vault's files on disk** (consistent with notes being the
+  source of truth and the registry being just a pointer to them — the
+  same instinct behind `Vault::trash_note` never permanently deleting a
+  note either), and **it refuses outright on `"default"`**, erroring
+  with the exact fix (`vault rename default <new-name>`, or `vault
+  promote <other-name>` to take over the name first) rather than
+  allowing the active vault to be silently unregistered. `vault list`
+  reads through `Config::load()` (not a raw file dump) so it reflects
+  the same self-healed/legacy-migrated view every other command and the
+  TUI itself see; each entry shows its path plus `[active, mounted]`-style
+  tags. Manually verified: `vault list` correctly tagged the active vault
+  among three registered ones; `vault remove default` refused with the
+  documented message; promoting a different vault to `"default"` first
+  (freeing the old name via `rename`) then let the old entry be removed
+  under its new name, confirmed via `vault list` showing one fewer entry
+  and the removed vault's on-disk note file still present and unchanged
+  afterward.

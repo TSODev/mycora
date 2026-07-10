@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`mycora vault remove`/`vault list` CLI commands** — `vault remove
+  <name>` unregisters a vault from `config.toml`; discussed the
+  semantics with the user before implementing and confirmed it only
+  ever touches the registry entry, never the vault's files on disk, and
+  refuses outright on `"default"` (rename or promote another vault
+  first). `vault list` prints every registered vault with its path and
+  `[active, mounted]`-style status tags.
 - **`mycora vault mount`/`vault unmount` CLI commands** — toggle a
   registered vault's `mounted` flag directly, each a no-op if it's
   already set that way.
