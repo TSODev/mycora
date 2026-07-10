@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Dropped arbitrary configurable keybindings from the roadmap** — the
+  current vim-inspired bindings already match the audience a terminal
+  note-taking tool draws; full remapping would add a permanent
+  schema/validation/docs cost for a speculative need. Revisit only if real
+  friction shows up, and prefer named presets (`vim`, maybe `emacs`) over
+  per-key remapping if it does. See ROADMAP.md's v0.7 section.
+
 ### Added
 - **Resizable split-pane layout (v0.7)** — `[`/`]` shrink/grow the tree
   pane, `{`/`}` shrink/grow the backlinks pane, always active in Normal

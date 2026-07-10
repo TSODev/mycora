@@ -265,7 +265,18 @@ Goal: make daily use pleasant, not just functional.
       for newlines) worked, `Esc` persisted to disk, `u` correctly
       reverted the file, and a no-change edit session left the file's
       `updated` timestamp untouched
-- [ ] Configurable keybindings
+- [ ] ~~Arbitrary configurable keybindings~~ — **deferred 2026-07-10**, no
+      target version. The current bindings are already vim-inspired and
+      coherent (`j/k/h/l`, `/` to search, `u` to undo), matching exactly
+      the audience a terminal note-taking tool draws — full remapping adds
+      a real, permanent cost (a remap config schema, conflict validation,
+      docs to maintain, every future feature having to register with it)
+      for a need that's speculative until someone actually hits it.
+      Revisit only if real friction shows up. If it does, prefer a small
+      set of **named presets** (`vim`, maybe `emacs` if there's ever
+      demand) over letting every key be individually rebound — covers the
+      realistic case (someone's muscle memory doesn't match the default)
+      without the maintenance burden of arbitrary per-key remapping.
 - [ ] Theming (at minimum: light/dark, respecting terminal colors)
 - [x] Split-pane layout: tree + note body + backlinks (2026-07-10) — three
       columns in Normal/Insert/ConfirmDelete modes, fixed proportions
