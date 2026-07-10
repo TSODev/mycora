@@ -8,6 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Example showcase vault** (`examples/showcase-vault/`) — a real,
+  committed Mycora vault documenting Mycora itself: 28 interlinked notes
+  covering its philosophy, interface, features, and design decisions,
+  organized as a tree with `[[wikilinks]]` cross-referencing related
+  notes and tags per section/topic. Built from the current README/
+  ROADMAP/USAGE content, verified against the real binary (`mycora
+  reindex` reports 0 broken links). Referenced from USAGE.md's
+  "Launching Mycora" section as a way to try search, backlinks, and the
+  command palette against real content.
 - **Command palette (v0.7)** — `:` in Normal mode opens a vim/helix-style
   command prompt in the status bar's hint row. Starting command set:
   `:reindex` (manual reindex, with a success/failure message),

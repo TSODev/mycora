@@ -98,6 +98,14 @@ quit with `q`/`q` or `Ctrl+C`. Stored at
 `~/.local/share/mycora/session.toml`, safe to delete if you ever want to
 reset it.
 
+**Want to try it before pointing Mycora at your own notes?**
+[`examples/showcase-vault/`](./examples/showcase-vault/) is a real Mycora
+vault — Mycora's own philosophy, interface, and design decisions, written
+as interlinked notes with tags, built with this exact tool. Point a
+registry entry at it (see [Configuration](#configuration)) to explore
+search, backlinks, and the command palette against real content instead
+of an empty vault.
+
 ## Configuration
 
 Config file at `~/.config/mycora/config.toml`. Mycora keeps a registry of
