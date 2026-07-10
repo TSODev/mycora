@@ -621,3 +621,29 @@ Goal: stability before a public release.
   `vault init work <path>` afterward printed the "stays read-only"
   message, and relaunching the TUI showed `work` stacked read-only below
   `default`, exactly as the message said it would.
+  **Since extended a third time** (2026-07-10, user-requested): `mycora
+  vault rename <old> <new>` renames a registry entry in place (path/
+  mounted untouched; a no-op if old == new; errors if `old` isn't
+  registered or `new` is already taken), and `mycora vault promote
+  <name>` makes a vault active by renaming it to `"default"` — the exact
+  name `Config::active_vault` looks for, so this is also how the "stays
+  read-only" case from `vault init` above gets resolved afterward.
+  `promote` is deliberately narrow: raised the same "what if `default`
+  already exists" question again before implementing, and this time
+  **confirmed the opposite answer from `init`'s**: `promote` *refuses*
+  outright if a different vault already holds `"default"`, rather than
+  auto-swapping names — the error message tells you to `vault rename
+  default <new-name>` first, then retry. `promote` is implemented as a
+  thin wrapper that ends up renaming the target to `"default"`, sharing
+  `rename_vault`'s read/write plumbing (both go through new private
+  `read_raw`/`write_raw`/`migrate_legacy_vault_path` helpers, refactored
+  out of `add_vault` at the same time so all four `*_vault` methods share
+  one implementation of "parse, mutate, rewrite the whole file"). Both
+  new methods are no-ops if there's nothing to do (renaming to the same
+  name; promoting an already-`"default"` vault). Manually verified: with
+  two vaults mounted, `promote` on the non-default one failed with the
+  expected message and touched nothing; `rename default old-default`
+  freed up the name; `promote work` then succeeded, and relaunching the
+  TUI confirmed `work`'s content was now the editable tree (its own
+  auto-seeded "Welcome to Mycora" note) with `old-default` stacked
+  read-only below it.

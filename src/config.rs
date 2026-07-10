@@ -146,26 +146,21 @@ impl Config {
     /// path-taking method in the crate). Creates the file (and its parent
     /// directory) if neither exists yet. Errors rather than silently
     /// overwriting if `name` is already registered; remove the old entry
-    /// first (by hand, or `mycora vault remove` if that ever exists) if
-    /// replacing it is what's wanted.
+    /// first (by hand, or `vault_rename` it out of the way) if replacing
+    /// it is what's wanted.
     ///
     /// Rewrites the whole file from a fresh parse — like `cargo add`
     /// rewriting `Cargo.toml` — rather than a surgical text insertion.
     /// Simpler, but loses hand-added comments/formatting in the file;
     /// config.toml is edited rarely enough that this is an acceptable
-    /// tradeoff for now. If the file only had the legacy `vault_path` key
-    /// (no `vaults` registry yet), that implicit `"default"` vault is
-    /// migrated into an explicit registry entry first, so adding a second
-    /// vault doesn't silently drop the first one.
+    /// tradeoff for now (shared by every `*_vault` method below, via
+    /// `read_raw`/`write_raw`). If the file only had the legacy
+    /// `vault_path` key (no `vaults` registry yet), that implicit
+    /// `"default"` vault is migrated into an explicit registry entry
+    /// first, so adding a second vault doesn't silently drop the first
+    /// one.
     pub fn add_vault(config_path: &Path, name: &str, path: PathBuf, mounted: bool) -> Result<()> {
-        let mut raw: RawConfig = if config_path.exists() {
-            let text = std::fs::read_to_string(config_path)
-                .with_context(|| format!("reading {}", config_path.display()))?;
-            toml::from_str(&text)
-                .with_context(|| format!("parsing {}", config_path.display()))?
-        } else {
-            RawConfig::default()
-        };
+        let mut raw = read_raw(config_path)?;
 
         if raw.vaults.iter().any(|v| v.name == name) {
             bail!(
@@ -174,15 +169,7 @@ impl Config {
             );
         }
 
-        if raw.vaults.is_empty()
-            && let Some(legacy_path) = raw.vault_path.take()
-        {
-            raw.vaults.push(RawVaultEntry {
-                name: "default".to_string(),
-                path: legacy_path,
-                mounted: true,
-            });
-        }
+        migrate_legacy_vault_path(&mut raw);
 
         raw.vaults.push(RawVaultEntry {
             name: name.to_string(),
@@ -190,14 +177,120 @@ impl Config {
             mounted,
         });
 
-        if let Some(parent) = config_path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("creating {}", parent.display()))?;
+        write_raw(config_path, &raw)
+    }
+
+    /// Renames a registered vault from `old_name` to `new_name`. A no-op
+    /// if the two are equal (returns `Ok` without touching the file).
+    /// Errors if `old_name` isn't registered, or if `new_name` is already
+    /// taken by a *different* entry. Path and `mounted` are untouched —
+    /// only the name changes, so this is also how you free up `"default"`
+    /// for `promote_vault` to reassign to another vault.
+    pub fn rename_vault(config_path: &Path, old_name: &str, new_name: &str) -> Result<()> {
+        if old_name == new_name {
+            return Ok(());
         }
-        let text = toml::to_string_pretty(&raw).context("serializing config.toml")?;
-        std::fs::write(config_path, text)
-            .with_context(|| format!("writing {}", config_path.display()))?;
-        Ok(())
+
+        let mut raw = read_raw(config_path)?;
+        migrate_legacy_vault_path(&mut raw);
+
+        if !raw.vaults.iter().any(|v| v.name == old_name) {
+            bail!("no vault named \"{old_name}\" in {}", config_path.display());
+        }
+        if raw.vaults.iter().any(|v| v.name == new_name) {
+            bail!(
+                "a vault named \"{new_name}\" is already registered in {}",
+                config_path.display()
+            );
+        }
+
+        for entry in &mut raw.vaults {
+            if entry.name == old_name {
+                entry.name = new_name.to_string();
+            }
+        }
+
+        write_raw(config_path, &raw)
+    }
+
+    /// Makes `name` the active/editable vault (`Config::active_vault`) by
+    /// renaming it to `"default"` — the name that method looks for. A
+    /// no-op if it's already named `"default"`. Errors if `name` isn't
+    /// registered, or if a *different* vault already holds the
+    /// `"default"` name — deliberately doesn't reassign that one itself
+    /// (confirmed with the user before implementing, same question
+    /// `vault_init` raised): rename it out of the way first with
+    /// `rename_vault(config_path, "default", "something-else")`, then
+    /// retry. Keeps this operation narrow and composed from
+    /// `rename_vault` rather than silently touching an entry the caller
+    /// didn't name.
+    pub fn promote_vault(config_path: &Path, name: &str) -> Result<()> {
+        let mut raw = read_raw(config_path)?;
+        migrate_legacy_vault_path(&mut raw);
+
+        if !raw.vaults.iter().any(|v| v.name == name) {
+            bail!("no vault named \"{name}\" in {}", config_path.display());
+        }
+        if name == "default" {
+            return Ok(());
+        }
+        if raw.vaults.iter().any(|v| v.name == "default") {
+            bail!(
+                "a vault named \"default\" is already registered in {} — rename it first with \
+                 `mycora vault rename default <new-name>`, then retry `mycora vault promote {name}`",
+                config_path.display()
+            );
+        }
+
+        for entry in &mut raw.vaults {
+            if entry.name == name {
+                entry.name = "default".to_string();
+            }
+        }
+
+        write_raw(config_path, &raw)
+    }
+}
+
+/// Reads and parses `config_path`, or an empty `RawConfig` if it doesn't
+/// exist yet — shared by every `Config::*_vault` writer method.
+fn read_raw(config_path: &Path) -> Result<RawConfig> {
+    if config_path.exists() {
+        let text = std::fs::read_to_string(config_path)
+            .with_context(|| format!("reading {}", config_path.display()))?;
+        toml::from_str(&text).with_context(|| format!("parsing {}", config_path.display()))
+    } else {
+        Ok(RawConfig::default())
+    }
+}
+
+/// Serializes and writes `raw` to `config_path`, creating its parent
+/// directory first if needed — shared by every `Config::*_vault` writer
+/// method.
+fn write_raw(config_path: &Path, raw: &RawConfig) -> Result<()> {
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let text = toml::to_string_pretty(raw).context("serializing config.toml")?;
+    std::fs::write(config_path, text)
+        .with_context(|| format!("writing {}", config_path.display()))
+}
+
+/// If the registry is empty but a legacy `vault_path` key is set, turns
+/// that implicit vault into an explicit `"default"` entry — called before
+/// every registry write so an old single-vault config isn't silently
+/// dropped the first time a `vault add`/`rename`/`promote` command
+/// touches the file.
+fn migrate_legacy_vault_path(raw: &mut RawConfig) {
+    if raw.vaults.is_empty()
+        && let Some(legacy_path) = raw.vault_path.take()
+    {
+        raw.vaults.push(RawVaultEntry {
+            name: "default".to_string(),
+            path: legacy_path,
+            mounted: true,
+        });
     }
 }
 
@@ -392,6 +485,113 @@ mod tests {
         assert_eq!(config.vaults[0].name, "default");
         assert_eq!(config.vaults[0].path, PathBuf::from("/legacy/vault"));
         assert_eq!(config.vaults[1].name, "second");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    fn config_at(path: &std::path::Path) -> Config {
+        let raw: RawConfig = toml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        Config::from_raw(raw, "/home/alice").unwrap()
+    }
+
+    #[test]
+    fn rename_vault_updates_the_name_in_place() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        Config::rename_vault(&path, "work", "personal").unwrap();
+
+        let config = config_at(&path);
+        assert_eq!(config.vaults.len(), 1);
+        assert_eq!(config.vaults[0].name, "personal");
+        assert_eq!(config.vaults[0].path, PathBuf::from("/vaults/work"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn rename_vault_same_name_is_a_noop() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        Config::rename_vault(&path, "work", "work").unwrap();
+
+        assert_eq!(config_at(&path).vaults[0].name, "work");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn rename_vault_errors_if_old_name_not_found() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        let err = Config::rename_vault(&path, "nope", "personal").unwrap_err();
+        assert!(err.to_string().contains("no vault named"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn rename_vault_errors_if_new_name_already_taken() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+        Config::add_vault(&path, "personal", PathBuf::from("/vaults/personal"), true).unwrap();
+
+        let err = Config::rename_vault(&path, "work", "personal").unwrap_err();
+        assert!(err.to_string().contains("already registered"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn promote_vault_renames_the_target_to_default() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        Config::promote_vault(&path, "work").unwrap();
+
+        let config = config_at(&path);
+        assert_eq!(config.active_vault().name, "default");
+        assert_eq!(config.active_vault().path, PathBuf::from("/vaults/work"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn promote_vault_already_default_is_a_noop() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "default", PathBuf::from("/vaults/default"), true).unwrap();
+
+        Config::promote_vault(&path, "default").unwrap();
+
+        assert_eq!(config_at(&path).vaults.len(), 1);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn promote_vault_errors_if_name_not_found() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        let err = Config::promote_vault(&path, "nope").unwrap_err();
+        assert!(err.to_string().contains("no vault named"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn promote_vault_errors_if_a_different_default_already_exists() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "default", PathBuf::from("/vaults/default"), true).unwrap();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        let err = Config::promote_vault(&path, "work").unwrap_err();
+        assert!(err.to_string().contains("rename it first"));
+
+        // Nothing was renamed on failure.
+        let config = config_at(&path);
+        assert_eq!(config.active_vault().name, "default");
+        assert_eq!(config.active_vault().path, PathBuf::from("/vaults/default"));
 
         std::fs::remove_file(&path).ok();
     }

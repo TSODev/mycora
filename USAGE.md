@@ -183,6 +183,29 @@ vault is already named `"default"`, the new one is still created and
 mounted, just read-only in the TUI, and the command tells you so rather
 than silently renaming the existing `"default"` entry to make room.
 
+To fix that afterward (or to switch which vault you're editing at any
+other time):
+
+```sh
+mycora vault rename <old-name> <new-name>   # renames a registry entry
+mycora vault promote <name>                 # makes it the active vault
+```
+
+`rename` only changes the name — path and mount state are untouched.
+`promote` makes `<name>` active by renaming it to `"default"`, the exact
+name [Configuration](#configuration) says `active_vault` looks for; it
+*refuses* if a different vault already holds that name rather than
+reassigning it automatically, so the usual fix-up sequence is:
+
+```sh
+mycora vault rename default old-default   # free up "default"
+mycora vault promote work                 # work becomes the new default
+```
+
+Both commands are no-ops (no error, no file change) if there's nothing
+to do — renaming a vault to its own name, or promoting one that's
+already `"default"`.
+
 ## The vault format
 
 Notes are plain Markdown files, one per note, in a single flat directory —

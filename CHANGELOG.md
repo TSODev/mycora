@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`mycora vault rename`/`vault promote` CLI commands** — `vault rename
+  <old> <new>` renames a registry entry in place; `vault promote <name>`
+  makes a vault the active (read-write) one by renaming it to
+  `"default"`. `promote` refuses outright if a different vault already
+  holds `"default"`, rather than auto-swapping names — rename it out of
+  the way first with `vault rename default <new-name>`, then retry.
+  Both are no-ops if there's nothing to change.
 - **`mycora vault init` CLI command** — creates a vault directory and
   registers it in `config.toml`, always mounted, then reports whether it
   actually became the active (read-write) vault (only true if it ends

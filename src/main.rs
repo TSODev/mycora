@@ -70,6 +70,21 @@ enum VaultCommand {
         /// exist yet.
         path: PathBuf,
     },
+    /// Rename a registered vault. Path and mount state are unaffected.
+    Rename {
+        /// Current name.
+        old_name: String,
+        /// New name.
+        new_name: String,
+    },
+    /// Make a vault the active (read-write) one, by renaming it to
+    /// "default" — the name Config::active_vault looks for. Fails if a
+    /// different vault already holds that name; rename it out of the way
+    /// first with `vault rename`.
+    Promote {
+        /// Name of the vault to promote.
+        name: String,
+    },
 }
 
 /// Restores the terminal (raw mode + alternate screen) before a panic's
@@ -102,6 +117,16 @@ fn main() -> anyhow::Result<()> {
         Some(Command::Vault {
             action: VaultCommand::Init { name, path },
         }) => return vault_init(&name, path),
+        Some(Command::Vault {
+            action:
+                VaultCommand::Rename {
+                    old_name,
+                    new_name,
+                },
+        }) => return vault_rename(&old_name, &new_name),
+        Some(Command::Vault {
+            action: VaultCommand::Promote { name },
+        }) => return vault_promote(&name),
         None => {}
     }
 
@@ -184,6 +209,28 @@ fn vault_init(name: &str, path: PathBuf) -> anyhow::Result<()> {
             config_path.display()
         );
     }
+    Ok(())
+}
+
+fn vault_rename(old_name: &str, new_name: &str) -> anyhow::Result<()> {
+    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
+    let config_path = Config::default_path(&home);
+    Config::rename_vault(&config_path, old_name, new_name)?;
+    println!(
+        "mycora: renamed vault \"{old_name}\" to \"{new_name}\" in {}",
+        config_path.display()
+    );
+    Ok(())
+}
+
+fn vault_promote(name: &str) -> anyhow::Result<()> {
+    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
+    let config_path = Config::default_path(&home);
+    Config::promote_vault(&config_path, name)?;
+    println!(
+        "mycora: \"{name}\" is now the active (read-write) vault in {}",
+        config_path.display()
+    );
     Ok(())
 }
 
