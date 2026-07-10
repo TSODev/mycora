@@ -8,6 +8,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Cross-vault `[[wikilink]]` resolution (v0.5, closes the version except
+  autocompletion)** — a wikilink in one mounted vault can now resolve to a
+  note in any other mounted vault, not just its own. Required reshaping
+  the `links` table (`source_vault`/`source`/`target_vault`/`target`
+  instead of one `vault_id` column that couldn't represent a cross-vault
+  edge; the old shape is auto-dropped and recreated on open, no real
+  migration since the index is disposable) and splitting `Index::reindex`
+  into two phases (`write_notes` per vault, then `write_links` per vault,
+  since link resolution needs every vault's notes already written first).
+  New `Index::reindex_mounted(&[(vault_id, tree, vault)])` batches this
+  correctly across a set of vaults; the existing single-vault
+  `Index::reindex` is now a one-entry convenience wrapper around it.
+  Resolution is scoped to just the vaults in a given batch, not every
+  vault ever indexed, so an unmounted vault's stale rows can't silently
+  resolve as a link target. `App`, `mycora reindex`, and `--watch` all
+  reindex every mounted vault as one batch now. `backlinks` and
+  `link_count_for_subtree` work cross-vault too, now that the schema can
+  express it.
 - **Multi-vault mounting, read-only for now** — every registry entry with
   `mounted = true` (the default) now loads at startup, each into its own
   `Tree`, sharing the one `vault_id`-scoped `Index`. Only the editable

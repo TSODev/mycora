@@ -8,15 +8,19 @@ use crate::vault::Vault;
 
 /// A vault mounted alongside the primary one: loaded and indexed (so its
 /// notes count toward search/backlinks/link-count badges under its own
-/// `vault_id`), but not navigable or editable yet. Full multi-vault editing
-/// needs every mutating `App` method to first resolve which vault a given
-/// `NoteId` belongs to — deferred to a later pass (see ROADMAP.md's
+/// `vault_id`, and its wikilinks can resolve cross-vault against the
+/// primary one's), but not navigable or editable yet. Full multi-vault
+/// editing needs every mutating `App` method to first resolve which vault a
+/// given `NoteId` belongs to — deferred to a later pass (see ROADMAP.md's
 /// "Multiple vaults" entry). Only its top-level roots are ever shown, and
 /// always collapsed: there's no expand/collapse interaction to offer when
-/// nothing here can become `selected`.
+/// nothing here can become `selected`. `vault` is kept (not just `tree`)
+/// because reindexing needs it for note-path lookups, even though nothing
+/// ever writes through it.
 struct ReadOnlyVault {
     id: String,
     tree: Tree,
+    vault: Vault,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,8 +86,31 @@ impl App {
     pub fn new() -> anyhow::Result<(Self, Vec<String>)> {
         let config = Config::load()?;
         let active = config.active_vault().clone();
-        let mut vault = Vault::open(active.path.clone())?;
-        let (mut tree, mut report) = vault.load()?;
+
+        // Load every mounted vault (primary included) before indexing any
+        // of them — cross-vault wikilink resolution needs every vault's
+        // notes visible to the index together, not one at a time (see
+        // `Index::reindex_mounted`'s doc comment).
+        let mut loaded: Vec<(String, Tree, Vault)> = Vec::new();
+        let mut warnings = Vec::new();
+        for entry in config.mounted_vaults() {
+            let mut v = Vault::open(entry.path.clone())?;
+            let (t, r) = v.load()?;
+            for warning in &r.warnings {
+                if entry.name == active.name {
+                    warnings.push(warning.clone());
+                } else {
+                    warnings.push(format!("[{}] {warning}", entry.name));
+                }
+            }
+            loaded.push((entry.name.clone(), t, v));
+        }
+
+        let primary_idx = loaded
+            .iter()
+            .position(|(name, _, _)| *name == active.name)
+            .expect("active_vault()'s name always exists among mounted_vaults()");
+        let (_, mut tree, mut vault) = loaded.remove(primary_idx);
 
         let selected = if tree.roots().is_empty() {
             let welcome = tree.create_note("Welcome to Mycora", None);
@@ -106,51 +133,47 @@ impl App {
 
         let index_path = Index::default_path(&config.home);
         let mut index = Index::open(&index_path)?;
-        // Reindex once at startup so search reflects the vault as loaded,
-        // without requiring `mycora reindex` to have been run separately —
-        // the index is disposable, so rebuilding it here is just as valid
-        // a source as an on-disk one from a previous session.
-        let reindex_report = index.reindex(&active.name, &tree, &vault)?;
-        for broken in &reindex_report.broken_links {
-            let source_title = tree
-                .get(broken.source)
-                .map(|note| note.title.as_str())
-                .unwrap_or("?");
-            report.warnings.push(format!(
-                "broken link in \"{source_title}\": [[{}]] matches no note",
-                broken.title
-            ));
+        // Reindex every mounted vault together at startup, so search and
+        // cross-vault links reflect them as loaded without requiring
+        // `mycora reindex` to have been run separately — the index is
+        // disposable, so rebuilding it here is just as valid a source as
+        // an on-disk one from a previous session.
+        let mut batch: Vec<(&str, &Tree, &Vault)> = vec![(active.name.as_str(), &tree, &vault)];
+        for (name, t, v) in &loaded {
+            batch.push((name.as_str(), t, v));
         }
-
-        // Every other mounted vault: loaded and indexed like the primary
-        // one, just not wired into `tree`/`vault`/`selected` — read-only
-        // for now (see `ReadOnlyVault`'s doc comment).
-        let mut other_vaults = Vec::new();
-        for entry in config.mounted_vaults() {
-            if entry.name == active.name {
-                continue;
-            }
-            let mut other_vault = Vault::open(entry.path.clone())?;
-            let (other_tree, other_report) = other_vault.load()?;
-            for warning in &other_report.warnings {
-                report.warnings.push(format!("[{}] {warning}", entry.name));
-            }
-            let other_reindex_report = index.reindex(&entry.name, &other_tree, &other_vault)?;
-            for broken in &other_reindex_report.broken_links {
-                let source_title = other_tree
-                    .get(broken.source)
-                    .map(|note| note.title.as_str())
-                    .unwrap_or("?");
-                report.warnings.push(format!(
-                    "[{}] broken link in \"{source_title}\": [[{}]] matches no note",
-                    entry.name, broken.title
+        let reports = index.reindex_mounted(&batch)?;
+        for ((vault_name, _, _), r) in batch.iter().zip(reports.iter()) {
+            for broken in &r.broken_links {
+                let source_title = if *vault_name == active.name {
+                    tree.get(broken.source).map(|n| n.title.as_str())
+                } else {
+                    loaded
+                        .iter()
+                        .find(|(name, _, _)| name == vault_name)
+                        .and_then(|(_, t, _)| t.get(broken.source))
+                        .map(|n| n.title.as_str())
+                }
+                .unwrap_or("?");
+                let prefix = if *vault_name == active.name {
+                    String::new()
+                } else {
+                    format!("[{vault_name}] ")
+                };
+                warnings.push(format!(
+                    "{prefix}broken link in \"{source_title}\": [[{}]] matches no note",
+                    broken.title
                 ));
             }
-            other_vaults.push(ReadOnlyVault {
-                id: entry.name.clone(),
-                tree: other_tree,
-            });
         }
+
+        // Every other mounted vault stays loaded, just not wired into
+        // `tree`/`vault`/`selected` — read-only for now (see
+        // `ReadOnlyVault`'s doc comment).
+        let other_vaults = loaded
+            .into_iter()
+            .map(|(id, tree, vault)| ReadOnlyVault { id, tree, vault })
+            .collect();
 
         let app = Self {
             tree,
@@ -175,7 +198,7 @@ impl App {
             other_vaults,
         };
 
-        Ok((app, report.warnings))
+        Ok((app, warnings))
     }
 
     /// Depth-first (id, depth) pairs for notes currently visible, respecting
@@ -591,9 +614,7 @@ impl App {
     /// in-memory tree (including edits made this session that a prior
     /// `mycora reindex` run on disk wouldn't know about), not a stale copy.
     pub fn begin_search(&mut self) {
-        if let Err(err) = self.index.reindex(&self.vault_id, &self.tree, &self.vault) {
-            self.last_error = Some(format!("reindex failed: {err}"));
-        }
+        self.reindex_mounted();
         self.search_query.clear();
         self.search_results.clear();
         self.search_selected = 0;
@@ -671,9 +692,7 @@ impl App {
     /// a stale on-disk index), then looks up which notes link to it.
     pub fn show_backlinks(&mut self) {
         let Some(id) = self.selected else { return };
-        if let Err(err) = self.index.reindex(&self.vault_id, &self.tree, &self.vault) {
-            self.last_error = Some(format!("reindex failed: {err}"));
-        }
+        self.reindex_mounted();
         self.backlinks_results = match self.index.backlinks(&self.vault_id, id) {
             Ok(hits) => hits,
             Err(err) => {
@@ -715,6 +734,24 @@ impl App {
 
     pub fn backlinks_selected(&self) -> usize {
         self.backlinks_selected
+    }
+
+    /// Reindexes the primary vault together with every read-only mounted
+    /// vault, so cross-vault wikilinks stay resolved against each other —
+    /// same reasoning as `App::new()`'s startup reindex. Called from `/`
+    /// and `b`, the only two places that need fresh results mid-session.
+    /// Errors fold into `last_error` rather than propagating, since these
+    /// are UI-triggered entry points that can't fail the whole app.
+    fn reindex_mounted(&mut self) {
+        let mut batch: Vec<(&str, &Tree, &Vault)> =
+            Vec::with_capacity(1 + self.other_vaults.len());
+        batch.push((self.vault_id.as_str(), &self.tree, &self.vault));
+        for v in &self.other_vaults {
+            batch.push((v.id.as_str(), &v.tree, &v.vault));
+        }
+        if let Err(err) = self.index.reindex_mounted(&batch) {
+            self.last_error = Some(format!("reindex failed: {err}"));
+        }
     }
 
     /// Total links touching `id`'s subtree (itself + all descendants) — the

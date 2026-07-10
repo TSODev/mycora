@@ -113,10 +113,38 @@ Goal: notes can reference each other outside the tree.
       (that's what "broken link" means here) rather than erroring, and a
       note linking to its own title is skipped too. Manually verified via
       `mycora reindex` against real vault files.
-- [ ] Cross-vault links: a wikilink can resolve to a note in any *mounted*
+- [x] Cross-vault links: a wikilink can resolve to a note in any *mounted*
       vault, not just the current one (see "Multiple vaults" below) — this
       is the intended path for referencing another vault's content, since
-      trees themselves stay single-vault (no cross-vault reparenting)
+      trees themselves stay single-vault (no cross-vault reparenting).
+      Required a `links` schema change: a single `vault_id` column can't
+      represent an edge whose two ends live in different vaults, so it's
+      now `source_vault`/`source`/`target_vault`/`target` (old on-disk
+      shape auto-dropped and recreated on open — the index is disposable,
+      not worth a real migration for data that regenerates for free).
+      `Index::reindex` split into two phases: `write_notes` per vault, then
+      `write_links` per vault — link resolution needs every vault's notes
+      already written before any of them can be looked up, so it can't be
+      interleaved per-vault the way the rest of reindex is. New
+      `Index::reindex_mounted(&[(vault_id, tree, vault)])` batches this
+      correctly across every vault in the call; the existing single-vault
+      `Index::reindex` is now a one-entry convenience wrapper around it, so
+      every prior single-vault call site and test kept working unchanged.
+      Resolution is deliberately scoped to just the vaults in the batch,
+      not "every vault ever indexed" — a vault mounted in a past session
+      but not part of this call doesn't get to resolve as a link target,
+      so its stale rows (still on disk until something reindexes over
+      them) can't silently leak into a session that unmounted it. `App`,
+      `mycora reindex`, and `--watch` all now reindex every mounted vault
+      as one batch, replacing per-vault loops that couldn't have resolved
+      cross-vault links even after the schema/API changes. `backlinks` and
+      `link_count_for_subtree` updated for the new column names — both
+      already worked cross-vault "for free" once the schema could express
+      it. Manually verified: a wikilink in one mounted vault correctly
+      resolved to a note in another (via both `mycora reindex` and a fresh
+      TUI startup), the target vault's link-count badge picked it up, and
+      unmounting the target vault correctly turned the same link "broken"
+      rather than resolving it from stale rows
 - [x] Backlinks panel: "notes that link here" — `Index::backlinks(vault_id,
       target)` (title-ordered, reads whatever `reindex` last resolved,
       doesn't reindex itself). TUI: `b` in Normal mode reindexes then opens
@@ -154,6 +182,9 @@ Goal: notes can reference each other outside the tree.
       Shown only when count > 0, to avoid cluttering every collapsed
       leaf-only branch with "(0 links)". Manually verified in tmux: a
       branch with two outgoing wikilinks showed "(2 links)" once collapsed
+
+v0.5 is done except link autocompletion, blocked on the v0.7 body editor
+as noted above.
 
 ## v0.6 — Search engine upgrade (tantivy)
 

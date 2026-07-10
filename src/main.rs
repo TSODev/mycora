@@ -13,6 +13,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use mycora::app::App;
 use mycora::config::Config;
 use mycora::index::Index;
+use mycora::tree::Tree;
 use mycora::vault::Vault;
 use mycora::{event, ui};
 
@@ -149,35 +150,48 @@ fn watch_reindex() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Loads every mounted vault fresh from disk and rebuilds its index rows,
-/// returning `(vault name, note count)` per vault. Shared by the one-shot
-/// and `--watch` reindex paths. Prints a warning per broken wikilink (a
-/// `[[title]]` that didn't resolve to any note) the same way
-/// `vault.load()`'s own warnings are printed — reported, not an error.
+/// Loads every mounted vault fresh from disk and rebuilds its index rows
+/// together, returning `(vault name, note count)` per vault. Shared by the
+/// one-shot and `--watch` reindex paths. Vaults are loaded before any of
+/// them are indexed, and reindexed as one `Index::reindex_mounted` batch —
+/// cross-vault wikilink resolution needs every vault's notes visible to
+/// the index together, not one at a time (see that method's doc comment).
+/// Prints a warning per broken wikilink (a `[[title]]` that didn't resolve
+/// to any note in any mounted vault) the same way `vault.load()`'s own
+/// warnings are printed — reported, not an error.
 fn perform_reindex(config: &Config) -> anyhow::Result<Vec<(String, usize)>> {
     let index_path = Index::default_path(&config.home);
     let mut index = Index::open(&index_path)?;
 
-    let mut results = Vec::new();
+    let mut loaded: Vec<(String, Tree, Vault)> = Vec::new();
     for entry in config.mounted_vaults() {
         let mut vault = Vault::open(entry.path.clone())?;
         let (tree, report) = vault.load()?;
         for warning in &report.warnings {
             eprintln!("mycora: [{}] {warning}", entry.name);
         }
+        loaded.push((entry.name.clone(), tree, vault));
+    }
 
-        let reindex_report = index.reindex(&entry.name, &tree, &vault)?;
-        for broken in &reindex_report.broken_links {
+    let batch: Vec<(&str, &Tree, &Vault)> = loaded
+        .iter()
+        .map(|(name, tree, vault)| (name.as_str(), tree, vault))
+        .collect();
+    let reports = index.reindex_mounted(&batch)?;
+
+    let mut results = Vec::new();
+    for ((name, tree, _), report) in loaded.iter().zip(reports.iter()) {
+        for broken in &report.broken_links {
             let source_title = tree
                 .get(broken.source)
                 .map(|note| note.title.as_str())
                 .unwrap_or("?");
             eprintln!(
-                "mycora: [{}] broken link in \"{source_title}\": [[{}]] matches no note",
-                entry.name, broken.title
+                "mycora: [{name}] broken link in \"{source_title}\": [[{}]] matches no note",
+                broken.title
             );
         }
-        results.push((entry.name.clone(), reindex_report.note_count));
+        results.push((name.clone(), report.note_count));
     }
     Ok(results)
 }

@@ -1,9 +1,12 @@
 # Mycora — Usage Guide
 
-> Reflects what's actually implemented today (v0.1–v0.4): an in-memory tree
-> with Markdown persistence, full structural operations, and SQLite-backed
-> search/tag filtering. No cross-links/wikilinks, no multi-pane layout yet —
-> see [ROADMAP.md](./ROADMAP.md) for what's still ahead.
+> Reflects what's actually implemented today (v0.1–v0.5, minus link
+> autocompletion): an in-memory tree with Markdown persistence, full
+> structural operations, SQLite-backed search/tag filtering, read-only
+> multi-vault mounting, and `[[wikilink]]` cross-links (including
+> cross-vault ones) with a backlinks panel and link-count badges. No
+> note-body editor or multi-pane layout yet — see
+> [ROADMAP.md](./ROADMAP.md) for what's still ahead.
 
 ## Table of Contents
 
@@ -35,12 +38,15 @@ version:
 - **The tree is the skeleton.** Every note has exactly one parent, or is a
   root — a strict hierarchy, no exceptions, so a note always has one
   unambiguous place you can navigate back to.
-- **Mycelial links are the nervous system** *(planned — v0.5, not
-  implemented yet)*. Independent of tree position, a note will be able to
-  reference any other note via `[[wikilink]]`-style links, the way a
-  mycelial fungal network connects the root systems of separate trees
-  underground — the tree gives you orientation, links will give you
-  associative reach.
+- **Mycelial links are the nervous system.** Independent of tree position,
+  a note can reference any other note via `[[wikilink]]`-style links —
+  even one in a different mounted vault — the way a mycelial fungal
+  network connects the root systems of separate trees underground. The
+  tree gives you orientation; links give you associative reach. Writing
+  the links themselves needs a note-body editor, which doesn't exist in
+  the TUI yet (planned for v0.7) — for now, add `[[links]]` by editing a
+  note's Markdown file directly, then `mycora reindex` (or just reopen the
+  TUI, which reindexes on startup) to resolve them.
 - **Plain Markdown is the source of truth.** Every note is one `.md` file
   with YAML frontmatter (see [The vault format](#the-vault-format)) —
   nothing Mycora keeps in its own state is authoritative.
@@ -53,13 +59,13 @@ version:
 
 | Term | Meaning |
 |---|---|
-| **Vault** | A directory of Markdown note files, plus its derived SQLite index. The config can register several named vaults, though only one is *mounted* (opened) at a time today — see [Configuration](#configuration). |
+| **Vault** | A directory of Markdown note files, plus its derived SQLite index. The config can register several named vaults; every one flagged `mounted` (the default) loads at startup — see [Configuration](#configuration). |
 | **Note** | One Markdown file: YAML frontmatter (`id`, `parent`, `order`, `tags`, timestamps) plus a `# Title` heading and body. |
 | **Tree** / **trunk** | The hierarchy formed by a note and all its descendants. The README's mycelial-network framing calls this a "trunk"; the code and the rest of this guide mostly just say "tree." A vault can hold several independent trees. |
 | **Root** | A note with no parent — the top of one tree/trunk. |
 | **Parent / child** | A note's one structural parent, or the notes directly beneath it — the relationship the tree is built from. |
-| **Mycelial link** *(planned)* | A `[[wikilink]]`-style, many-to-many reference between two notes, independent of where either one lives in the tree. |
-| **Index** | The disposable SQLite database (`notes`, `tree_edges`, `tags`, `notes_fts`, and eventually `links`) behind search and tag filtering — never a second source of truth. |
+| **Mycelial link** | A `[[wikilink]]`-style, many-to-many reference between two notes, independent of where either one lives in the tree — can even cross from one mounted vault into another. |
+| **Index** | The disposable SQLite database (`notes`, `tree_edges`, `tags`, `notes_fts`, `links`) behind search, tag filtering, and backlinks — never a second source of truth. |
 
 ## Installation
 

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -72,6 +71,19 @@ impl Index {
     }
 
     fn migrate(conn: &Connection) -> Result<()> {
+        // `links`' shape changed (a single `vault_id` -> `source_vault` +
+        // `target_vault`, to represent a link whose two ends live in
+        // different mounted vaults). The whole index is disposable and
+        // safe to rebuild from scratch, so an old-shape table left over
+        // from before this change is just dropped rather than migrated —
+        // its rows regenerate for free on the next reindex.
+        let old_shape: bool = conn
+            .prepare("SELECT 1 FROM pragma_table_info('links') WHERE name = 'vault_id'")?
+            .exists([])?;
+        if old_shape {
+            conn.execute("DROP TABLE links", [])?;
+        }
+
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS notes (
@@ -92,10 +104,11 @@ impl Index {
                 PRIMARY KEY (vault_id, id)
             );
             CREATE TABLE IF NOT EXISTS links (
-                vault_id TEXT NOT NULL,
-                source   TEXT NOT NULL,
-                target   TEXT NOT NULL,
-                PRIMARY KEY (vault_id, source, target)
+                source_vault TEXT NOT NULL,
+                source       TEXT NOT NULL,
+                target_vault TEXT NOT NULL,
+                target       TEXT NOT NULL,
+                PRIMARY KEY (source_vault, source, target_vault, target)
             );
             CREATE TABLE IF NOT EXISTS tags (
                 vault_id TEXT NOT NULL,
@@ -116,10 +129,58 @@ impl Index {
         Ok(())
     }
 
-    /// Rebuilds every row belonging to `vault_id` from `tree`/`vault`'s
-    /// current state: drops then reinserts, since the index is always
-    /// disposable and cheaper to regenerate wholesale than to diff.
+    /// Rebuilds `vault_id`'s rows alone, resolving its wikilinks only
+    /// against its own notes — equivalent to `reindex_mounted(&[(vault_id,
+    /// tree, vault)])`. Fine for a single-vault setup, or for refreshing
+    /// just the one vault that changed (search/backlinks do this): the
+    /// `notes` table still has every other mounted vault's rows from a
+    /// previous `reindex_mounted` call, but this call's link resolution
+    /// won't reach them, since it only trusts `vault_id` as "known good".
     pub fn reindex(&mut self, vault_id: &str, tree: &Tree, vault: &Vault) -> Result<ReindexReport> {
+        let mut reports = self.reindex_mounted(&[(vault_id, tree, vault)])?;
+        Ok(reports.remove(0))
+    }
+
+    /// Rebuilds every given vault's rows together, so a `[[title]]` in one
+    /// can resolve to a note in *any* of them — this is what cross-vault
+    /// linking means (see ROADMAP.md's v0.5 "Cross-vault links" entry).
+    /// Two phases, because link resolution needs every vault's notes
+    /// already written before any of them can be looked up: first every
+    /// vault's `notes`/`tree_edges`/`notes_fts`/`tags` rows, then every
+    /// vault's `links` rows, resolved against the now-complete set.
+    /// Deliberately scoped to just the vaults passed in, not "every vault
+    /// ever indexed" — a vault that was mounted in a past session but
+    /// isn't part of this call doesn't get to resolve as a link target,
+    /// so its stale rows (still on disk until something reindexes over
+    /// them) can't silently leak into a fresh session's link results.
+    pub fn reindex_mounted(
+        &mut self,
+        vaults: &[(&str, &Tree, &Vault)],
+    ) -> Result<Vec<ReindexReport>> {
+        let mut note_counts = Vec::with_capacity(vaults.len());
+        for (vault_id, tree, vault) in vaults {
+            note_counts.push(self.write_notes(vault_id, tree, vault)?);
+        }
+
+        let vault_ids: Vec<&str> = vaults.iter().map(|(id, _, _)| *id).collect();
+        let mut reports = Vec::with_capacity(vaults.len());
+        for (i, (vault_id, tree, _)) in vaults.iter().enumerate() {
+            let broken_links = self.write_links(vault_id, tree, &vault_ids)?;
+            reports.push(ReindexReport {
+                note_count: note_counts[i],
+                broken_links,
+            });
+        }
+        Ok(reports)
+    }
+
+    /// Phase 1 of a reindex: `notes`/`tree_edges`/`notes_fts`/`tags` for
+    /// `vault_id` alone, from `tree`/`vault`'s current state. Drops then
+    /// reinserts, since the index is always disposable and cheaper to
+    /// regenerate wholesale than to diff. Does not touch `links` — that's
+    /// `write_links`, run separately once every vault in a batch has had
+    /// this phase done.
+    fn write_notes(&mut self, vault_id: &str, tree: &Tree, vault: &Vault) -> Result<usize> {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM notes WHERE vault_id = ?1", params![vault_id])?;
         tx.execute(
@@ -131,19 +192,8 @@ impl Index {
             params![vault_id],
         )?;
         tx.execute("DELETE FROM tags WHERE vault_id = ?1", params![vault_id])?;
-        tx.execute("DELETE FROM links WHERE vault_id = ?1", params![vault_id])?;
-
-        // Titles aren't required to be unique, so a wikilink can resolve to
-        // more than one note — every match gets a link row (see ROADMAP.md's
-        // "Multiple vaults" neighbor, the v0.5 cross-links entry: ambiguity
-        // is resolved by fanning out rather than silently picking one).
-        let mut titles: HashMap<&str, Vec<NoteId>> = HashMap::new();
-        for (id, note) in tree.iter() {
-            titles.entry(note.title.as_str()).or_default().push(id);
-        }
 
         let mut count = 0;
-        let mut broken_links = Vec::new();
         for (id, note) in tree.iter() {
             let path = vault
                 .path(id)
@@ -187,30 +237,76 @@ impl Index {
                     params![vault_id, id.0.to_string(), tag],
                 )?;
             }
-            for title in extract_wikilink_titles(&note.body) {
-                let Some(targets) = titles.get(title.as_str()) else {
-                    broken_links.push(BrokenLink { source: id, title });
-                    continue;
-                };
-                for &target in targets {
-                    if target == id {
-                        continue; // skip self-links
-                    }
-                    tx.execute(
-                        "INSERT OR IGNORE INTO links (vault_id, source, target)
-                         VALUES (?1, ?2, ?3)",
-                        params![vault_id, id.0.to_string(), target.0.to_string()],
-                    )?;
-                }
-            }
             count += 1;
         }
 
         tx.commit()?;
-        Ok(ReindexReport {
-            note_count: count,
-            broken_links,
-        })
+        Ok(count)
+    }
+
+    /// Phase 2 of a reindex: resolves `vault_id`'s wikilinks and (re)writes
+    /// its `links` rows — only its *outgoing* ones (`source_vault =
+    /// vault_id`), never touching another vault's rows even if this call
+    /// creates a link pointing into it. Resolution is a `notes` lookup
+    /// scoped to `known_vault_ids`, not every vault ever indexed (see
+    /// `reindex_mounted`'s doc comment on why that scoping matters). Titles
+    /// aren't required to be unique, so a match in more than one note (in
+    /// the same or a different vault) fans out to a link per match, rather
+    /// than silently picking one (see ROADMAP.md's v0.5 entry).
+    fn write_links(
+        &mut self,
+        vault_id: &str,
+        tree: &Tree,
+        known_vault_ids: &[&str],
+    ) -> Result<Vec<BrokenLink>> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "DELETE FROM links WHERE source_vault = ?1",
+            params![vault_id],
+        )?;
+
+        let placeholders = known_vault_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(", ");
+        let lookup_sql =
+            format!("SELECT vault_id, id FROM notes WHERE title = ?1 AND vault_id IN ({placeholders})");
+
+        let mut broken_links = Vec::new();
+        for (id, note) in tree.iter() {
+            for title in extract_wikilink_titles(&note.body) {
+                let targets: Vec<(String, String)> = {
+                    let mut stmt = tx.prepare(&lookup_sql)?;
+                    let mut lookup_params: Vec<&dyn rusqlite::ToSql> = vec![&title];
+                    for vid in known_vault_ids {
+                        lookup_params.push(vid);
+                    }
+                    stmt.query_map(lookup_params.as_slice(), |row| {
+                        Ok((row.get(0)?, row.get(1)?))
+                    })?
+                    .collect::<rusqlite::Result<_>>()?
+                };
+
+                if targets.is_empty() {
+                    broken_links.push(BrokenLink { source: id, title });
+                    continue;
+                }
+                for (target_vault, target_id) in targets {
+                    if target_vault == vault_id && target_id == id.0.to_string() {
+                        continue; // skip self-links
+                    }
+                    tx.execute(
+                        "INSERT OR IGNORE INTO links (source_vault, source, target_vault, target)
+                         VALUES (?1, ?2, ?3, ?4)",
+                        params![vault_id, id.0.to_string(), target_vault, target_id],
+                    )?;
+                }
+            }
+        }
+
+        tx.commit()?;
+        Ok(broken_links)
     }
 
     /// Full-text search over title + body (+ tags) within `vault_id`,
@@ -325,15 +421,16 @@ impl Index {
         Ok(hits)
     }
 
-    /// Notes in `vault_id` that link to `target` — i.e. `target`'s
-    /// backlinks, ordered by title. Reads whatever `links` rows `reindex`
-    /// last resolved; does not itself trigger a reindex.
+    /// Notes (in any mounted vault) that link to `target` in `vault_id` —
+    /// i.e. `target`'s backlinks, ordered by title. Reads whatever `links`
+    /// rows `reindex`/`reindex_mounted` last resolved; does not itself
+    /// trigger a reindex.
     pub fn backlinks(&self, vault_id: &str, target: NoteId) -> Result<Vec<IndexedNote>> {
         let mut stmt = self.conn.prepare(
             "SELECT n.id, n.title
              FROM links l
-             JOIN notes n ON n.vault_id = l.vault_id AND n.id = l.source
-             WHERE l.vault_id = ?1 AND l.target = ?2
+             JOIN notes n ON n.vault_id = l.source_vault AND n.id = l.source
+             WHERE l.target_vault = ?1 AND l.target = ?2
              ORDER BY n.title",
         )?;
         let rows = stmt.query_map(params![vault_id, target.0.to_string()], |row| {
@@ -370,8 +467,8 @@ impl Index {
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
         let sql = format!(
             "SELECT COUNT(*) FROM links
-             WHERE vault_id = ?
-               AND (source IN ({placeholders}) OR target IN ({placeholders}))"
+             WHERE (source_vault = ? AND source IN ({placeholders}))
+                OR (target_vault = ? AND target IN ({placeholders}))"
         );
 
         let mut stmt = self.conn.prepare(&sql)?;
@@ -379,6 +476,7 @@ impl Index {
         for id in &ids {
             query_params.push(id);
         }
+        query_params.push(&vault_id);
         for id in &ids {
             query_params.push(id);
         }
@@ -624,7 +722,10 @@ mod tests {
     fn links_for(index: &Index, vault_id: &str) -> Vec<(String, String)> {
         let mut stmt = index
             .conn
-            .prepare("SELECT source, target FROM links WHERE vault_id = ?1 ORDER BY source, target")
+            .prepare(
+                "SELECT source, target FROM links
+                 WHERE source_vault = ?1 ORDER BY source, target",
+            )
             .unwrap();
         stmt.query_map(params![vault_id], |row| Ok((row.get(0)?, row.get(1)?)))
             .unwrap()
@@ -906,5 +1007,170 @@ mod tests {
         let index = Index::open(&db_path).unwrap();
         assert_eq!(index.link_count_for_subtree("default", &[]).unwrap(), 0);
         std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn reindex_mounted_resolves_wikilinks_across_vaults() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree_a = Tree::new();
+        let source = tree_a.create_note("Source", None);
+        tree_a.set_body(source, "See [[Target In B]].");
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+
+        let mut tree_b = Tree::new();
+        let target = tree_b.create_note("Target In B", None);
+        let vault_b_dir = temp_vault_dir();
+        let vault_b = Vault::open(vault_b_dir.clone()).unwrap();
+
+        let reports = index
+            .reindex_mounted(&[("a", &tree_a, &vault_a), ("b", &tree_b, &vault_b)])
+            .unwrap();
+        assert!(reports.iter().all(|r| r.broken_links.is_empty()));
+
+        // The link is recorded once, under its source vault ("a"); "b"
+        // never gets an outgoing-link row for it.
+        assert_eq!(links_for(&index, "a"), vec![(source.0.to_string(), target.0.to_string())]);
+        assert!(links_for(&index, "b").is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
+        std::fs::remove_dir_all(&vault_b_dir).ok();
+    }
+
+    #[test]
+    fn reindex_mounted_fans_out_across_vaults_when_ambiguous() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree_a = Tree::new();
+        let source = tree_a.create_note("Source", None);
+        tree_a.set_body(source, "See [[Shared]].");
+        let dup_in_a = tree_a.create_note("Shared", None);
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+
+        let mut tree_b = Tree::new();
+        let dup_in_b = tree_b.create_note("Shared", None);
+        let vault_b_dir = temp_vault_dir();
+        let vault_b = Vault::open(vault_b_dir.clone()).unwrap();
+
+        index
+            .reindex_mounted(&[("a", &tree_a, &vault_a), ("b", &tree_b, &vault_b)])
+            .unwrap();
+
+        let mut hits = links_for(&index, "a");
+        hits.sort();
+        let mut expected = vec![
+            (source.0.to_string(), dup_in_a.0.to_string()),
+            (source.0.to_string(), dup_in_b.0.to_string()),
+        ];
+        expected.sort();
+        assert_eq!(hits, expected);
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
+        std::fs::remove_dir_all(&vault_b_dir).ok();
+    }
+
+    #[test]
+    fn reindex_does_not_resolve_against_a_vault_left_out_of_the_batch() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        // "b" gets indexed once, on its own.
+        let mut tree_b = Tree::new();
+        tree_b.create_note("Target In B", None);
+        let vault_b_dir = temp_vault_dir();
+        let vault_b = Vault::open(vault_b_dir.clone()).unwrap();
+        index.reindex("b", &tree_b, &vault_b).unwrap();
+
+        // Later, "a" is reindexed alone (not batched with "b") and links to
+        // a title that only exists in "b". Even though "b"'s notes are
+        // still sitting in the table, they must not count as known-good
+        // for this narrower reindex.
+        let mut tree_a = Tree::new();
+        let source = tree_a.create_note("Source", None);
+        tree_a.set_body(source, "See [[Target In B]].");
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+        let report = index.reindex("a", &tree_a, &vault_a).unwrap();
+
+        assert_eq!(report.broken_links.len(), 1);
+        assert_eq!(report.broken_links[0].title, "Target In B");
+        assert!(links_for(&index, "a").is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
+        std::fs::remove_dir_all(&vault_b_dir).ok();
+    }
+
+    #[test]
+    fn backlinks_finds_a_source_note_in_a_different_vault() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree_a = Tree::new();
+        let source = tree_a.create_note("Source", None);
+        tree_a.set_body(source, "See [[Target]].");
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+
+        let mut tree_b = Tree::new();
+        let target = tree_b.create_note("Target", None);
+        let vault_b_dir = temp_vault_dir();
+        let vault_b = Vault::open(vault_b_dir.clone()).unwrap();
+
+        index
+            .reindex_mounted(&[("a", &tree_a, &vault_a), ("b", &tree_b, &vault_b)])
+            .unwrap();
+
+        let hits = index.backlinks("b", target).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].note_id, source);
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
+        std::fs::remove_dir_all(&vault_b_dir).ok();
+    }
+
+    #[test]
+    fn link_count_for_subtree_counts_a_cross_vault_link() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree_a = Tree::new();
+        let source = tree_a.create_note("Source", None);
+        tree_a.set_body(source, "See [[Target]].");
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+
+        let mut tree_b = Tree::new();
+        let target = tree_b.create_note("Target", None);
+        let vault_b_dir = temp_vault_dir();
+        let vault_b = Vault::open(vault_b_dir.clone()).unwrap();
+
+        index
+            .reindex_mounted(&[("a", &tree_a, &vault_a), ("b", &tree_b, &vault_b)])
+            .unwrap();
+
+        assert_eq!(
+            index
+                .link_count_for_subtree("a", &tree_a.subtree_ids(source))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            index
+                .link_count_for_subtree("b", &tree_b.subtree_ids(target))
+                .unwrap(),
+            1
+        );
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
+        std::fs::remove_dir_all(&vault_b_dir).ok();
     }
 }
