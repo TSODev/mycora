@@ -121,6 +121,12 @@ impl Tree {
         self.notes.get(&id)
     }
 
+    /// Every note in the tree, in arbitrary order — for callers (the SQLite
+    /// indexer) that need to visit all of them rather than walk structurally.
+    pub fn iter(&self) -> impl Iterator<Item = (NoteId, &Note)> {
+        self.notes.iter().map(|(id, note)| (*id, note))
+    }
+
     pub fn rename(&mut self, id: NoteId, title: impl Into<String>) -> bool {
         match self.notes.get_mut(&id) {
             Some(note) => {

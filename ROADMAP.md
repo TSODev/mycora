@@ -53,12 +53,16 @@ Goal: all CRUD + structural operations, safely.
 
 Goal: fast lookups without scanning the filesystem every time.
 
-- [ ] SQLite schema: `notes` (mirrors frontmatter + path), `tree_edges`,
+- [x] SQLite schema: `notes` (mirrors frontmatter + path), `tree_edges`,
       `links` (many-to-many) — each keyed with a `vault_id` from the start
       (see "Multiple vaults" below) so multi-vault support doesn't require
-      a schema migration later
-- [ ] Index rebuild command (`mycora reindex`) — index is always disposable
-      and regenerable from the Markdown files
+      a schema migration later. `links` exists but stays empty until v0.5
+      parses wikilinks. Index lives at `~/.local/share/mycora/index.sqlite3`
+      (XDG data dir, not `~/.config`, since it's generated/disposable) via
+      `rusqlite` (`bundled` feature, no system libsqlite3 dependency)
+- [x] Index rebuild command (`mycora reindex`) — index is always disposable
+      and regenerable from the Markdown files; rebuilds only the active
+      vault's rows (`config.active_vault()`), scoped by `vault_id`
 - [ ] Incremental reindex on file change (watch vault directory)
 - [ ] SQLite FTS5 virtual table for full-text search over title + body
 - [ ] Search overlay in the TUI (fuzzy-ish substring search to start)

@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **SQLite index & `mycora reindex` (start of v0.4)** — a disposable index
+  (`notes`, `tree_edges`, `links`, each keyed by `vault_id`) at
+  `~/.local/share/mycora/index.sqlite3`, rebuilt from the active vault's
+  Markdown files by the new `mycora reindex` subcommand. Nothing reads
+  from the index yet (search/FTS5, the watch-driven incremental reindex,
+  and tag filtering are the rest of v0.4, still to come) — this lands the
+  schema and the rebuild path first. Adds `rusqlite` (`bundled` feature)
+  as a dependency.
 - **Vault registry in config** — `config.toml` can now declare multiple
   named vaults via `[[vaults]]` (`name` + `path` each) instead of a single
   `vault_path`. Only one vault is opened at startup for now: the entry

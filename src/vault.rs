@@ -96,6 +96,13 @@ impl Vault {
         Ok((tree, LoadReport { warnings }))
     }
 
+    /// The on-disk file backing `id`, if it's been loaded or saved this
+    /// session — for callers (the SQLite indexer) that need the path rather
+    /// than just the note's structural/content fields.
+    pub fn path(&self, id: NoteId) -> Option<&Path> {
+        self.paths.get(&id).map(PathBuf::as_path)
+    }
+
     pub fn save_note(&mut self, id: NoteId, note: &Note) -> Result<()> {
         let path = match self.paths.get(&id) {
             Some(path) => path.clone(),

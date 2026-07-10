@@ -14,6 +14,7 @@ anyhow = "1.0.103"
 clap = { version = "4.6.1", features = ["derive"] }
 crossterm = "0.29.0"
 ratatui = "0.30.2"
+rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"
 time = { version = "0.3.53", features = ["formatting", "parsing", "serde-well-known"] }
