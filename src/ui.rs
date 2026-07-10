@@ -138,7 +138,7 @@ fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
     let title = note.map(|n| n.title.as_str()).unwrap_or("");
     let body = note.map(|n| n.body.as_str()).unwrap_or("");
 
-    let paragraph = Paragraph::new(body)
+    let paragraph = Paragraph::new(crate::markdown::render(body))
         .wrap(Wrap { trim: false })
         .block(Block::default().borders(Borders::ALL).title(title));
     frame.render_widget(paragraph, area);

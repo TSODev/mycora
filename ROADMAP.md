@@ -292,11 +292,24 @@ Goal: make daily use pleasant, not just functional.
       see that entry's note
 - [ ] Interactive backlinks pane (jump to an entry without the separate
       `b` overlay) — kept open on purpose, see the split-layout entry's note
-- [ ] Render note body as formatted markdown in the preview pane, built on
-      `pulldown-cmark` (already in the stack for wikilink extraction)
-      rather than a dedicated rendering crate — evaluated `ratatui-markdown`
-      (2026-07) and passed: too young (2 months old, 12 releases, API still
-      moving) and pinned to ratatui ^0.29 vs. our 0.30
+- [x] Render note body as formatted markdown in the preview pane
+      (2026-07-10) — `src/markdown.rs`'s `render(&str) -> Vec<Line>` walks
+      `pulldown-cmark`'s event stream and builds styled ratatui lines
+      directly (a small hand-rolled `Renderer` with a style stack, not a
+      dedicated ratatui-markdown crate — evaluated `ratatui-markdown`
+      (2026-07) and passed: too young then and pinned to ratatui ^0.29 vs.
+      our 0.30; nothing changed that assessment). Note: this roadmap entry
+      previously said pulldown-cmark was "already in the stack for
+      wikilink extraction" — that was never true, `link.rs`'s wikilink
+      parser is a hand-rolled bracket scanner with no dependency at all;
+      `pulldown-cmark` is a new dependency added specifically for this
+      item. Covers headings (color-coded by level), bold/italic, inline
+      and block code (green), bulleted/numbered lists (including nesting
+      depth and correct ordinal counting), blockquotes (dim+italic), and
+      horizontal rules. Not interactive: links render as plain text, and
+      `[[wikilinks]]` aren't CommonMark syntax so they render as literal
+      bracketed text too — highlighting them specially is a separate,
+      not-yet-scoped concern from "render the Markdown"
 - [ ] Command palette (`:` command mode, à la vim/helix)
 - [ ] Session state: remember last open note, expanded/collapsed branches
 - [ ] 2-line status bar, harmonized with Terapi/jsoned: `Length(2)` band

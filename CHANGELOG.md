@@ -8,6 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Markdown rendering in the body preview pane (v0.7)** — a new
+  `src/markdown.rs` module walks `pulldown-cmark`'s event stream and
+  builds styled ratatui lines directly, rather than pulling in a
+  dedicated ratatui-markdown crate (re-evaluated `ratatui-markdown` and
+  it's still pinned to ratatui `^0.29`, incompatible with our 0.30).
+  Covers headings (color-coded by level), bold/italic, inline/block code,
+  bulleted/numbered lists (with nesting), blockquotes, and horizontal
+  rules. Not interactive — links and `[[wikilinks]]` render as plain
+  text.
 - **Split-pane layout (v0.7)** — Normal/Insert/ConfirmDelete modes now
   show three columns (fixed 40/40/20 proportions): the tree, a read-only
   plain-text preview of the selected note's body, and a read-only

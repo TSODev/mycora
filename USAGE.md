@@ -6,7 +6,7 @@
 > tag filtering, read-only multi-vault mounting, `[[wikilink]]` cross-links
 > (including cross-vault ones) with a backlinks panel and link-count
 > badges, a full-pane note-body editor, and a three-pane layout (tree,
-> body preview, backlinks). No pane resizing, Markdown rendering, link
+> rendered-Markdown body preview, backlinks). No pane resizing, link
 > autocompletion, or configurable keybindings/theming yet — see
 > [ROADMAP.md](./ROADMAP.md) for what's still ahead.
 
@@ -216,9 +216,11 @@ current mode and the relevant keybinding hints:
   are read-only: `j`/`k` never selects into them, and their link-count
   badges work the same as the default vault's, just computed against that
   vault's own notes.
-- **Body preview** (middle) — the selected note's body as plain text, not
-  rendered Markdown (that's a separate, still-open item). Updates live as
-  you move the selection.
+- **Body preview** (middle) — the selected note's body, rendered as
+  Markdown (headings, bold/italic, inline/block code, lists, blockquotes,
+  horizontal rules). Updates live as you move the selection. Read-only and
+  not interactive: links and `[[wikilinks]]` render as plain text, not as
+  something you can click or navigate from the preview itself.
 - **Backlinks** (right) — notes linking to the selected note, also live.
   Read-only glance list: jumping to one of them still goes through the
   interactive backlinks overlay (`b`), not this pane directly.
