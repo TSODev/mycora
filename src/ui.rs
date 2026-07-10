@@ -28,7 +28,7 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    let items: Vec<ListItem> = app
+    let mut items: Vec<ListItem> = app
         .visible_notes()
         .into_iter()
         .map(|(id, depth)| {
@@ -73,6 +73,26 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
             ListItem::new(Line::from(Span::styled(label, style)))
         })
         .collect();
+
+    // Other mounted vaults: read-only, so never selectable/navigable (see
+    // `App::other_vault_sections`'s doc comment) — just a dimmed separator
+    // per vault followed by its top-level roots, always collapsed.
+    for (vault_name, roots) in app.other_vault_sections() {
+        let dim = Style::default().add_modifier(Modifier::DIM);
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!("── {vault_name} ──"),
+            dim,
+        ))));
+        for (title, count) in roots {
+            let label = if count > 0 {
+                let plural = if count == 1 { "" } else { "s" };
+                format!("▸ {title} ({count} link{plural})")
+            } else {
+                format!("▸ {title}")
+            };
+            items.push(ListItem::new(Line::from(Span::styled(label, dim))));
+        }
+    }
 
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Mycora"));
     frame.render_widget(list, area);

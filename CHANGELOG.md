@@ -8,6 +8,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Multi-vault mounting, read-only for now** — every registry entry with
+  `mounted = true` (the default) now loads at startup, each into its own
+  `Tree`, sharing the one `vault_id`-scoped `Index`. Only the editable
+  vault (`config.active_vault()`) is navigable/selectable; every other
+  mounted vault shows up stacked below it with a `── name ──` separator,
+  roots only, always collapsed, read-only — `j`/`k` never selects into
+  it. Its notes are still indexed, so link-count badges work on it, but
+  search (`/`) and backlinks (`b`) stay scoped to the editable vault only
+  (jumping to a result in a read-only vault has nowhere to land). `mycora
+  reindex`/`--watch` now cover every mounted vault, not just the active
+  one. Full multi-vault editing (every mutating `App` method resolving
+  which vault a note belongs to) is deferred to a later pass — see
+  ROADMAP.md's "Multiple vaults" entry for the full scope writeup.
+  `VaultEntry` gains a `mounted: bool` field (`config.toml`'s `[[vaults]]`
+  entries), defaulting to `true`.
 - **Link-count badge on collapsed branches (v0.5)** — a collapsed note
   with children shows an aggregate link count, e.g. `▸ Research (2
   links)`, when that count is greater than zero. `Index::link_count_for_subtree`

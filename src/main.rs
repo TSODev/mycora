@@ -78,49 +78,53 @@ fn main() -> anyhow::Result<()> {
     result
 }
 
-/// Rebuilds the SQLite index for the active vault (`config.active_vault()`)
-/// from its Markdown files and reports how many notes were indexed. The
-/// index itself is always disposable — this is safe to rerun any time.
+/// Rebuilds the SQLite index for every *mounted* vault (`Config::mounted_vaults`)
+/// from its Markdown files and reports how many notes were indexed in each.
+/// The index itself is always disposable — this is safe to rerun any time.
 fn reindex() -> anyhow::Result<()> {
     let config = Config::load()?;
-    let (count, index_path) = perform_reindex(&config)?;
-    println!(
-        "mycora: reindexed {count} note(s) from vault \"{}\" into {}",
-        config.active_vault().name,
-        index_path.display()
-    );
+    let index_path = Index::default_path(&config.home);
+    let results = perform_reindex(&config)?;
+    for (name, count) in &results {
+        println!(
+            "mycora: reindexed {count} note(s) from vault \"{name}\" into {}",
+            index_path.display()
+        );
+    }
     Ok(())
 }
 
 /// Like `reindex`, but stays running afterward and reindexes again whenever
-/// a file in the vault directory changes, rather than a single pass.
-/// Reindexing is always a full rebuild of the vault's rows (not a per-file
-/// diff) — matches `Index::reindex`'s own "disposable, cheaper to
-/// regenerate wholesale than to diff" approach, just triggered by
-/// filesystem events instead of a manual rerun. The vault directory is
-/// flat (`Vault::load` doesn't recurse), so the watch is non-recursive too;
-/// that also means moving a trashed note into `.trash/` still fires one
-/// legitimate change event (the file leaving the watched root).
+/// a file in any mounted vault's directory changes, rather than a single
+/// pass. Reindexing is always a full rebuild of *every* mounted vault's
+/// rows (not a per-file, per-vault diff) — matches `Index::reindex`'s own
+/// "disposable, cheaper to regenerate wholesale than to diff" approach,
+/// just triggered by filesystem events instead of a manual rerun. Every
+/// vault directory is flat (`Vault::load` doesn't recurse), so each watch
+/// is non-recursive too; that also means moving a trashed note into
+/// `.trash/` still fires one legitimate change event (the file leaving the
+/// watched root).
 fn watch_reindex() -> anyhow::Result<()> {
     let config = Config::load()?;
-    let active = config.active_vault().clone();
+    let index_path = Index::default_path(&config.home);
 
-    let (count, index_path) = perform_reindex(&config)?;
-    println!(
-        "mycora: reindexed {count} note(s) from vault \"{}\" into {}",
-        active.name,
-        index_path.display()
-    );
-    println!(
-        "mycora: watching {} for changes (Ctrl+C to stop)",
-        active.path.display()
-    );
+    let results = perform_reindex(&config)?;
+    for (name, count) in &results {
+        println!(
+            "mycora: reindexed {count} note(s) from vault \"{name}\" into {}",
+            index_path.display()
+        );
+    }
 
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(move |res| {
         let _ = tx.send(res);
     })?;
-    watcher.watch(&active.path, RecursiveMode::NonRecursive)?;
+    for entry in config.mounted_vaults() {
+        watcher.watch(&entry.path, RecursiveMode::NonRecursive)?;
+        println!("mycora: watching {} for changes", entry.path.display());
+    }
+    println!("mycora: Ctrl+C to stop");
 
     loop {
         match rx.recv() {
@@ -131,8 +135,9 @@ fn watch_reindex() -> anyhow::Result<()> {
                 // before reindexing once.
                 while rx.recv_timeout(Duration::from_millis(300)).is_ok() {}
                 match perform_reindex(&config) {
-                    Ok((count, _)) => {
-                        println!("mycora: change detected, reindexed {count} note(s)")
+                    Ok(results) => {
+                        let total: usize = results.iter().map(|(_, count)| count).sum();
+                        println!("mycora: change detected, reindexed {total} note(s)")
                     }
                     Err(err) => eprintln!("mycora: reindex failed: {err}"),
                 }
@@ -144,32 +149,37 @@ fn watch_reindex() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Loads the active vault fresh from disk and rebuilds its index rows.
-/// Shared by the one-shot and `--watch` reindex paths. Prints a warning per
-/// broken wikilink (a `[[title]]` that didn't resolve to any note) the same
-/// way `vault.load()`'s own warnings are printed — reported, not an error.
-fn perform_reindex(config: &Config) -> anyhow::Result<(usize, std::path::PathBuf)> {
-    let active = config.active_vault();
-    let mut vault = Vault::open(active.path.clone())?;
-    let (tree, report) = vault.load()?;
-    for warning in &report.warnings {
-        eprintln!("mycora: {warning}");
-    }
-
+/// Loads every mounted vault fresh from disk and rebuilds its index rows,
+/// returning `(vault name, note count)` per vault. Shared by the one-shot
+/// and `--watch` reindex paths. Prints a warning per broken wikilink (a
+/// `[[title]]` that didn't resolve to any note) the same way
+/// `vault.load()`'s own warnings are printed — reported, not an error.
+fn perform_reindex(config: &Config) -> anyhow::Result<Vec<(String, usize)>> {
     let index_path = Index::default_path(&config.home);
     let mut index = Index::open(&index_path)?;
-    let reindex_report = index.reindex(&active.name, &tree, &vault)?;
-    for broken in &reindex_report.broken_links {
-        let source_title = tree
-            .get(broken.source)
-            .map(|note| note.title.as_str())
-            .unwrap_or("?");
-        eprintln!(
-            "mycora: broken link in \"{source_title}\": [[{}]] matches no note",
-            broken.title
-        );
+
+    let mut results = Vec::new();
+    for entry in config.mounted_vaults() {
+        let mut vault = Vault::open(entry.path.clone())?;
+        let (tree, report) = vault.load()?;
+        for warning in &report.warnings {
+            eprintln!("mycora: [{}] {warning}", entry.name);
+        }
+
+        let reindex_report = index.reindex(&entry.name, &tree, &vault)?;
+        for broken in &reindex_report.broken_links {
+            let source_title = tree
+                .get(broken.source)
+                .map(|note| note.title.as_str())
+                .unwrap_or("?");
+            eprintln!(
+                "mycora: [{}] broken link in \"{source_title}\": [[{}]] matches no note",
+                entry.name, broken.title
+            );
+        }
+        results.push((entry.name.clone(), reindex_report.note_count));
     }
-    Ok((reindex_report.note_count, index_path))
+    Ok(results)
 }
 
 fn run(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> anyhow::Result<()> {

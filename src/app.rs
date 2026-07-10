@@ -6,6 +6,19 @@ use crate::note::{Note, NoteId};
 use crate::tree::Tree;
 use crate::vault::Vault;
 
+/// A vault mounted alongside the primary one: loaded and indexed (so its
+/// notes count toward search/backlinks/link-count badges under its own
+/// `vault_id`), but not navigable or editable yet. Full multi-vault editing
+/// needs every mutating `App` method to first resolve which vault a given
+/// `NoteId` belongs to — deferred to a later pass (see ROADMAP.md's
+/// "Multiple vaults" entry). Only its top-level roots are ever shown, and
+/// always collapsed: there's no expand/collapse interaction to offer when
+/// nothing here can become `selected`.
+struct ReadOnlyVault {
+    id: String,
+    tree: Tree,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Normal,
@@ -58,6 +71,8 @@ pub struct App {
     search_selected: usize,
     backlinks_results: Vec<IndexedNote>,
     backlinks_selected: usize,
+    /// Every other mounted vault (see `Config::mounted_vaults`), read-only.
+    other_vaults: Vec<ReadOnlyVault>,
 }
 
 impl App {
@@ -107,6 +122,36 @@ impl App {
             ));
         }
 
+        // Every other mounted vault: loaded and indexed like the primary
+        // one, just not wired into `tree`/`vault`/`selected` — read-only
+        // for now (see `ReadOnlyVault`'s doc comment).
+        let mut other_vaults = Vec::new();
+        for entry in config.mounted_vaults() {
+            if entry.name == active.name {
+                continue;
+            }
+            let mut other_vault = Vault::open(entry.path.clone())?;
+            let (other_tree, other_report) = other_vault.load()?;
+            for warning in &other_report.warnings {
+                report.warnings.push(format!("[{}] {warning}", entry.name));
+            }
+            let other_reindex_report = index.reindex(&entry.name, &other_tree, &other_vault)?;
+            for broken in &other_reindex_report.broken_links {
+                let source_title = other_tree
+                    .get(broken.source)
+                    .map(|note| note.title.as_str())
+                    .unwrap_or("?");
+                report.warnings.push(format!(
+                    "[{}] broken link in \"{source_title}\": [[{}]] matches no note",
+                    entry.name, broken.title
+                ));
+            }
+            other_vaults.push(ReadOnlyVault {
+                id: entry.name.clone(),
+                tree: other_tree,
+            });
+        }
+
         let app = Self {
             tree,
             vault,
@@ -127,6 +172,7 @@ impl App {
             search_selected: 0,
             backlinks_results: Vec::new(),
             backlinks_selected: 0,
+            other_vaults,
         };
 
         Ok((app, report.warnings))
@@ -681,5 +727,35 @@ impl App {
         self.index
             .link_count_for_subtree(&self.vault_id, &subtree)
             .unwrap_or(0)
+    }
+
+    /// One `(vault name, root notes)` entry per other mounted vault, for
+    /// the read-only sections `ui.rs` renders below the primary tree. Each
+    /// root's link count is its own subtree's badge, same as the primary
+    /// tree's (best-effort: an index error just reports 0).
+    pub fn other_vault_sections(&self) -> Vec<(&str, Vec<(&str, i64)>)> {
+        self.other_vaults
+            .iter()
+            .map(|v| {
+                let roots = v
+                    .tree
+                    .roots()
+                    .iter()
+                    .map(|&id| {
+                        let note = v
+                            .tree
+                            .get(id)
+                            .expect("root ids always resolve in their own tree");
+                        let subtree = v.tree.subtree_ids(id);
+                        let count = self
+                            .index
+                            .link_count_for_subtree(&v.id, &subtree)
+                            .unwrap_or(0);
+                        (note.title.as_str(), count)
+                    })
+                    .collect();
+                (v.id.as_str(), roots)
+            })
+            .collect()
     }
 }

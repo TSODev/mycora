@@ -83,8 +83,8 @@ single `q` won't close the app).
 ## Configuration
 
 Config file at `~/.config/mycora/config.toml`. Mycora keeps a registry of
-named vaults; only one is opened at startup for now (mounting more than one
-at once is not implemented yet):
+named vaults, every one of which is *mounted* (loaded) at startup unless
+you opt it out:
 
 ```toml
 [[vaults]]
@@ -94,11 +94,25 @@ path = "/path/to/your/notes"
 [[vaults]]
 name = "work"
 path = "/path/to/work/notes"
+
+[[vaults]]
+name = "archive"
+path = "/path/to/old/notes"
+mounted = false   # known to the registry, but not loaded
 ```
 
-The entry named `default` is opened on startup; if none is named `default`,
-the first entry is used. The older single-vault form is still accepted as a
-fallback when `[[vaults]]` is absent:
+The entry named `default` is the one you actually work in — it's the only
+vault you can create/rename/move/delete notes in today. Every other
+mounted vault shows up read-only, stacked below it with a `── name ──`
+separator (see [Layout](#layout)); if none is named `default`, the first
+mounted entry becomes the editable one instead. `mounted` defaults to
+`true` when omitted, so a vault only becomes registry-only-but-inactive if
+you explicitly set `mounted = false`. Editing a non-`default` mounted
+vault directly (reparenting into it, switching which one you're "in")
+isn't implemented yet.
+
+The older single-vault form is still accepted as a fallback when
+`[[vaults]]` is absent:
 
 ```toml
 vault_path = "/path/to/your/notes"
@@ -142,29 +156,32 @@ TUI starts — nothing is ever silently lost or causes a crash.
 
 ## The search index
 
-Alongside the vault, Mycora keeps a disposable SQLite index at
-`~/.local/share/mycora/index.sqlite3` — it powers full-text search
-([Searching](#searching)) and tag filtering. It's derived entirely from
-the vault's Markdown files, never authoritative: safe to delete, safe to
-rebuild, never a second copy of your data.
+Alongside the vault(s), Mycora keeps a single disposable SQLite index at
+`~/.local/share/mycora/index.sqlite3` shared across every mounted vault
+(each table is keyed by vault name) — it powers full-text search
+([Searching](#searching)), backlinks, link-count badges, and tag
+filtering. It's derived entirely from the vaults' Markdown files, never
+authoritative: safe to delete, safe to rebuild, never a second copy of
+your data.
 
-You generally don't need to manage this yourself — the TUI reindexes the
-active vault automatically on startup, and again every time you open
-search with `/`, so results always reflect the vault as loaded (including
-edits made earlier in the same session). The CLI commands below are for
-headless use: rebuilding the index without opening the TUI, or keeping it
-warm in the background for some other tool to query directly.
+You generally don't need to manage this yourself — the TUI reindexes
+every mounted vault automatically on startup, and reindexes the default
+vault again every time you open search with `/` or backlinks with `b`, so
+results always reflect it as loaded (including edits made earlier in the
+same session). The CLI commands below are for headless use: rebuilding
+the index without opening the TUI, or keeping it warm in the background
+for some other tool to query directly.
 
 ```sh
-mycora reindex          # rebuild once, then exit
+mycora reindex          # rebuild every mounted vault once, then exit
 mycora reindex --watch  # rebuild, then keep running and rebuild again
-                         # whenever a file in the vault changes
+                         # whenever a file in any mounted vault changes
 ```
 
 `--watch` debounces bursts of filesystem events (300ms) into a single
 reindex, since one save is often a write followed by a rename-into-place.
-It watches the vault directory non-recursively, matching how the vault
-itself is a flat directory. Stop it with `Ctrl+C`.
+It watches every mounted vault's directory non-recursively, matching how
+each vault itself is a flat directory. Stop it with `Ctrl+C`.
 
 Each reindex is a full rebuild of the vault's rows, not a per-file diff —
 intentionally: the index is small and disposable enough that regenerating
@@ -185,6 +202,13 @@ status bar at the bottom showing the current mode and the relevant
 keybinding hints. A richer split-pane layout (note body, backlinks) is
 planned for v0.7.
 
+If other vaults are mounted alongside the default one (see
+[Configuration](#configuration)), their root notes appear stacked below
+it, each vault preceded by a dimmed `── name ──` separator. These rows are
+read-only: `j`/`k` never selects into them, and their link-count badges
+work the same as the default vault's, just computed against that vault's
+own notes.
+
 ## Searching
 
 - `/` — opens a search prompt over the active vault's title + body text
@@ -200,7 +224,11 @@ planned for v0.7.
 
 Opening search always reindexes first (see [The search index](#the-search-index)),
 so results reflect the tree exactly as it stands, including edits you
-haven't run `mycora reindex` for yet.
+haven't run `mycora reindex` for yet. Search and backlinks (`b`) only
+cover the default (editable) vault — other mounted vaults are read-only
+and don't have anywhere for a jump-to-result to land yet, so they're left
+out of both, even though they're indexed and their link-count badges work
+(see [Layout](#layout)).
 
 ## Creating and renaming notes
 

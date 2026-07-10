@@ -244,3 +244,23 @@ Goal: stability before a public release.
   `[[wikilink]]` links rather than tree reparenting; this is also why the
   v0.4 SQLite schema needs `vault_id` on `notes`/`tree_edges`/`links` from
   its first version.
+  **Implemented 2026-07-10** (first pass, see v0.5 above): every registry
+  entry with `mounted = true` (the default) loads at startup, each into
+  its own `Tree`, all sharing the one `Index` (already `vault_id`-scoped).
+  No runtime mount/unmount keybinding yet — "mounted" is decided by
+  `config.toml` and re-read on each launch, not toggled mid-session; that
+  and persisting "which vaults were open last session" both stay v0.7
+  territory as originally scoped above. Bigger deliberate scope cut: only
+  `config.active_vault()` (named `"default"`, or the first mounted entry)
+  is *editable* — every other mounted vault is read-only in the TUI
+  (shown stacked below, `── name ──` separator, roots only, always
+  collapsed, never `selected`). Full multi-vault editing needs every
+  mutating `App` method to first resolve which vault a given `NoteId`
+  belongs to; deliberately not attempted in this pass given how many
+  methods that touches. Search (`/`) and backlinks (`b`) are similarly
+  scoped to the editable vault only — a jump-to-result lands nowhere for a
+  read-only vault's note, so they're left out of both rather than jumping
+  to a note the tree can't actually select. Link-count badges *do* work
+  for read-only vaults (`Index::link_count_for_subtree` just takes an
+  explicit `vault_id`), which is what actually proves the shared index
+  works across mounted vaults in this pass.

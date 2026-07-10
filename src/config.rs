@@ -4,13 +4,17 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
-/// A vault known to Mycora: a name (unique within the registry, used to
-/// address the vault before multi-vault mounting has UI of its own) and the
-/// on-disk directory `Vault::open` should point at.
+/// A vault known to Mycora: a name (unique within the registry, doubling as
+/// the index's `vault_id`) and the on-disk directory `Vault::open` should
+/// point at.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VaultEntry {
     pub name: String,
     pub path: PathBuf,
+    /// Whether `App`/the CLI reindex commands should load this vault at
+    /// startup. `true` by default — a registry entry only stays *known but
+    /// inactive* if the user explicitly opts it out with `mounted = false`.
+    pub mounted: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -27,6 +31,12 @@ struct RawConfig {
 struct RawVaultEntry {
     name: String,
     path: PathBuf,
+    #[serde(default = "default_mounted")]
+    mounted: bool,
+}
+
+fn default_mounted() -> bool {
+    true
 }
 
 pub struct Config {
@@ -64,6 +74,7 @@ impl Config {
             vec![VaultEntry {
                 name: "default".to_string(),
                 path,
+                mounted: true,
             }]
         } else {
             raw.vaults
@@ -71,6 +82,7 @@ impl Config {
                 .map(|v| VaultEntry {
                     name: v.name,
                     path: v.path,
+                    mounted: v.mounted,
                 })
                 .collect()
         };
@@ -88,21 +100,48 @@ impl Config {
         })
     }
 
-    /// The vault to open on startup. Until App-level mounting exists (only
-    /// the registry is implemented so far — see ROADMAP.md's "Multiple
-    /// vaults" entry), Mycora always runs against exactly one: the entry
-    /// named `"default"` if the registry has one, else the first entry.
+    /// Every vault flagged `mounted` in the registry — what `App` and the
+    /// CLI reindex commands actually load. A registry can hold vaults that
+    /// aren't currently mounted (`mounted = false`); see ROADMAP.md's
+    /// "Multiple vaults" entry.
+    pub fn mounted_vaults(&self) -> impl Iterator<Item = &VaultEntry> {
+        self.vaults.iter().filter(|v| v.mounted)
+    }
+
+    /// The single *editable* vault: the entry named `"default"` among the
+    /// mounted ones if there is one, else the first mounted entry. Every
+    /// other mounted vault is read-only in the TUI for now — full
+    /// multi-vault editing needs every mutating `App` method to resolve
+    /// which vault a note belongs to first, deferred to a later pass (see
+    /// ROADMAP.md's "Multiple vaults" entry).
     pub fn active_vault(&self) -> &VaultEntry {
-        self.vaults
+        let mounted: Vec<&VaultEntry> = self.mounted_vaults().collect();
+        // Self-heal rather than fail to start if every entry opted out of
+        // mounting: the app always needs at least one editable vault.
+        let candidates: Vec<&VaultEntry> = if mounted.is_empty() {
+            self.vaults.iter().collect()
+        } else {
+            mounted
+        };
+        candidates
             .iter()
             .find(|v| v.name == "default")
-            .unwrap_or(&self.vaults[0])
+            .copied()
+            .unwrap_or(candidates[0])
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn raw_vault(name: &str, path: &str) -> RawVaultEntry {
+        RawVaultEntry {
+            name: name.to_string(),
+            path: PathBuf::from(path),
+            mounted: true,
+        }
+    }
 
     #[test]
     fn no_config_defaults_to_a_single_default_vault_under_home() {
@@ -112,6 +151,7 @@ mod tests {
             vec![VaultEntry {
                 name: "default".to_string(),
                 path: PathBuf::from("/home/alice/mycora"),
+                mounted: true,
             }]
         );
     }
@@ -132,10 +172,7 @@ mod tests {
     fn registry_entries_take_priority_over_legacy_vault_path() {
         let raw = RawConfig {
             vault_path: Some(PathBuf::from("/ignored")),
-            vaults: vec![RawVaultEntry {
-                name: "work".to_string(),
-                path: PathBuf::from("/vaults/work"),
-            }],
+            vaults: vec![raw_vault("work", "/vaults/work")],
         };
         let config = Config::from_raw(raw, "/home/alice").unwrap();
         assert_eq!(config.vaults.len(), 1);
@@ -147,14 +184,8 @@ mod tests {
         let raw = RawConfig {
             vault_path: None,
             vaults: vec![
-                RawVaultEntry {
-                    name: "work".to_string(),
-                    path: PathBuf::from("/vaults/work"),
-                },
-                RawVaultEntry {
-                    name: "work".to_string(),
-                    path: PathBuf::from("/vaults/other"),
-                },
+                raw_vault("work", "/vaults/work"),
+                raw_vault("work", "/vaults/other"),
             ],
         };
         assert!(Config::from_raw(raw, "/home/alice").is_err());
@@ -165,14 +196,8 @@ mod tests {
         let raw = RawConfig {
             vault_path: None,
             vaults: vec![
-                RawVaultEntry {
-                    name: "work".to_string(),
-                    path: PathBuf::from("/vaults/work"),
-                },
-                RawVaultEntry {
-                    name: "default".to_string(),
-                    path: PathBuf::from("/vaults/default"),
-                },
+                raw_vault("work", "/vaults/work"),
+                raw_vault("default", "/vaults/default"),
             ],
         };
         let config = Config::from_raw(raw, "/home/alice").unwrap();
@@ -184,17 +209,48 @@ mod tests {
         let raw = RawConfig {
             vault_path: None,
             vaults: vec![
-                RawVaultEntry {
-                    name: "work".to_string(),
-                    path: PathBuf::from("/vaults/work"),
-                },
-                RawVaultEntry {
-                    name: "personal".to_string(),
-                    path: PathBuf::from("/vaults/personal"),
-                },
+                raw_vault("work", "/vaults/work"),
+                raw_vault("personal", "/vaults/personal"),
             ],
         };
         let config = Config::from_raw(raw, "/home/alice").unwrap();
+        assert_eq!(config.active_vault().name, "work");
+    }
+
+    #[test]
+    fn mounted_defaults_to_true_when_omitted() {
+        let raw = RawConfig {
+            vault_path: None,
+            vaults: vec![raw_vault("work", "/vaults/work")],
+        };
+        let config = Config::from_raw(raw, "/home/alice").unwrap();
+        assert!(config.vaults[0].mounted);
+    }
+
+    #[test]
+    fn mounted_vaults_excludes_entries_with_mounted_false() {
+        let mut archive = raw_vault("archive", "/vaults/archive");
+        archive.mounted = false;
+        let raw = RawConfig {
+            vault_path: None,
+            vaults: vec![raw_vault("default", "/vaults/default"), archive],
+        };
+        let config = Config::from_raw(raw, "/home/alice").unwrap();
+        let mounted: Vec<&str> = config.mounted_vaults().map(|v| v.name.as_str()).collect();
+        assert_eq!(mounted, vec!["default"]);
+    }
+
+    #[test]
+    fn active_vault_self_heals_when_nothing_is_mounted() {
+        let mut work = raw_vault("work", "/vaults/work");
+        work.mounted = false;
+        let raw = RawConfig {
+            vault_path: None,
+            vaults: vec![work],
+        };
+        let config = Config::from_raw(raw, "/home/alice").unwrap();
+        // Every entry opted out of mounting, but active_vault() still needs
+        // to return *something* rather than panicking.
         assert_eq!(config.active_vault().name, "work");
     }
 }
