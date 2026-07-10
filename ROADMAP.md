@@ -647,3 +647,27 @@ Goal: stability before a public release.
   TUI confirmed `work`'s content was now the editable tree (its own
   auto-seeded "Welcome to Mycora" note) with `old-default` stacked
   read-only below it.
+  **Since extended a fourth time** (2026-07-10, user-requested): `mycora
+  vault mount <name>`/`vault unmount <name>` toggle a registered vault's
+  `mounted` flag directly (thin wrappers over a shared private
+  `Config::set_mounted`), each a no-op if the flag's already set that
+  way. Implementing these surfaced a **pre-existing latent panic** in
+  `App::new`, unrelated to this change but made trivially reachable by
+  it: `Config::active_vault`'s self-heal (its own doc comment: "the app
+  always needs at least one editable vault") returns *some* vault even
+  when every registry entry has `mounted = false`, but that self-healed
+  pick isn't necessarily itself in `mounted_vaults()` — `App::new` only
+  loaded vaults from `mounted_vaults()`, so its `primary_idx` lookup for
+  the self-healed `active` vault would find nothing and hit an
+  `.expect(...)`. Previously only reachable by hand-editing every entry
+  in `config.toml` to `mounted = false`; `vault unmount`ing your only
+  vault (or every mounted one) makes it trivial. **Fixed alongside this
+  feature** rather than shipped as a companion bug: `App::new` now
+  explicitly includes `active` in the set of vaults it loads even when
+  `active` itself isn't flagged `mounted`, so the self-heal promise
+  actually holds end-to-end instead of panicking one level up from where
+  it was made. Manually verified two scenarios against a two-vault
+  registry: unmounting just `default` (leaving `archive` mounted) loaded
+  `archive` as active with no panic; then unmounting `archive` too, so
+  *every* entry was `mounted = false`, still loaded `default` cleanly
+  via the self-heal path instead of crashing.

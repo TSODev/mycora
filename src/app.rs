@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use ratatui::widgets::{Block, Borders};
 use ratatui_textarea::TextArea;
 
-use crate::config::Config;
+use crate::config::{Config, VaultEntry};
 use crate::index::{Index, IndexedNote, SearchHit, TagFilterOp};
 use crate::note::{Note, NoteId};
 use crate::session::Session;
@@ -172,10 +172,19 @@ impl App {
         // Load every mounted vault (primary included) before indexing any
         // of them — cross-vault wikilink resolution needs every vault's
         // notes visible to the index together, not one at a time (see
-        // `Index::reindex_mounted`'s doc comment).
+        // `Index::reindex_mounted`'s doc comment). `active` is loaded even
+        // if it isn't itself in `mounted_vaults()`: `Config::active_vault`
+        // self-heals by returning *some* vault even when every registry
+        // entry has `mounted = false` (e.g. after `vault unmount`ing all
+        // of them), and that self-healed pick needs to actually be
+        // loadable, not just named.
+        let mut to_load: Vec<&VaultEntry> = config.mounted_vaults().collect();
+        if !to_load.iter().any(|entry| entry.name == active.name) {
+            to_load.push(&active);
+        }
         let mut loaded: Vec<(String, Tree, Vault)> = Vec::new();
         let mut warnings = Vec::new();
-        for entry in config.mounted_vaults() {
+        for entry in to_load {
             let mut v = Vault::open(entry.path.clone())?;
             let (t, r) = v.load()?;
             for warning in &r.warnings {
@@ -191,7 +200,7 @@ impl App {
         let primary_idx = loaded
             .iter()
             .position(|(name, _, _)| *name == active.name)
-            .expect("active_vault()'s name always exists among mounted_vaults()");
+            .expect("active is always pushed onto to_load above if not already in it");
         let (_, mut tree, mut vault) = loaded.remove(primary_idx);
 
         let mut selected = if tree.roots().is_empty() {

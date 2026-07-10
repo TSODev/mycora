@@ -8,6 +8,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`mycora vault mount`/`vault unmount` CLI commands** — toggle a
+  registered vault's `mounted` flag directly, each a no-op if it's
+  already set that way.
+
+### Fixed
+- **Latent panic when every registry vault was unmounted** — `App::new`
+  could panic on startup if `Config::active_vault`'s self-heal (which
+  guarantees returning *some* vault even when every entry has `mounted =
+  false`) picked a vault that wasn't itself in `mounted_vaults()`.
+  Previously only reachable by hand-editing every `config.toml` entry to
+  `mounted = false`; the new `vault unmount` command made it trivial, so
+  fixed alongside it rather than shipped as a companion bug. `App::new`
+  now always loads the active vault, even if it isn't flagged `mounted`.
+
+### Added
 - **`mycora vault rename`/`vault promote` CLI commands** — `vault rename
   <old> <new>` renames a registry entry in place; `vault promote <name>`
   makes a vault the active (read-write) one by renaming it to

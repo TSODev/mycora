@@ -85,6 +85,17 @@ enum VaultCommand {
         /// Name of the vault to promote.
         name: String,
     },
+    /// Flag a registered vault to load at startup.
+    Mount {
+        /// Name of the vault to mount.
+        name: String,
+    },
+    /// Flag a registered vault to *not* load at startup — stays known to
+    /// the registry, just inactive until mounted again.
+    Unmount {
+        /// Name of the vault to unmount.
+        name: String,
+    },
 }
 
 /// Restores the terminal (raw mode + alternate screen) before a panic's
@@ -127,6 +138,12 @@ fn main() -> anyhow::Result<()> {
         Some(Command::Vault {
             action: VaultCommand::Promote { name },
         }) => return vault_promote(&name),
+        Some(Command::Vault {
+            action: VaultCommand::Mount { name },
+        }) => return vault_set_mounted(&name, true),
+        Some(Command::Vault {
+            action: VaultCommand::Unmount { name },
+        }) => return vault_set_mounted(&name, false),
         None => {}
     }
 
@@ -229,6 +246,22 @@ fn vault_promote(name: &str) -> anyhow::Result<()> {
     Config::promote_vault(&config_path, name)?;
     println!(
         "mycora: \"{name}\" is now the active (read-write) vault in {}",
+        config_path.display()
+    );
+    Ok(())
+}
+
+fn vault_set_mounted(name: &str, mounted: bool) -> anyhow::Result<()> {
+    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
+    let config_path = Config::default_path(&home);
+    if mounted {
+        Config::mount_vault(&config_path, name)?;
+    } else {
+        Config::unmount_vault(&config_path, name)?;
+    }
+    let state = if mounted { "mounted" } else { "unmounted" };
+    println!(
+        "mycora: \"{name}\" is now {state} in {}",
         config_path.display()
     );
     Ok(())

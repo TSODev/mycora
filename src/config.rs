@@ -250,6 +250,43 @@ impl Config {
 
         write_raw(config_path, &raw)
     }
+
+    /// Sets whether `name` is mounted at startup — `mycora vault
+    /// mount`/`vault unmount`. A no-op if it's already set to `mounted`.
+    /// Errors if `name` isn't registered. Doesn't guard against unmounting
+    /// every vault in the registry (including the active one):
+    /// `Config::active_vault` self-heals by returning some vault anyway,
+    /// and `App::new` loads that self-healed pick regardless of its own
+    /// `mounted` flag, so the app still starts — it just won't treat the
+    /// unmounted registry as *meaning* anything is mounted, which is the
+    /// honest state to leave it in rather than silently refusing.
+    fn set_mounted(config_path: &Path, name: &str, mounted: bool) -> Result<()> {
+        let mut raw = read_raw(config_path)?;
+        migrate_legacy_vault_path(&mut raw);
+
+        let entry = raw
+            .vaults
+            .iter_mut()
+            .find(|v| v.name == name)
+            .with_context(|| format!("no vault named \"{name}\" in {}", config_path.display()))?;
+
+        if entry.mounted == mounted {
+            return Ok(());
+        }
+        entry.mounted = mounted;
+
+        write_raw(config_path, &raw)
+    }
+
+    /// `mycora vault mount <name>`. See `set_mounted`.
+    pub fn mount_vault(config_path: &Path, name: &str) -> Result<()> {
+        Self::set_mounted(config_path, name, true)
+    }
+
+    /// `mycora vault unmount <name>`. See `set_mounted`.
+    pub fn unmount_vault(config_path: &Path, name: &str) -> Result<()> {
+        Self::set_mounted(config_path, name, false)
+    }
 }
 
 /// Reads and parses `config_path`, or an empty `RawConfig` if it doesn't
@@ -592,6 +629,55 @@ mod tests {
         let config = config_at(&path);
         assert_eq!(config.active_vault().name, "default");
         assert_eq!(config.active_vault().path, PathBuf::from("/vaults/default"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn unmount_vault_clears_the_mounted_flag() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "archive", PathBuf::from("/vaults/archive"), true).unwrap();
+
+        Config::unmount_vault(&path, "archive").unwrap();
+
+        let config = config_at(&path);
+        assert!(!config.vaults[0].mounted);
+        assert_eq!(config.mounted_vaults().count(), 0);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn mount_vault_sets_the_mounted_flag() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "archive", PathBuf::from("/vaults/archive"), false).unwrap();
+
+        Config::mount_vault(&path, "archive").unwrap();
+
+        let config = config_at(&path);
+        assert!(config.vaults[0].mounted);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn mount_vault_already_mounted_is_a_noop() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "archive", PathBuf::from("/vaults/archive"), true).unwrap();
+
+        Config::mount_vault(&path, "archive").unwrap();
+
+        assert!(config_at(&path).vaults[0].mounted);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn set_mounted_errors_if_name_not_found() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "archive", PathBuf::from("/vaults/archive"), true).unwrap();
+
+        let err = Config::unmount_vault(&path, "nope").unwrap_err();
+        assert!(err.to_string().contains("no vault named"));
 
         std::fs::remove_file(&path).ok();
     }

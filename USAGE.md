@@ -206,6 +206,19 @@ Both commands are no-ops (no error, no file change) if there's nothing
 to do — renaming a vault to its own name, or promoting one that's
 already `"default"`.
 
+To flag a registered vault in or out of loading at startup, without
+removing it from the registry entirely:
+
+```sh
+mycora vault mount <name>
+mycora vault unmount <name>
+```
+
+Also no-ops if the vault's already in the requested state. Unmounting
+every vault in the registry (including the active one) doesn't break
+anything — `active_vault` still self-heals to some vault, and Mycora
+loads it regardless of its `mounted` flag, so the app always starts.
+
 ## The vault format
 
 Notes are plain Markdown files, one per note, in a single flat directory —
