@@ -320,6 +320,9 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
   note (expanding its ancestors, same as Search and Backlinks), `Esc`
   cancels back to Normal without changing your selection. If nothing
   matches, the status bar says so instead of opening an empty list.
+- `:panes reset` — resets the split layout (see [Layout](#layout)) back
+  to the default 40/40/20, the quickest way back after resizing since
+  pane widths persist across restarts
 - `:q` / `:quit` — quits Mycora, same as `q` `q` in Normal mode
 
 An unrecognized command shows an error in the status bar rather than

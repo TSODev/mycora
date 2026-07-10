@@ -157,6 +157,7 @@ pub const COMMAND_REFERENCE: &[(&str, &str)] = &[
         ":tags <tag1,tag2,...>",
         "list notes matching any of the given tags",
     ),
+    (":panes reset", "reset pane widths to the default 40/40/20"),
     (":q, :quit", "quit Mycora"),
 ];
 
@@ -242,7 +243,7 @@ impl App {
                 widths.iter().sum::<u16>() == 100
                     && widths.iter().all(|w| *w >= Self::PANE_MIN_PCT)
             })
-            .unwrap_or([40, 40, 20]);
+            .unwrap_or(Self::DEFAULT_PANE_WIDTHS);
 
         let index_path = Index::default_path(&config.home);
         let mut index = Index::open(&index_path)?;
@@ -920,6 +921,8 @@ impl App {
     const PANE_MIN_PCT: u16 = 10;
     /// How much one `[`/`]`/`{`/`}` press adjusts a pane by.
     const PANE_STEP_PCT: u16 = 5;
+    /// Starting layout, and what `:panes reset` restores.
+    const DEFAULT_PANE_WIDTHS: [u16; 3] = [40, 40, 20];
 
     /// Grows or shrinks `pane_widths[target]` (0 = tree, 2 = backlinks) by
     /// `PANE_STEP_PCT`, transferring the difference to/from the body pane
@@ -1110,8 +1113,11 @@ impl App {
     ///   `mycora reindex` from the CLI but without leaving the TUI
     /// - `tags <tag1,tag2,...>` — notes matching *any* of the given tags
     ///   (`TagFilterOp::Any`); opens `Mode::TagResults` if there are hits
+    /// - `panes reset` — resets the split layout to `DEFAULT_PANE_WIDTHS`;
+    ///   the only way back to it now that widths persist across restarts,
+    ///   short of hand-editing or deleting `session.toml`
     ///
-    /// Kept in sync with `COMMAND_REFERENCE` below by hand — only three
+    /// Kept in sync with `COMMAND_REFERENCE` below by hand — only four
     /// entries, not worth generating one from the other.
     pub fn execute_command(&mut self) {
         let input = std::mem::take(&mut self.command_input);
@@ -1130,6 +1136,7 @@ impl App {
             "q" | "quit" => self.should_quit = true,
             "reindex" => self.command_reindex(),
             "tags" => self.command_tags(args),
+            "panes" => self.command_panes(args),
             _ => {
                 self.last_message = None;
                 self.last_error = Some(format!("unknown command: {name}"));
@@ -1186,6 +1193,17 @@ impl App {
                 self.last_error = Some(format!("tag filter failed: {err}"));
             }
         }
+    }
+
+    fn command_panes(&mut self, args: &str) {
+        if args.trim() != "reset" {
+            self.last_message = None;
+            self.last_error = Some("usage: :panes reset".to_string());
+            return;
+        }
+        self.pane_widths = Self::DEFAULT_PANE_WIDTHS;
+        self.last_error = None;
+        self.last_message = Some("pane widths reset to default".to_string());
     }
 
     pub fn move_tag_results_selection(&mut self, delta: isize) {

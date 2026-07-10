@@ -439,7 +439,22 @@ Goal: make daily use pleasant, not just functional.
       the popup with all three commands listed, typing `reindex` and
       `Enter` continued to work normally with the popup visible the whole
       time, and it disappeared once the command executed and the mode
-      returned to Normal.
+      returned to Normal. **Since extended again** (2026-07-10): added
+      `:panes reset`, resetting the split layout to
+      `App::DEFAULT_PANE_WIDTHS` (40/40/20) — the user asked about adding
+      a `:search` command too (equivalent to `/`), which was talked
+      through and deliberately skipped: `/` already has a direct,
+      prominently-hinted keybinding, so a `:search` command would just be
+      a second entry point for the same thing rather than exposing
+      anything new, unlike every other command in the palette. `:panes
+      reset` earns its place differently: once pane widths started
+      persisting across restarts (see "Resizable panes" above), there was
+      no way back to the default short of mashing `[`/`]`/`{`/`}` by eye
+      or hand-editing `session.toml` — a real gap, not a redundant second
+      path. Manually verified in tmux: resized panes with `]`/`{`, `:`
+      showed `:panes reset` in the help popup, running it reported "pane
+      widths reset to default" and the layout snapped back to 40/40/20,
+      and `:panes` with no argument showed "ERROR usage: :panes reset".
 - [x] Session state: remember last open note, expanded/collapsed branches
       (2026-07-10) — new `src/session.rs`: `Session::load`/`save` read and
       write `~/.local/share/mycora/session.toml` (XDG data dir alongside

@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`:panes reset` command (v0.7)** — resets the split layout to the
+  default 40/40/20, now that pane widths persist across restarts and
+  there was otherwise no quick way back to the default. Considered
+  `:search` (equivalent to `/`) too and skipped it — `/` already has a
+  direct keybinding, so a command would just duplicate an existing entry
+  point rather than exposing anything new.
 - **Persisted pane widths (v0.7)** — resizing the split layout with
   `[`/`]`/`{`/`}` is now remembered across restarts, in
   `session.toml`'s new vault-agnostic `pane_widths` field (unlike

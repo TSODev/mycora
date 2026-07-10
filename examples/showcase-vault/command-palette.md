@@ -7,22 +7,28 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-10T19:00:00Z
 ---
 
 # Command palette
 
 `:` in Normal mode opens a vim/helix-style command prompt,
-replacing only the [[Status bar]]'s hint row.
+replacing only the [[Status bar]]'s hint row. A popup listing every
+command also appears above the prompt for as long as it's open.
 
 - `:reindex` — manually rebuilds the [[Search and indexing]] index,
   reporting how many notes were indexed
 - `:tags <tag1,tag2,...>` — matches notes with *any* of the listed tags
   (OR, not AND yet), opening a full-pane result list (`j`/`k` move,
   `Enter` jumps, `Esc` cancels)
+- `:panes reset` — resets the [[Layout]] back to 40/40/20, the way back
+  after resizing now that widths persist across restarts
 - `:q` / `:quit` — quits, same as `q` `q` in Normal mode
 
-Both exposed commands surface backend functionality that already existed
-without a keybinding of its own — see [[Search and indexing]] for the
-tag-filtering and reindex machinery underneath. An unrecognized command
-reports an error in the status bar rather than doing nothing silently.
+Every exposed command surfaces backend functionality or a real gap that
+had no keybinding of its own — see [[Search and indexing]] for the
+tag-filtering and reindex machinery underneath `:reindex`/`:tags`. A
+`:search` command was considered too, then skipped: `/` already has a
+direct keybinding, so it would just duplicate an existing entry point
+rather than adding anything. An unrecognized command reports an error in
+the status bar rather than doing nothing silently.
