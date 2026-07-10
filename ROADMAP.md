@@ -588,3 +588,16 @@ Goal: stability before a public release.
   for read-only vaults (`Index::link_count_for_subtree` just takes an
   explicit `vault_id`), which is what actually proves the shared index
   works across mounted vaults in this pass.
+  **Since extended** (2026-07-10, user-requested): `mycora vault add
+  <name> <path> [--no-mount]` registers a new entry in `config.toml`'s
+  registry from the CLI, rather than hand-editing the TOML — still no
+  runtime mount/unmount (that's still config-file-and-relaunch, as
+  above), just a friendlier way to add an entry to begin with.
+  `Config::add_vault` rewrites the whole file from a fresh parse (like
+  `cargo add` rewriting `Cargo.toml`), migrating a legacy `vault_path`
+  key into an explicit `"default"` entry first if that's all that was
+  there, and rejecting a duplicate name outright rather than silently
+  overwriting it. Manually verified: adding a vault to an empty/missing
+  config created it; adding a second preserved the first; adding a
+  duplicate name errored without touching the file; adding to a
+  `vault_path`-only config correctly migrated it alongside the new entry.

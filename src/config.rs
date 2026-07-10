@@ -1,8 +1,8 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// A vault known to Mycora: a name (unique within the registry, doubling as
 /// the index's `vault_id`) and the on-disk directory `Vault::open` should
@@ -17,17 +17,18 @@ pub struct VaultEntry {
     pub mounted: bool,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 struct RawConfig {
     /// Pre-registry single-vault key. Still honored when `vaults` is empty,
     /// so an existing `config.toml` from before the registry keeps working
     /// unchanged rather than silently reverting to `~/mycora`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     vault_path: Option<PathBuf>,
     #[serde(default)]
     vaults: Vec<RawVaultEntry>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct RawVaultEntry {
     name: String,
     path: PathBuf,
@@ -50,9 +51,17 @@ pub struct Config {
 }
 
 impl Config {
+    /// `~/.config/mycora/config.toml` — kept as its own method (mirroring
+    /// `Session::default_path`/`Index::default_path`) so callers that need
+    /// the path without loading a full `Config` (e.g. `add_vault`, and its
+    /// own tests) don't have to duplicate the join.
+    pub fn default_path(home: &str) -> PathBuf {
+        PathBuf::from(home).join(".config/mycora/config.toml")
+    }
+
     pub fn load() -> Result<Self> {
         let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-        let config_path = PathBuf::from(&home).join(".config/mycora/config.toml");
+        let config_path = Self::default_path(&home);
 
         let raw: RawConfig = if config_path.exists() {
             let text = std::fs::read_to_string(&config_path)
@@ -128,6 +137,67 @@ impl Config {
             .find(|v| v.name == "default")
             .copied()
             .unwrap_or(candidates[0])
+    }
+
+    /// Registers a new vault at `config_path` (`Self::default_path`'s
+    /// result, for the real `mycora vault add` CLI command — kept as an
+    /// explicit parameter rather than resolving `HOME` internally so this
+    /// stays testable against a scratch path, matching every other
+    /// path-taking method in the crate). Creates the file (and its parent
+    /// directory) if neither exists yet. Errors rather than silently
+    /// overwriting if `name` is already registered; remove the old entry
+    /// first (by hand, or `mycora vault remove` if that ever exists) if
+    /// replacing it is what's wanted.
+    ///
+    /// Rewrites the whole file from a fresh parse — like `cargo add`
+    /// rewriting `Cargo.toml` — rather than a surgical text insertion.
+    /// Simpler, but loses hand-added comments/formatting in the file;
+    /// config.toml is edited rarely enough that this is an acceptable
+    /// tradeoff for now. If the file only had the legacy `vault_path` key
+    /// (no `vaults` registry yet), that implicit `"default"` vault is
+    /// migrated into an explicit registry entry first, so adding a second
+    /// vault doesn't silently drop the first one.
+    pub fn add_vault(config_path: &Path, name: &str, path: PathBuf, mounted: bool) -> Result<()> {
+        let mut raw: RawConfig = if config_path.exists() {
+            let text = std::fs::read_to_string(config_path)
+                .with_context(|| format!("reading {}", config_path.display()))?;
+            toml::from_str(&text)
+                .with_context(|| format!("parsing {}", config_path.display()))?
+        } else {
+            RawConfig::default()
+        };
+
+        if raw.vaults.iter().any(|v| v.name == name) {
+            bail!(
+                "a vault named \"{name}\" is already registered in {}",
+                config_path.display()
+            );
+        }
+
+        if raw.vaults.is_empty()
+            && let Some(legacy_path) = raw.vault_path.take()
+        {
+            raw.vaults.push(RawVaultEntry {
+                name: "default".to_string(),
+                path: legacy_path,
+                mounted: true,
+            });
+        }
+
+        raw.vaults.push(RawVaultEntry {
+            name: name.to_string(),
+            path,
+            mounted,
+        });
+
+        if let Some(parent) = config_path.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating {}", parent.display()))?;
+        }
+        let text = toml::to_string_pretty(&raw).context("serializing config.toml")?;
+        std::fs::write(config_path, text)
+            .with_context(|| format!("writing {}", config_path.display()))?;
+        Ok(())
     }
 }
 
@@ -252,5 +322,77 @@ mod tests {
         // Every entry opted out of mounting, but active_vault() still needs
         // to return *something* rather than panicking.
         assert_eq!(config.active_vault().name, "work");
+    }
+
+    fn scratch_config_path() -> PathBuf {
+        std::env::temp_dir().join(format!("mycora-config-test-{}.toml", uuid::Uuid::new_v4()))
+    }
+
+    #[test]
+    fn add_vault_creates_the_file_and_parent_dir_when_neither_exists() {
+        let dir = std::env::temp_dir().join(format!("mycora-config-test-{}", uuid::Uuid::new_v4()));
+        let config_path = dir.join("config.toml");
+        assert!(!dir.exists());
+
+        Config::add_vault(&config_path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        let config = Config::from_raw(
+            toml::from_str(&std::fs::read_to_string(&config_path).unwrap()).unwrap(),
+            "/home/alice",
+        )
+        .unwrap();
+        assert_eq!(config.vaults.len(), 1);
+        assert_eq!(config.vaults[0].name, "work");
+        assert_eq!(config.vaults[0].path, PathBuf::from("/vaults/work"));
+        assert!(config.vaults[0].mounted);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn add_vault_preserves_existing_entries() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+        Config::add_vault(&path, "archive", PathBuf::from("/vaults/archive"), false).unwrap();
+
+        let raw: RawConfig = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let config = Config::from_raw(raw, "/home/alice").unwrap();
+        assert_eq!(config.vaults.len(), 2);
+        assert_eq!(config.vaults[0].name, "work");
+        assert!(config.vaults[0].mounted);
+        assert_eq!(config.vaults[1].name, "archive");
+        assert_eq!(config.vaults[1].path, PathBuf::from("/vaults/archive"));
+        assert!(!config.vaults[1].mounted);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn add_vault_rejects_a_duplicate_name() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        let err = Config::add_vault(&path, "work", PathBuf::from("/vaults/other"), true)
+            .unwrap_err();
+        assert!(err.to_string().contains("already registered"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn add_vault_migrates_a_legacy_vault_path_into_the_registry() {
+        let path = scratch_config_path();
+        std::fs::write(&path, "vault_path = \"/legacy/vault\"\n").unwrap();
+
+        Config::add_vault(&path, "second", PathBuf::from("/vaults/second"), true).unwrap();
+
+        let raw: RawConfig = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let config = Config::from_raw(raw, "/home/alice").unwrap();
+        assert_eq!(config.vaults.len(), 2);
+        assert_eq!(config.vaults[0].name, "default");
+        assert_eq!(config.vaults[0].path, PathBuf::from("/legacy/vault"));
+        assert_eq!(config.vaults[1].name, "second");
+
+        std::fs::remove_file(&path).ok();
     }
 }

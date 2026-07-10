@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`mycora vault add` CLI command** — registers a new vault in
+  `config.toml`'s registry (`mycora vault add <name> <path>
+  [--no-mount]`) instead of hand-editing the TOML. Creates the file if
+  missing, migrates an older single-vault `vault_path` config into an
+  explicit `"default"` entry if that's all there was, and errors on a
+  duplicate name rather than overwriting it.
 - **`:panes reset` command (v0.7)** — resets the split layout to the
   default 40/40/20, now that pane widths persist across restarts and
   there was otherwise no quick way back to the default. Considered

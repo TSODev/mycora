@@ -148,6 +148,26 @@ vault_path = "/path/to/your/notes"
 If the file is missing, or neither `[[vaults]]` nor `vault_path` is set,
 Mycora defaults to a single vault at `~/mycora`.
 
+### Registering a vault from the CLI
+
+```sh
+mycora vault add <name> <path>              # adds it, mounted
+mycora vault add <name> <path> --no-mount   # adds it, registry-only
+```
+
+Appends a `[[vaults]]` entry to `config.toml`, creating the file (and its
+parent directory) if neither exists yet. Errors rather than overwriting if
+`name` is already registered — remove the old entry by hand first if
+that's what you want. If the file only had the older single-vault
+`vault_path` form, that vault is migrated into an explicit `"default"`
+registry entry first, so adding a second vault doesn't silently drop it.
+The path doesn't need to exist yet; Mycora creates it on first use, same
+as pointing the TUI at a brand-new `vault_path` already does.
+
+Rewrites the whole file from a fresh parse (like `cargo add` rewriting
+`Cargo.toml`) rather than a surgical text edit — simple, but any hand-added
+comments or unusual formatting in `config.toml` won't survive.
+
 ## The vault format
 
 Notes are plain Markdown files, one per note, in a single flat directory —

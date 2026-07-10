@@ -1,7 +1,9 @@
 use std::io;
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
 
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use crossterm::{
     execute,
@@ -34,6 +36,30 @@ enum Command {
         #[arg(long)]
         watch: bool,
     },
+    /// Manage the vault registry in config.toml.
+    Vault {
+        #[command(subcommand)]
+        action: VaultCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum VaultCommand {
+    /// Register a vault in config.toml's registry.
+    Add {
+        /// Name for the vault — its index vault_id, must be unique in the
+        /// registry (and is what "default" needs to match to be the
+        /// editable vault, see Config::active_vault).
+        name: String,
+        /// Path to the vault's directory on disk. Doesn't need to exist
+        /// yet — Vault::open creates it on first use, same as launching
+        /// the TUI against a brand-new vault_path does today.
+        path: PathBuf,
+        /// Register it without mounting (mounted = false in the written
+        /// entry). Mounted by default, matching every other vault entry.
+        #[arg(long)]
+        no_mount: bool,
+    },
 }
 
 /// Restores the terminal (raw mode + alternate screen) before a panic's
@@ -56,6 +82,13 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Some(Command::Reindex { watch: false }) => return reindex(),
         Some(Command::Reindex { watch: true }) => return watch_reindex(),
+        Some(Command::Vault {
+            action: VaultCommand::Add {
+                name,
+                path,
+                no_mount,
+            },
+        }) => return vault_add(&name, path, !no_mount),
         None => {}
     }
 
@@ -86,6 +119,23 @@ fn main() -> anyhow::Result<()> {
     }
 
     result
+}
+
+/// Resolves `HOME` and delegates to `Config::add_vault` — the CLI side of
+/// `mycora vault add`. Prints a one-line confirmation on success; errors
+/// (HOME unset, config.toml unparseable, duplicate name) propagate as
+/// `main`'s own `Result` does for every other subcommand.
+fn vault_add(name: &str, path: PathBuf, mounted: bool) -> anyhow::Result<()> {
+    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
+    let config_path = Config::default_path(&home);
+    Config::add_vault(&config_path, name, path.clone(), mounted)?;
+    let mount_note = if mounted { "" } else { " (not mounted)" };
+    println!(
+        "mycora: added vault \"{name}\" ({}) to {}{mount_note}",
+        path.display(),
+        config_path.display()
+    );
+    Ok(())
 }
 
 /// Rebuilds the SQLite index for every *mounted* vault (`Config::mounted_vaults`)
