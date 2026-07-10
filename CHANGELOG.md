@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`mycora reindex --watch` (v0.4)** — stays running and reindexes the
+  active vault automatically whenever a file in it changes, via the
+  `notify` crate (non-recursive, matching `Vault::load`). Debounces
+  bursts of filesystem events (300ms) into a single reindex, since one
+  atomic save is often a write + rename-into-place. Each trigger is a
+  full rebuild of the vault's index rows, not a per-file diff — same
+  "disposable, cheap to regenerate wholesale" index philosophy as
+  `mycora reindex`, just triggered by file events instead of manually.
 - **Search overlay in the TUI (v0.4)** — `/` in Normal mode opens a search
   prompt; results from `Index::search` update live as you type, Up/Down
   cycles them, Enter expands the hit's ancestors and selects it in the

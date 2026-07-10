@@ -63,7 +63,17 @@ Goal: fast lookups without scanning the filesystem every time.
 - [x] Index rebuild command (`mycora reindex`) — index is always disposable
       and regenerable from the Markdown files; rebuilds only the active
       vault's rows (`config.active_vault()`), scoped by `vault_id`
-- [ ] Incremental reindex on file change (watch vault directory)
+- [x] Incremental reindex on file change (watch vault directory) —
+      `mycora reindex --watch`, via the `notify` crate, non-recursive
+      (`Vault::load` doesn't recurse either, so this matches). "Incremental"
+      means *event-triggered*, not a per-file diff: each debounced batch of
+      filesystem events (300ms coalescing window, since one atomic save is
+      often a write + rename-into-place) still does a full `vault.load()` +
+      `index.reindex()` for the active vault — consistent with the index
+      being disposable and "cheaper to regenerate wholesale than to diff"
+      (see `Index::reindex`'s doc comment). Manually verified: adding and
+      removing a note file while `--watch` was running correctly bumped the
+      indexed count up then back down
 - [x] SQLite FTS5 virtual table for full-text search over title + body —
       `notes_fts` (title, body, tags), rebuilt alongside `notes`/`tree_edges`
       in `reindex`. `Index::search()` turns free-text input into an ANDed,
