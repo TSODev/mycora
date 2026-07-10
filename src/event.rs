@@ -64,7 +64,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Char('J') => app.reorder_down(),
         KeyCode::Char('u') => app.undo(),
         KeyCode::Char('/') => app.begin_search(),
-        KeyCode::Char('b') => app.show_backlinks(),
+        KeyCode::Char('b') => app.focus_backlinks(),
         KeyCode::Char('e') => app.begin_edit_body(),
         _ => {}
     }
@@ -105,9 +105,9 @@ fn handle_search(app: &mut App, code: KeyCode) {
 fn handle_backlinks(app: &mut App, code: KeyCode) {
     match code {
         KeyCode::Enter => app.confirm_backlinks(),
-        KeyCode::Esc => app.cancel_backlinks(),
-        KeyCode::Up => app.move_backlinks_selection(-1),
-        KeyCode::Down => app.move_backlinks_selection(1),
+        KeyCode::Esc | KeyCode::Char('b') => app.cancel_backlinks(),
+        KeyCode::Char('j') | KeyCode::Down => app.move_backlinks_selection(1),
+        KeyCode::Char('k') | KeyCode::Up => app.move_backlinks_selection(-1),
         _ => {}
     }
 }

@@ -20,6 +20,7 @@
 - [The search index](#the-search-index)
 - [Layout](#layout)
 - [Searching](#searching)
+- [Backlinks](#backlinks)
 - [Creating and renaming notes](#creating-and-renaming-notes)
 - [Editing a note's body](#editing-a-notes-body)
 - [Moving notes](#moving-notes)
@@ -181,11 +182,12 @@ your data.
 
 You generally don't need to manage this yourself — the TUI reindexes
 every mounted vault automatically on startup, and reindexes the default
-vault again every time you open search with `/` or backlinks with `b`, so
-results always reflect it as loaded (including edits made earlier in the
-same session). The CLI commands below are for headless use: rebuilding
-the index without opening the TUI, or keeping it warm in the background
-for some other tool to query directly.
+vault again every time you open search with `/`, so results always
+reflect it as loaded (including edits made earlier in the same session).
+The backlinks pane and its link-count badges don't trigger a reindex —
+they read whatever the last one resolved. The CLI commands below are for
+headless use: rebuilding the index without opening the TUI, or keeping it
+warm in the background for some other tool to query directly.
 
 ```sh
 mycora reindex          # rebuild every mounted vault once, then exit
@@ -231,16 +233,16 @@ it in place.
   horizontal rules). Updates live as you move the selection. Read-only and
   not interactive: links and `[[wikilinks]]` render as plain text, not as
   something you can click or navigate from the preview itself.
-- **Backlinks** (right) — notes linking to the selected note, also live.
-  Read-only glance list: jumping to one of them still goes through the
-  interactive backlinks overlay (`b`), not this pane directly.
+- **Backlinks** (right) — notes linking to the selected note, live. Press
+  `b` to move keyboard focus into it (cyan border, highlighted entry) —
+  see [Backlinks](#backlinks) below.
 
 Column widths are fixed (40%/40%/20%) for now — interactive resizing is
 still an open item.
 
-Search (`/`), the backlinks overlay (`b`), and the body editor (`e`) all
-still take over the whole screen as full-pane overlays rather than living
-inside these columns.
+Search (`/`) and the body editor (`e`) still take over the whole screen as
+full-pane overlays rather than living inside these columns. The backlinks
+pane doesn't — `b` shifts focus onto it in place.
 
 ## Searching
 
@@ -259,11 +261,27 @@ inside these columns.
 
 Opening search always reindexes first (see [The search index](#the-search-index)),
 so results reflect the tree exactly as it stands, including edits you
-haven't run `mycora reindex` for yet. Search and backlinks (`b`) only
+haven't run `mycora reindex` for yet. Search and the backlinks pane only
 cover the default (editable) vault — other mounted vaults are read-only
 and don't have anywhere for a jump-to-result to land yet, so they're left
 out of both, even though they're indexed and their link-count badges work
 (see [Layout](#layout)).
+
+## Backlinks
+
+The right-hand pane (see [Layout](#layout)) always shows notes linking to
+the selected one, live. `b` moves keyboard focus into it — cyan border,
+current entry highlighted:
+
+- `j` / `k` (or `↑` / `↓`) — move between entries
+- `Enter` — jump to the focused entry: expands its ancestors so it's
+  visible, selects it in the tree, and returns focus to the tree
+- `Esc` or `b` again — returns focus to the tree without changing your
+  current selection
+
+Unlike search, focusing the backlinks pane doesn't reindex first — it
+reads whatever the last reindex resolved, same as the pane's live view
+does when it's not focused (and same as the link-count badges).
 
 ## Creating and renaming notes
 
@@ -358,6 +376,7 @@ session. Not persisted across restarts.
 | `u` | Undo |
 | `Ctrl+R` | Redo |
 | `/` | Open search (see [Searching](#searching)) |
+| `b` | Focus the backlinks pane (see [Backlinks](#backlinks)) |
 | `q` `q` | Quit (press twice — any other key cancels) |
 | `Ctrl+C` | Quit immediately — bypasses any prompt or confirmation |
 
@@ -391,3 +410,11 @@ session. Not persisted across restarts.
 |---|---|
 | *(type)* | Edit the body, multi-line — `Enter` inserts a newline |
 | `Esc` | Save and return to Normal mode (see [Editing a note's body](#editing-a-notes-body)) |
+
+### Backlinks (focused)
+
+| Key | Action |
+|---|---|
+| `j` / `k` / `↑` / `↓` | Move between entries |
+| `Enter` | Jump to the focused entry (see [Backlinks](#backlinks)) |
+| `Esc` / `b` | Return focus to the tree, keeping the current selection |

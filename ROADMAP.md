@@ -283,15 +283,36 @@ Goal: make daily use pleasant, not just functional.
       existing interactive `b` overlay (`Mode::Backlinks`) rather than
       being merged into the pane itself — a deliberate scope cut, agreed
       with the user before implementing, to keep this pass to "show a
-      third pane" rather than "rebuild backlinks navigation." Manually
+      third pane" rather than "rebuild backlinks navigation." (**Since
+      superseded**: the "Interactive backlinks pane" item below did
+      exactly that merge, later the same day.) Manually
       verified in tmux: selecting a different note updated both the body
       and backlinks panes live, and all three full-pane overlays (search,
       the backlinks picker, the body editor) still take over the whole
       screen exactly as before rather than showing the split
 - [ ] Resizable panes for the split layout above — kept open on purpose,
       see that entry's note
-- [ ] Interactive backlinks pane (jump to an entry without the separate
-      `b` overlay) — kept open on purpose, see the split-layout entry's note
+- [x] Interactive backlinks pane (2026-07-10) — `b` no longer opens a
+      separate full-screen overlay (`Mode::Backlinks` used to); it shifts
+      keyboard focus onto the already-visible backlinks pane instead:
+      `j`/`k` (or `Up`/`Down`) move within it, `Enter` jumps (expanding
+      ancestors so the target is visible, same as before), `Esc` or `b`
+      again returns focus to the tree. The focused pane gets a cyan border
+      and reversed-highlight on the current entry, matching the tree's own
+      selection styling. Confirmed with the user before implementing:
+      replace the overlay entirely rather than keep both — one interaction
+      path, not two doing the same thing. Also dropped the reindex-on-open
+      that `show_backlinks` used to do: the pane now reads
+      `App::live_backlinks()` exactly like the passive pane already did,
+      so `b` no longer forces a fresh reindex — consistent with the
+      passive pane's existing "doesn't reindex first" contract rather than
+      a special case for the interactive path. Manually verified in tmux:
+      focusing showed the cyan border and highlighted the first entry,
+      `j` moved to the second, `Enter` jumped to it (tree selection,
+      breadcrumb, and body preview all updated, backlinks pane correctly
+      went empty since nothing links to the destination), and `b` then
+      `Esc` on a different note returned to Normal without changing the
+      tree selection
 - [x] Render note body as formatted markdown in the preview pane
       (2026-07-10) — `src/markdown.rs`'s `render(&str) -> Vec<Line>` walks
       `pulldown-cmark`'s event stream and builds styled ratatui lines

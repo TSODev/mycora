@@ -20,22 +20,20 @@ pub fn draw(frame: &mut Frame, app: &App) {
     draw_status(frame, chunks[1], app);
 }
 
-/// Full-pane overlays (search, the backlinks picker, the body editor) take
-/// over the whole main area, same as before the split layout. Every other
-/// mode — Normal, Insert (renaming), ConfirmDelete (whose prompt is only
-/// in the status bar) — gets the three-pane split: tree, a read-only body
-/// preview, and a read-only backlinks list, both following the current
-/// selection live. Fixed proportions for now (40/40/20) — interactive
-/// resizing is a separate, still-open ROADMAP item, deliberately not
-/// attempted alongside the layout itself.
+/// Full-pane overlays (search, the body editor) take over the whole main
+/// area, same as before the split layout. Every other mode — Normal,
+/// Insert (renaming), ConfirmDelete (whose prompt is only in the status
+/// bar), and Backlinks (which shifts focus onto the backlinks pane rather
+/// than opening its own overlay — see `App::focus_backlinks`'s doc
+/// comment) — gets the three-pane split: tree, a read-only body preview,
+/// and the backlinks list, both following the current selection live.
+/// Fixed proportions for now (40/40/20) — interactive resizing is a
+/// separate, still-open ROADMAP item, deliberately not attempted alongside
+/// the layout itself.
 fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
     match app.mode {
         Mode::Search => {
             draw_search(frame, area, app);
-            return;
-        }
-        Mode::Backlinks => {
-            draw_backlinks(frame, area, app);
             return;
         }
         Mode::EditBody => {
@@ -44,7 +42,7 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
             }
             return;
         }
-        Mode::Normal | Mode::Insert | Mode::ConfirmDelete => {}
+        Mode::Normal | Mode::Insert | Mode::ConfirmDelete | Mode::Backlinks => {}
     }
 
     let panes = Layout::default()
@@ -146,21 +144,41 @@ fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(paragraph, area);
 }
 
-/// Read-only list of notes linking to the selected note — follows the
-/// current selection live. Doesn't reindex first, same as
-/// `App::link_count_for`'s badges: reflects whatever the last reindex
-/// resolved (on startup, or the next time `/` or `b` is used), not a
-/// live-as-you-type view of unreindexed edits. Jumping to one of these
-/// still goes through the interactive `b` overlay (`Mode::Backlinks`),
-/// unchanged — this pane is a glance, not a picker.
+/// List of notes linking to the selected note — follows the current
+/// selection live. Doesn't reindex first, same as `App::link_count_for`'s
+/// badges: reflects whatever the last reindex resolved (on startup, or the
+/// next time `/` is used), not a live-as-you-type view of unreindexed
+/// edits. Interactive when `b` shifts focus here (`Mode::Backlinks`): the
+/// focused entry is highlighted and the border turns cyan, matching the
+/// tree's own selection styling; otherwise it's just a glance list.
 fn draw_backlinks_pane(frame: &mut Frame, area: Rect, app: &App) {
+    let focused = app.mode == Mode::Backlinks;
+
     let items: Vec<ListItem> = app
         .live_backlinks()
         .iter()
-        .map(|hit| ListItem::new(Line::from(Span::raw(hit.title.clone()))))
+        .enumerate()
+        .map(|(i, hit)| {
+            let style = if focused && i == app.backlinks_selected() {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            ListItem::new(Line::from(Span::styled(hit.title.clone(), style)))
+        })
         .collect();
 
-    let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Backlinks"));
+    let border_style = if focused {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(border_style)
+            .title("Backlinks"),
+    );
     frame.render_widget(list, area);
 }
 
@@ -223,31 +241,6 @@ fn spans_from_snippet(snippet: &str, base: Style, matched: Style) -> Vec<Span<'s
         spans.push(Span::styled(rest.to_string(), base));
     }
     spans
-}
-
-fn draw_backlinks(frame: &mut Frame, area: Rect, app: &App) {
-    let items: Vec<ListItem> = app
-        .backlinks_results()
-        .iter()
-        .enumerate()
-        .map(|(i, hit)| {
-            let style = if i == app.backlinks_selected() {
-                Style::default().add_modifier(Modifier::REVERSED)
-            } else {
-                Style::default()
-            };
-            ListItem::new(Line::from(Span::styled(hit.title.clone(), style)))
-        })
-        .collect();
-
-    let target_title = app
-        .selected
-        .and_then(|id| app.tree.get(id))
-        .map(|note| note.title.as_str())
-        .unwrap_or("");
-    let title = format!("Backlinks: {target_title}");
-    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
-    frame.render_widget(list, area);
 }
 
 /// Background shared by both status rows — matches Terapi/jsoned's status
@@ -325,7 +318,10 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
             "SEARCH",
             "type: filter  Up/Down: move  Enter: open  Esc: cancel",
         ),
-        Mode::Backlinks => ("BACKLINKS", "Up/Down: move  Enter: open  Esc: cancel"),
+        Mode::Backlinks => (
+            "BACKLINKS",
+            "j/k: move  Enter: jump  Esc/b: back to tree",
+        ),
         Mode::EditBody => ("EDIT BODY", "Esc: save & exit"),
         Mode::ConfirmDelete => unreachable!("handled above"),
     };

@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Interactive backlinks pane replaces the `b` overlay (v0.7)** — `b` no
+  longer opens a separate full-screen overlay; it shifts keyboard focus
+  onto the backlinks pane already visible in the split layout instead.
+  `j`/`k`/`Up`/`Down` move within it, `Enter` jumps (same ancestor-reveal
+  behavior as before), `Esc` or `b` again returns focus to the tree. The
+  focused pane gets a cyan border and reversed-highlight, matching the
+  tree's own selection styling. Also drops the reindex-on-open the old
+  overlay did — the pane now reads `App::live_backlinks()` exactly like
+  the passive pane already did, so `b` no longer forces a fresh reindex.
+
 ### Added
 - **Session state (v0.7)** — Mycora now remembers the last selected note
   and which branches were expanded/collapsed, per vault, across restarts.

@@ -101,7 +101,9 @@ pub struct App {
     search_query: String,
     search_results: Vec<SearchHit>,
     search_selected: usize,
-    backlinks_results: Vec<IndexedNote>,
+    /// Index into `live_backlinks()` while `mode == Mode::Backlinks` — see
+    /// `focus_backlinks`'s doc comment for why there's no cached results
+    /// field alongside it.
     backlinks_selected: usize,
     /// Every other mounted vault (see `Config::mounted_vaults`), read-only.
     other_vaults: Vec<ReadOnlyVault>,
@@ -252,7 +254,6 @@ impl App {
             search_query: String::new(),
             search_results: Vec::new(),
             search_selected: 0,
-            backlinks_results: Vec::new(),
             backlinks_selected: 0,
             other_vaults,
             body_editor: None,
@@ -762,36 +763,35 @@ impl App {
         self.search_selected
     }
 
-    /// Enters backlinks mode for the currently selected note: reindexes
-    /// first (same reasoning as `begin_search` — reflect the live tree, not
-    /// a stale on-disk index), then looks up which notes link to it.
-    pub fn show_backlinks(&mut self) {
-        let Some(id) = self.selected else { return };
-        self.reindex_mounted();
-        self.backlinks_results = match self.index.backlinks(&self.vault_id, id) {
-            Ok(hits) => hits,
-            Err(err) => {
-                self.last_error = Some(format!("backlinks lookup failed: {err}"));
-                Vec::new()
-            }
-        };
+    /// Shifts keyboard focus onto the backlinks pane already visible in the
+    /// split layout, rather than opening a separate overlay — `j`/`k`
+    /// (or `Up`/`Down`) move within it, `Enter` jumps, `Esc` or `b` again
+    /// returns focus to the tree. Doesn't reindex first: it reads
+    /// `live_backlinks()` exactly like the passive pane already did before
+    /// this had its own focus state, so results reflect whatever the last
+    /// reindex resolved rather than forcing a fresh one on every `b` press.
+    pub fn focus_backlinks(&mut self) {
+        if self.selected.is_none() {
+            return;
+        }
         self.backlinks_selected = 0;
         self.mode = Mode::Backlinks;
     }
 
     pub fn move_backlinks_selection(&mut self, delta: isize) {
-        if self.backlinks_results.is_empty() {
+        let len = self.live_backlinks().len();
+        if len == 0 {
             return;
         }
-        let len = self.backlinks_results.len() as isize;
+        let len = len as isize;
         let new_pos = (self.backlinks_selected as isize + delta).rem_euclid(len) as usize;
         self.backlinks_selected = new_pos;
     }
 
-    /// Jumps to the selected backlink (expanding its ancestors so it's
-    /// visible) and returns to normal mode.
+    /// Jumps to the focused backlink (expanding its ancestors so it's
+    /// visible) and returns focus to the tree.
     pub fn confirm_backlinks(&mut self) {
-        if let Some(hit) = self.backlinks_results.get(self.backlinks_selected) {
+        if let Some(hit) = self.live_backlinks().get(self.backlinks_selected) {
             let id = hit.note_id;
             self.reveal(id);
             self.selected = Some(id);
@@ -801,10 +801,6 @@ impl App {
 
     pub fn cancel_backlinks(&mut self) {
         self.mode = Mode::Normal;
-    }
-
-    pub fn backlinks_results(&self) -> &[IndexedNote] {
-        &self.backlinks_results
     }
 
     pub fn backlinks_selected(&self) -> usize {
