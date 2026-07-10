@@ -101,8 +101,20 @@ v0.4 is now feature-complete against this list.
 
 Goal: notes can reference each other outside the tree.
 
-- [ ] Parse `[[wikilink]]` syntax from note bodies
-- [ ] Persist links in the `links` table, independent of tree position
+- [x] Parse `[[wikilink]]` syntax from note bodies — `link::extract_wikilink_titles`,
+      a small hand-rolled bracket scanner (no `regex` dependency added for
+      this). Stops cleanly at an unclosed `[[` rather than erroring
+- [x] Persist links in the `links` table, independent of tree position —
+      resolved and (re)written by `reindex`, scoped by `vault_id` like
+      every other table. Titles aren't required to be unique, so a
+      wikilink whose title matches more than one note fans out to a link
+      per match (resolved 2026-07-10, in the "Multiple vaults" spirit of
+      not silently guessing); a title matching no note is simply skipped
+      (that's what "broken link" means here) rather than erroring, and a
+      note linking to its own title is skipped too. Manually verified via
+      `mycora reindex` against real vault files. Backlinks *querying* isn't
+      exposed yet (no `Index` method beyond what's needed for `reindex`
+      itself) — that's the next item
 - [ ] Cross-vault links: a wikilink can resolve to a note in any *mounted*
       vault, not just the current one (see "Multiple vaults" below) — this
       is the intended path for referencing another vault's content, since

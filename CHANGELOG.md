@@ -8,6 +8,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`[[wikilink]]` parsing and link persistence (start of v0.5)** — a new
+  `link` module extracts `[[title]]` occurrences from note bodies (a small
+  hand-rolled scanner, no new dependency), and `reindex` resolves each
+  title against the vault's notes and writes the resolved pairs into the
+  index's `links` table. Titles aren't required to be unique: a wikilink
+  matching several notes links to all of them rather than silently
+  guessing one; a title matching no note is skipped (a "broken" link);
+  self-links are skipped. No querying API yet (backlinks panel, etc.) —
+  this lands the extraction + persistence half of v0.5's cross-links work
+  first.
 - **Tag filtering (v0.4, closes the version)** — a new `tags` table
   (`vault_id`, `note_id`, `tag`), populated by `reindex`.
   `Index::filter_by_tags(vault_id, tags, TagFilterOp::{All,Any})` does

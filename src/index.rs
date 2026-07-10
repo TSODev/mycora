@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -5,6 +6,7 @@ use rusqlite::{params, Connection};
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 
+use crate::link::extract_wikilink_titles;
 use crate::note::NoteId;
 use crate::tree::Tree;
 use crate::vault::Vault;
@@ -114,6 +116,16 @@ impl Index {
             params![vault_id],
         )?;
         tx.execute("DELETE FROM tags WHERE vault_id = ?1", params![vault_id])?;
+        tx.execute("DELETE FROM links WHERE vault_id = ?1", params![vault_id])?;
+
+        // Titles aren't required to be unique, so a wikilink can resolve to
+        // more than one note — every match gets a link row (see ROADMAP.md's
+        // "Multiple vaults" neighbor, the v0.5 cross-links entry: ambiguity
+        // is resolved by fanning out rather than silently picking one).
+        let mut titles: HashMap<&str, Vec<NoteId>> = HashMap::new();
+        for (id, note) in tree.iter() {
+            titles.entry(note.title.as_str()).or_default().push(id);
+        }
 
         let mut count = 0;
         for (id, note) in tree.iter() {
@@ -158,6 +170,21 @@ impl Index {
                     "INSERT OR IGNORE INTO tags (vault_id, note_id, tag) VALUES (?1, ?2, ?3)",
                     params![vault_id, id.0.to_string(), tag],
                 )?;
+            }
+            for title in extract_wikilink_titles(&note.body) {
+                let Some(targets) = titles.get(title.as_str()) else {
+                    continue; // broken link: no note has this title
+                };
+                for &target in targets {
+                    if target == id {
+                        continue; // skip self-links
+                    }
+                    tx.execute(
+                        "INSERT OR IGNORE INTO links (vault_id, source, target)
+                         VALUES (?1, ?2, ?3)",
+                        params![vault_id, id.0.to_string(), target.0.to_string()],
+                    )?;
+                }
             }
             count += 1;
         }
@@ -511,5 +538,126 @@ mod tests {
             .unwrap()
             .is_empty());
         std::fs::remove_file(&db_path).ok();
+    }
+
+    fn links_for(index: &Index, vault_id: &str) -> Vec<(String, String)> {
+        let mut stmt = index
+            .conn
+            .prepare("SELECT source, target FROM links WHERE vault_id = ?1 ORDER BY source, target")
+            .unwrap();
+        stmt.query_map(params![vault_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn reindex_resolves_a_wikilink_to_the_matching_note() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let target = tree.create_note("Target Note", None);
+        let source = tree.create_note("Source Note", None);
+        tree.set_body(source, "See [[Target Note]] for details.");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        assert_eq!(
+            links_for(&index, "default"),
+            vec![(source.0.to_string(), target.0.to_string())]
+        );
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn reindex_fans_out_a_wikilink_to_every_note_sharing_that_title() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let dup_a = tree.create_note("Debugging", None);
+        let dup_b = tree.create_note("Debugging", None);
+        let source = tree.create_note("Source Note", None);
+        tree.set_body(source, "See [[Debugging]].");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let mut expected = vec![
+            (source.0.to_string(), dup_a.0.to_string()),
+            (source.0.to_string(), dup_b.0.to_string()),
+        ];
+        expected.sort();
+        assert_eq!(links_for(&index, "default"), expected);
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn reindex_skips_a_wikilink_whose_title_matches_no_note() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let source = tree.create_note("Source Note", None);
+        tree.set_body(source, "See [[Nonexistent Title]].");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        assert!(links_for(&index, "default").is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn reindex_skips_self_links() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let source = tree.create_note("Source Note", None);
+        tree.set_body(source, "Refers to [[Source Note]] itself.");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        assert!(links_for(&index, "default").is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn reindex_scopes_links_to_their_vault_id() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree_a = Tree::new();
+        let target_a = tree_a.create_note("Target", None);
+        let source_a = tree_a.create_note("Source", None);
+        tree_a.set_body(source_a, "[[Target]]");
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+        index.reindex("a", &tree_a, &vault_a).unwrap();
+
+        assert_eq!(
+            links_for(&index, "a"),
+            vec![(source_a.0.to_string(), target_a.0.to_string())]
+        );
+        assert!(links_for(&index, "b").is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
     }
 }
