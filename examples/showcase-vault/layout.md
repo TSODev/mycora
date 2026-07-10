@@ -6,7 +6,7 @@ tags:
 - interface
 - layout
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T18:00:00Z
+updated: 2026-07-10T22:00:00Z
 ---
 
 # Layout
@@ -14,8 +14,9 @@ updated: 2026-07-10T18:00:00Z
 Three columns, plus the [[Status bar]] at the bottom:
 
 - **Tree** (left, blue border) — the indented, collapsible note tree. If
-  other vaults are mounted (see [[Multi-vault mounting]]), their root
-  notes appear stacked below it, read-only.
+  other vaults are mounted (see [[Multi-vault mounting]]), their notes
+  appear stacked below it, dimmed and read-only but just as navigable —
+  not roots-only.
 - **Body preview** (middle, magenta border) — the selected note's body,
   rendered as formatted Markdown (headings, bold/italic, code, lists,
   blockquotes, rules). Read-only; links and wikilinks render as plain

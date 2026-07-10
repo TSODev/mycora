@@ -161,6 +161,24 @@ pub const COMMAND_REFERENCE: &[(&str, &str)] = &[
     (":q, :quit", "quit Mycora"),
 ];
 
+/// One row in the tree pane, as returned by `App::visible_rows`: a note
+/// (possibly in a read-only mounted vault) or a `── vault name ──`
+/// separator marking where a read-only vault's section begins.
+/// Separators aren't navigable — `App::move_selection` skips them.
+pub enum TreeRow {
+    Note {
+        id: NoteId,
+        depth: usize,
+        title: String,
+        has_children: bool,
+        expanded: bool,
+        link_count: i64,
+        /// `false` for anything outside the active vault.
+        editable: bool,
+    },
+    VaultSeparator(String),
+}
+
 impl App {
     /// Loads config + vault from disk and returns the ready-to-run app along
     /// with any load warnings (malformed files, orphaned/duplicate ids) for
@@ -343,46 +361,150 @@ impl App {
         )
     }
 
-    /// Depth-first (id, depth) pairs for notes currently visible, respecting
-    /// collapse state. Recomputed on demand rather than cached: fine at
-    /// in-memory, single-vault scale (see ROADMAP v0.1).
-    pub fn visible_notes(&self) -> Vec<(NoteId, usize)> {
+    /// Depth-first (id, depth) pairs for the *active* vault only,
+    /// respecting collapse state. Private — only `neighbor_after` (picking
+    /// where selection lands after a delete, which only ever happens in
+    /// the active vault) still needs an active-only list; rendering and
+    /// `move_selection` use the cross-vault `visible_rows` below.
+    fn visible_active_notes(&self) -> Vec<(NoteId, usize)> {
         let mut out = Vec::new();
         for &root in self.tree.roots() {
-            self.push_visible(root, 0, &mut out);
+            self.push_visible_active(root, 0, &mut out);
         }
         out
     }
 
-    fn push_visible(&self, id: NoteId, depth: usize, out: &mut Vec<(NoteId, usize)>) {
+    fn push_visible_active(&self, id: NoteId, depth: usize, out: &mut Vec<(NoteId, usize)>) {
         out.push((id, depth));
         if self.expanded.contains(&id) {
             for &child in self.tree.children(id) {
-                self.push_visible(child, depth + 1, out);
+                self.push_visible_active(child, depth + 1, out);
+            }
+        }
+    }
+
+    /// The `Tree` that owns `id` and that tree's vault id — the active
+    /// vault first, else whichever read-only mounted vault's tree
+    /// contains it, else `None` if `id` isn't loaded anywhere right now.
+    /// Backbone for every read accessor that must work regardless of
+    /// which vault the current selection happens to be in.
+    fn resolve(&self, id: NoteId) -> Option<(&Tree, &str)> {
+        if self.tree.get(id).is_some() {
+            return Some((&self.tree, self.vault_id.as_str()));
+        }
+        self.other_vaults
+            .iter()
+            .find(|v| v.tree.get(id).is_some())
+            .map(|v| (&v.tree, v.id.as_str()))
+    }
+
+    /// `true` iff `id` belongs to the active (editable) vault. Every
+    /// mutating command checks this first and reports a clear error
+    /// rather than silently no-oping or, worse, acting on the wrong
+    /// vault — e.g. `create_child` would otherwise happily create a new
+    /// note in the *active* vault, wrongly parented under a read-only
+    /// vault's id, since `Tree::create_note` doesn't itself validate that
+    /// a given parent id exists in `self.tree`.
+    fn require_editable(&mut self, id: NoteId) -> bool {
+        if self.tree.get(id).is_some() {
+            true
+        } else {
+            self.last_message = None;
+            self.last_error = Some("this vault is read-only".to_string());
+            false
+        }
+    }
+
+    /// Depth-first rows across *every* mounted vault — the active one
+    /// first, then each read-only one behind its own separator — used by
+    /// both `ui.rs`'s tree rendering and `move_selection`. Read-only
+    /// branches respect `self.expanded` exactly like the active tree does
+    /// (ids are globally unique UUIDs, so the same set works across
+    /// vaults); this replaces the old roots-only, always-collapsed
+    /// `other_vault_sections` view with real navigation.
+    pub fn visible_rows(&self) -> Vec<TreeRow> {
+        let mut out = Vec::new();
+        for &root in self.tree.roots() {
+            self.push_visible_row(&self.tree, &self.vault_id, root, 0, true, &mut out);
+        }
+        for v in &self.other_vaults {
+            out.push(TreeRow::VaultSeparator(v.id.clone()));
+            for &root in v.tree.roots() {
+                self.push_visible_row(&v.tree, &v.id, root, 0, false, &mut out);
+            }
+        }
+        out
+    }
+
+    fn push_visible_row(
+        &self,
+        tree: &Tree,
+        vault_id: &str,
+        id: NoteId,
+        depth: usize,
+        editable: bool,
+        out: &mut Vec<TreeRow>,
+    ) {
+        let note = tree
+            .get(id)
+            .expect("visible row ids always resolve in their own tree");
+        let has_children = !tree.children(id).is_empty();
+        let is_expanded = self.expanded.contains(&id);
+        let link_count = if has_children && !is_expanded {
+            let subtree = tree.subtree_ids(id);
+            self.index
+                .link_count_for_subtree(vault_id, &subtree)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        out.push(TreeRow::Note {
+            id,
+            depth,
+            title: note.title.clone(),
+            has_children,
+            expanded: is_expanded,
+            link_count,
+            editable,
+        });
+        if is_expanded {
+            for &child in tree.children(id) {
+                self.push_visible_row(tree, vault_id, child, depth + 1, editable, out);
             }
         }
     }
 
     pub fn move_selection(&mut self, delta: isize) {
-        let visible = self.visible_notes();
-        if visible.is_empty() {
+        let ids: Vec<NoteId> = self
+            .visible_rows()
+            .into_iter()
+            .filter_map(|row| match row {
+                TreeRow::Note { id, .. } => Some(id),
+                TreeRow::VaultSeparator(_) => None,
+            })
+            .collect();
+        if ids.is_empty() {
             self.selected = None;
             return;
         }
 
         let current_pos = self
             .selected
-            .and_then(|id| visible.iter().position(|&(v, _)| v == id))
+            .and_then(|id| ids.iter().position(|&v| v == id))
             .unwrap_or(0);
 
-        let len = visible.len() as isize;
+        let len = ids.len() as isize;
         let new_pos = (current_pos as isize + delta).rem_euclid(len) as usize;
-        self.selected = Some(visible[new_pos].0);
+        self.selected = Some(ids[new_pos]);
     }
 
     pub fn toggle_expand(&mut self) {
         if let Some(id) = self.selected {
-            if self.tree.children(id).is_empty() {
+            let has_children = self
+                .resolve(id)
+                .map(|(tree, _)| !tree.children(id).is_empty())
+                .unwrap_or(false);
+            if !has_children {
                 return;
             }
             if !self.expanded.insert(id) {
@@ -404,6 +526,11 @@ impl App {
     }
 
     pub fn create_sibling(&mut self) {
+        if let Some(id) = self.selected
+            && !self.require_editable(id)
+        {
+            return;
+        }
         let parent = self
             .selected
             .and_then(|id| self.tree.get(id))
@@ -420,6 +547,9 @@ impl App {
 
     pub fn create_child(&mut self) {
         if let Some(parent) = self.selected {
+            if !self.require_editable(parent) {
+                return;
+            }
             let new_id = self.tree.create_note("New note", Some(parent));
             self.expanded.insert(parent);
             self.selected = Some(new_id);
@@ -433,6 +563,9 @@ impl App {
     /// right after it. Undoing removes the whole copy in one step.
     pub fn copy_selected(&mut self) {
         let Some(id) = self.selected else { return };
+        if !self.require_editable(id) {
+            return;
+        }
         let Some(note) = self.tree.get(id) else {
             return;
         };
@@ -454,6 +587,9 @@ impl App {
     /// preceding sibling (becoming that sibling's last child).
     pub fn indent_selected(&mut self) {
         let Some(id) = self.selected else { return };
+        if !self.require_editable(id) {
+            return;
+        }
         let Some(previous_parent) = self.tree.get(id).map(|note| note.parent) else {
             return;
         };
@@ -478,6 +614,9 @@ impl App {
     /// former parent if it already had later siblings.
     pub fn outdent_selected(&mut self) {
         let Some(id) = self.selected else { return };
+        if !self.require_editable(id) {
+            return;
+        }
         let Some(previous_parent) = self.tree.get(id).map(|note| note.parent) else {
             return;
         };
@@ -513,6 +652,9 @@ impl App {
 
     fn reorder(&mut self, up: bool) {
         let Some(id) = self.selected else { return };
+        if !self.require_editable(id) {
+            return;
+        }
         let moved = if up {
             self.tree.move_up(id)
         } else {
@@ -547,6 +689,9 @@ impl App {
     /// Opens the delete confirmation prompt for the selected note.
     pub fn request_delete(&mut self) {
         if let Some(id) = self.selected {
+            if !self.require_editable(id) {
+                return;
+            }
             self.pending_delete = Some(id);
             self.mode = Mode::ConfirmDelete;
         }
@@ -606,7 +751,7 @@ impl App {
     }
 
     fn neighbor_after(&self, id: NoteId) -> Option<NoteId> {
-        let visible = self.visible_notes();
+        let visible = self.visible_active_notes();
         let pos = visible.iter().position(|&(v, _)| v == id)?;
         visible
             .get(pos + 1)
@@ -616,6 +761,9 @@ impl App {
 
     pub fn begin_rename(&mut self) {
         if let Some(id) = self.selected {
+            if !self.require_editable(id) {
+                return;
+            }
             self.input = self
                 .tree
                 .get(id)
@@ -821,8 +969,20 @@ impl App {
     }
 
     /// Expands every ancestor of `id` so it's visible in `visible_notes()`.
+    /// Direct field access rather than `self.resolve(id)`: needs a live
+    /// `&Tree` reference at the same time as `&mut self.expanded`, which
+    /// a `&self` method handing back borrowed data can't provide alongside
+    /// a mutable borrow of a different field — same reason
+    /// `reveal_ancestors` is a free function taking disjoint refs rather
+    /// than a method in the first place.
     fn reveal(&mut self, id: NoteId) {
-        reveal_ancestors(&self.tree, &mut self.expanded, id);
+        if self.tree.get(id).is_some() {
+            reveal_ancestors(&self.tree, &mut self.expanded, id);
+            return;
+        }
+        if let Some(v) = self.other_vaults.iter().find(|v| v.tree.get(id).is_some()) {
+            reveal_ancestors(&v.tree, &mut self.expanded, id);
+        }
     }
 
     pub fn search_query(&self) -> &str {
@@ -911,13 +1071,33 @@ impl App {
         let Some(id) = self.selected else {
             return Vec::new();
         };
-        self.index.backlinks(&self.vault_id, id).unwrap_or_default()
+        let Some((_, vault_id)) = self.resolve(id) else {
+            return Vec::new();
+        };
+        self.index.backlinks(vault_id, id).unwrap_or_default()
     }
 
-    /// The active (editable) vault's registry name — the first segment of
-    /// the status bar's breadcrumb.
+    /// The selected note, wherever it lives — the active vault or a
+    /// read-only mounted one. `ui.rs`'s body preview uses this instead of
+    /// reaching into the active `tree` directly, so a read-only note's
+    /// body is actually readable (the whole point of read-only vaults
+    /// being navigable at all).
+    pub fn selected_note(&self) -> Option<&Note> {
+        let id = self.selected?;
+        self.resolve(id).and_then(|(tree, _)| tree.get(id))
+    }
+
+    /// The registry name of whichever vault `selected` is actually in —
+    /// the first segment of the status bar's breadcrumb. Falls back to
+    /// the active vault's name when nothing's selected. This is what
+    /// makes the breadcrumb honestly show, e.g., `archive › Some Note`
+    /// rather than always claiming `default` while browsing a read-only
+    /// vault.
     pub fn vault_name(&self) -> &str {
-        &self.vault_id
+        self.selected
+            .and_then(|id| self.resolve(id))
+            .map(|(_, vault_id)| vault_id)
+            .unwrap_or(self.vault_id.as_str())
     }
 
     /// Current percent widths of the split layout's tree/body/backlinks
@@ -973,67 +1153,31 @@ impl App {
     /// (inclusive) — the rest of the status bar's breadcrumb. Empty when
     /// nothing's selected.
     pub fn breadcrumb_titles(&self) -> Vec<String> {
-        let Some(mut id) = self.selected else {
+        let Some(id) = self.selected else {
+            return Vec::new();
+        };
+        let Some((tree, _)) = self.resolve(id) else {
             return Vec::new();
         };
         let mut titles = Vec::new();
-        while let Some(note) = self.tree.get(id) {
+        let mut current = Some(id);
+        while let Some(cur_id) = current {
+            let Some(note) = tree.get(cur_id) else { break };
             titles.push(note.title.clone());
-            match note.parent {
-                Some(parent_id) => id = parent_id,
-                None => break,
-            }
+            current = note.parent;
         }
         titles.reverse();
         titles
     }
 
-    /// Total links touching `id`'s subtree (itself + all descendants) — the
-    /// aggregate badge shown on a collapsed branch. Best-effort: an index
-    /// error just reports 0 rather than surfacing as `last_error`, since
-    /// this runs during rendering on an immutable `&App` and a badge
-    /// miscount isn't worth interrupting the user over.
-    pub fn link_count_for(&self, id: NoteId) -> i64 {
-        let subtree = self.tree.subtree_ids(id);
-        self.index
-            .link_count_for_subtree(&self.vault_id, &subtree)
-            .unwrap_or(0)
-    }
-
-    /// One `(vault name, root notes)` entry per other mounted vault, for
-    /// the read-only sections `ui.rs` renders below the primary tree. Each
-    /// root's link count is its own subtree's badge, same as the primary
-    /// tree's (best-effort: an index error just reports 0).
-    pub fn other_vault_sections(&self) -> Vec<(&str, Vec<(&str, i64)>)> {
-        self.other_vaults
-            .iter()
-            .map(|v| {
-                let roots = v
-                    .tree
-                    .roots()
-                    .iter()
-                    .map(|&id| {
-                        let note = v
-                            .tree
-                            .get(id)
-                            .expect("root ids always resolve in their own tree");
-                        let subtree = v.tree.subtree_ids(id);
-                        let count = self
-                            .index
-                            .link_count_for_subtree(&v.id, &subtree)
-                            .unwrap_or(0);
-                        (note.title.as_str(), count)
-                    })
-                    .collect();
-                (v.id.as_str(), roots)
-            })
-            .collect()
-    }
 
     /// Opens the selected note's body for editing. No-op if nothing's
     /// selected (there's no note to edit) — mirrors `begin_rename`'s guard.
     pub fn begin_edit_body(&mut self) {
         let Some(id) = self.selected else { return };
+        if !self.require_editable(id) {
+            return;
+        }
         let Some(note) = self.tree.get(id) else { return };
         let lines: Vec<String> = if note.body.is_empty() {
             vec![String::new()]

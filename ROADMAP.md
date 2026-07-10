@@ -692,3 +692,57 @@ Goal: stability before a public release.
   under its new name, confirmed via `vault list` showing one fewer entry
   and the removed vault's on-disk note file still present and unchanged
   afterward.
+  **Since extended a sixth time** (2026-07-10, user-requested): read-only
+  mounted vaults are now fully navigable — `j`/`k` continue past the
+  active vault's last row into each read-only vault's section instead of
+  stopping at the boundary, `l`/`Space` expand/collapse branches *inside*
+  a read-only vault (previously roots-only, always collapsed), the body
+  preview and backlinks pane both work for whatever's selected, and the
+  breadcrumb shows the vault actually being looked at. Everything about a
+  read-only vault stays read-only — no create/rename/delete/move/
+  reorder/copy/edit-body — reporting "this vault is read-only" through
+  the status bar rather than silently no-oping.
+  Auditing `app.rs` before writing any of this turned up two real bugs
+  the change would otherwise trigger or leave latent, both fixed as part
+  of this pass: `create_child`/`create_sibling` had no guard against
+  `selected` pointing outside `self.tree` at all — once `selected` can
+  point into a read-only vault, `create_child` would have silently
+  created a stray, wrongly-parented note *in the active vault*, since
+  `Tree::create_note` doesn't itself validate that a parent id exists;
+  and `breadcrumb_titles`/`vault_name` were hardcoded to the active
+  vault's tree/id, which would have shown the active vault's name with
+  an empty path while actually browsing a read-only one. Every other
+  mutating method (`copy_selected`, `indent_selected`, `outdent_selected`,
+  `reorder`, `begin_rename`, `begin_edit_body`) already no-opped safely
+  via existing `self.tree.get(id)` checks, but silently; `request_delete`
+  had no guard (would've opened the confirm-delete prompt for an
+  unremovable note). All nine now share one `require_editable` check.
+  Implementation: a new `resolve(id) -> Option<(&Tree, &str)>` (checks
+  the active tree, else scans the read-only ones) backs every read
+  accessor that must work regardless of which vault the selection is in;
+  a new `TreeRow` enum (`Note { .. }` / `VaultSeparator`) and
+  `visible_rows()` replace the old active-only `visible_notes()` +
+  roots-only `other_vault_sections()` with one combined, depth-first,
+  fully-navigable list `move_selection` and `ui.rs`'s tree rendering both
+  consume. `reveal()` (expands ancestors before a search/backlinks jump)
+  needed direct field-disjoint access to `self.tree`/`self.other_vaults`
+  vs. `self.expanded` rather than going through `resolve(&self)`, since
+  it mutates `expanded` while needing a live tree reference at the same
+  time — same reason the existing free-function `reveal_ancestors` isn't
+  a method either. Deliberately didn't add a "(read-only)" badge anywhere
+  — the corrected breadcrumb (showing the real vault name) plus the tree
+  pane's dimmed read-only rows already make it unambiguous, without
+  adding more UI surface. Manually verified end-to-end in tmux against a
+  two-vault scratch setup (active vault with a nested branch, read-only
+  vault with its own nested branch and a note targeted by a cross-vault
+  wikilink from the active vault): `j`/`k` crossed the boundary into the
+  read-only section; `l` expanded a collapsed branch inside it, revealing
+  a nested note; selecting that note showed its body and, in the
+  backlinks pane, the active vault's note that links to it; `b` then
+  `Enter` on that backlink jumped back into the active vault, breadcrumb
+  updating correctly both directions; every edit key (`a`, `d`, `i`, `e`,
+  `y`, `Tab`, `K`, `J`) on the read-only note showed "this vault is
+  read-only" and left both vaults' files byte-identical on disk
+  (confirmed via `md5sum`) — critically, `a` did *not* leak a stray note
+  into the active vault; the same keys still worked normally afterward
+  against a note in the active vault.

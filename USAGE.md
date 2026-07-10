@@ -130,13 +130,14 @@ mounted = false   # known to the registry, but not loaded
 
 The entry named `default` is the one you actually work in — it's the only
 vault you can create/rename/move/delete notes in today. Every other
-mounted vault shows up read-only, stacked below it with a `── name ──`
-separator (see [Layout](#layout)); if none is named `default`, the first
-mounted entry becomes the editable one instead. `mounted` defaults to
-`true` when omitted, so a vault only becomes registry-only-but-inactive if
-you explicitly set `mounted = false`. Editing a non-`default` mounted
-vault directly (reparenting into it, switching which one you're "in")
-isn't implemented yet.
+mounted vault is fully browsable (not just displayed) but read-only,
+stacked below it with a `── name ──` separator (see [Layout](#layout));
+if none is named `default`, the first mounted entry becomes the editable
+one instead. `mounted` defaults to `true` when omitted, so a vault only
+becomes registry-only-but-inactive if you explicitly set
+`mounted = false`. Editing a non-`default` mounted vault directly
+(reparenting into it, switching which one you're "in") isn't implemented
+yet.
 
 The older single-vault form is still accepted as a fallback when
 `[[vaults]]` is absent:
@@ -327,11 +328,12 @@ it in place.
 
 - **Tree** (left, blue border) — the indented, collapsible note tree, same
   as before. If other vaults are mounted alongside the default one (see
-  [Configuration](#configuration)), their root notes appear stacked below
-  it, each vault preceded by a dimmed `── name ──` separator. These rows
-  are read-only: `j`/`k` never selects into them, and their link-count
-  badges work the same as the default vault's, just computed against that
-  vault's own notes.
+  [Configuration](#configuration)), their notes appear stacked below it,
+  each vault preceded by a dimmed `── name ──` separator. `j`/`k` and
+  `l`/`h`/`Space` navigate and expand/collapse into these vaults just
+  like the default one — dimmed rows to mark them read-only, but fully
+  browsable, not roots-only. Their link-count badges work the same as
+  the default vault's, just computed against that vault's own notes.
 - **Body preview** (middle, magenta border) — the selected note's body,
   rendered as Markdown (headings, bold/italic, inline/block code, lists,
   blockquotes, horizontal rules). Updates live as you move the selection.
@@ -374,17 +376,20 @@ pane doesn't — `b` shifts focus onto it in place.
 
 Opening search always reindexes first (see [The search index](#the-search-index)),
 so results reflect the tree exactly as it stands, including edits you
-haven't run `mycora reindex` for yet. Search and the backlinks pane only
-cover the default (editable) vault — other mounted vaults are read-only
-and don't have anywhere for a jump-to-result to land yet, so they're left
-out of both, even though they're indexed and their link-count badges work
-(see [Layout](#layout)).
+haven't run `mycora reindex` for yet. `/` itself only searches the
+default (editable) vault's notes — other mounted vaults are indexed too
+(their link-count badges work, see [Layout](#layout)) but aren't
+included in full-text results yet. The backlinks pane isn't scoped this
+way: it follows the current selection in *any* mounted vault, read-only
+included, and jumping to a backlink can land anywhere (see
+[Backlinks](#backlinks)).
 
 ## Backlinks
 
 The right-hand pane (see [Layout](#layout)) always shows notes linking to
-the selected one, live. `b` moves keyboard focus into it — cyan border,
-current entry highlighted:
+the selected one, live — whichever vault that note is in, including a
+read-only mounted one, and results can span vaults too. `b` moves
+keyboard focus into it — cyan border, current entry highlighted:
 
 - `j` / `k` (or `↑` / `↓`) — move between entries
 - `Enter` — jump to the focused entry: expands its ancestors so it's

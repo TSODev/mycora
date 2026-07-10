@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, Mode, COMMAND_REFERENCE};
+use crate::app::{App, Mode, TreeRow, COMMAND_REFERENCE};
 
 /// Split-pane border accents. Named ANSI colors, not RGB/indexed — the
 /// terminal maps these to whatever's actually configured (light theme,
@@ -83,72 +83,63 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
     }
 }
 
+/// Renders `app.visible_rows()` — the active vault's tree followed by
+/// each read-only mounted vault behind its own dimmed `── name ──`
+/// separator, fully navigable (not roots-only) since `TreeRow::Note`
+/// already carries per-row expand/children/link-count state resolved
+/// against whichever tree the row actually belongs to (see
+/// `App::visible_rows`'s doc comment). Read-only rows are dimmed, and
+/// stay reversed-and-dimmed rather than plain-reversed when selected, so
+/// a read-only selection still reads as "read-only" even while
+/// highlighted.
 fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
-    let mut items: Vec<ListItem> = app
-        .visible_notes()
+    let dim = Style::default().add_modifier(Modifier::DIM);
+
+    let items: Vec<ListItem> = app
+        .visible_rows()
         .into_iter()
-        .map(|(id, depth)| {
-            let note = app
-                .tree
-                .get(id)
-                .expect("visible note ids always resolve in the tree");
-
-            let marker = if app.tree.children(id).is_empty() {
-                "  "
-            } else if app.expanded.contains(&id) {
-                "▾ "
-            } else {
-                "▸ "
-            };
-            let indent = "  ".repeat(depth);
-
-            let label = if app.mode == Mode::Insert && app.selected == Some(id) {
-                format!("{indent}{marker}{}", app.input)
-            } else {
-                let collapsed_with_children =
-                    !app.expanded.contains(&id) && !app.tree.children(id).is_empty();
-                if collapsed_with_children {
-                    let count = app.link_count_for(id);
-                    if count > 0 {
-                        let plural = if count == 1 { "" } else { "s" };
-                        format!("{indent}{marker}{} ({count} link{plural})", note.title)
-                    } else {
-                        format!("{indent}{marker}{}", note.title)
-                    }
+        .map(|row| match row {
+            TreeRow::VaultSeparator(name) => {
+                ListItem::new(Line::from(Span::styled(format!("── {name} ──"), dim)))
+            }
+            TreeRow::Note {
+                id,
+                depth,
+                title,
+                has_children,
+                expanded,
+                link_count,
+                editable,
+            } => {
+                let marker = if !has_children {
+                    "  "
+                } else if expanded {
+                    "▾ "
                 } else {
-                    format!("{indent}{marker}{}", note.title)
-                }
-            };
+                    "▸ "
+                };
+                let indent = "  ".repeat(depth);
 
-            let style = if app.selected == Some(id) {
-                Style::default().add_modifier(Modifier::REVERSED)
-            } else {
-                Style::default()
-            };
+                let label = if app.mode == Mode::Insert && app.selected == Some(id) {
+                    format!("{indent}{marker}{}", app.input)
+                } else if !expanded && has_children && link_count > 0 {
+                    let plural = if link_count == 1 { "" } else { "s" };
+                    format!("{indent}{marker}{title} ({link_count} link{plural})")
+                } else {
+                    format!("{indent}{marker}{title}")
+                };
 
-            ListItem::new(Line::from(Span::styled(label, style)))
+                let base = if editable { Style::default() } else { dim };
+                let style = if app.selected == Some(id) {
+                    base.add_modifier(Modifier::REVERSED)
+                } else {
+                    base
+                };
+
+                ListItem::new(Line::from(Span::styled(label, style)))
+            }
         })
         .collect();
-
-    // Other mounted vaults: read-only, so never selectable/navigable (see
-    // `App::other_vault_sections`'s doc comment) — just a dimmed separator
-    // per vault followed by its top-level roots, always collapsed.
-    for (vault_name, roots) in app.other_vault_sections() {
-        let dim = Style::default().add_modifier(Modifier::DIM);
-        items.push(ListItem::new(Line::from(Span::styled(
-            format!("── {vault_name} ──"),
-            dim,
-        ))));
-        for (title, count) in roots {
-            let label = if count > 0 {
-                let plural = if count == 1 { "" } else { "s" };
-                format!("▸ {title} ({count} link{plural})")
-            } else {
-                format!("▸ {title}")
-            };
-            items.push(ListItem::new(Line::from(Span::styled(label, dim))));
-        }
-    }
 
     let list = List::new(items).block(
         Block::default()
@@ -160,10 +151,12 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Read-only preview of the selected note's body, rendered as Markdown
-/// (see `crate::markdown`). Empty when nothing's selected or the note has
-/// no body yet.
+/// (see `crate::markdown`) — resolved via `App::selected_note` so a note
+/// in a read-only mounted vault is just as readable here as one in the
+/// active vault. Empty when nothing's selected or the note has no body
+/// yet.
 fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
-    let note = app.selected.and_then(|id| app.tree.get(id));
+    let note = app.selected_note();
     let title = note.map(|n| n.title.as_str()).unwrap_or("");
     let body = note.map(|n| n.body.as_str()).unwrap_or("");
 

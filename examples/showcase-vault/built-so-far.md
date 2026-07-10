@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T20:00:00Z
+updated: 2026-07-10T22:00:00Z
 ---
 
 # Built so far
@@ -31,4 +31,7 @@ updated: 2026-07-10T20:00:00Z
   [[Deferred: configurable keybindings]])
 - **Since v0.7** — a full `mycora vault ...` CLI for the registry:
   [[Managing vaults from the CLI]] (`add`, `init`, `rename`, `promote`,
-  `mount`, `unmount`, `remove`, `list`)
+  `mount`, `unmount`, `remove`, `list`); [[Read-only secondary vaults]]
+  became fully navigable (not just visible), with every mutation guarded
+  against acting on the wrong vault (see
+  [[Guard every mutation against the wrong vault]])

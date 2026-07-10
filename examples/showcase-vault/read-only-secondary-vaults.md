@@ -6,7 +6,7 @@ tags:
 - design-decision
 - multi-vault
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-10T22:00:00Z
 ---
 
 # Read-only secondary vaults
@@ -17,13 +17,17 @@ multi-vault editing from the start.
 
 Full editing would need every mutating operation in the app to first
 resolve which vault a given note actually belongs to — a real change
-touching a large number of methods. Read-only-first ships the part that
-matters immediately (seeing and cross-linking to another vault's notes)
-without taking on that cost speculatively. Search and the backlinks panel
-are similarly scoped to the editable vault only, since a jump-to-result
-has nowhere to land in a vault the tree can't select into.
+touching a large number of methods, still not attempted. What *did* land
+later the same day: read-only vaults are fully navigable, not just
+visible — `j`/`k` move into them, branches expand/collapse, the body
+preview and [[Cross-links and backlinks]] panel both work for whatever's
+selected in any mounted vault, and jumping to a backlink can land in any
+of them. Every edit key still refuses with a clear "this vault is
+read-only" instead of silently doing nothing or, worse, mutating the
+active vault by mistake — see
+[[Guard every mutation against the wrong vault]].
 
-Link-count badges are the exception — they work for read-only vaults too,
-since they only need a vault id, not a selectable tree — which is what
-actually proves the shared [[Search and indexing]] index works correctly
-across mounted vaults.
+Link-count badges needed none of this — they worked for read-only vaults
+from the start, since they only need a vault id, not a selectable tree —
+which is what originally proved the shared [[Search and indexing]] index
+works correctly across mounted vaults, before navigation caught up.

@@ -163,9 +163,17 @@ directly and guarantee its synthetic output matches the real on-disk format.
   the entry on the opposite stack. This is what keeps a chain of undo/redo
   correct even when other edits happened in between; don't "simplify" this
   into replaying stored snapshots without preserving that property.
-  `visible_notes()` (depth-first, respecting `expanded: HashSet<NoteId>`)
+  `visible_rows()` (depth-first, respecting `expanded: HashSet<NoteId>`)
   is recomputed on every call rather than cached — acceptable at current
-  scale per ROADMAP's v0.1 note, revisit if it shows up in profiling.
+  scale per ROADMAP's v0.1 note, revisit if it shows up in profiling. It
+  returns `TreeRow::Note`/`TreeRow::VaultSeparator` spanning the active
+  vault *and* every read-only mounted one (real navigation, not
+  roots-only) — `resolve(id) -> Option<(&Tree, &str)>` is the backbone
+  every cross-vault read accessor (`live_backlinks`, `selected_note`,
+  `breadcrumb_titles`, ...) uses to find which tree an id actually
+  belongs to, and `require_editable(id)` is the guard every mutating
+  method checks first, refusing with `last_error` rather than silently
+  no-oping or acting on the wrong vault if `id` isn't in the active tree.
   `COMMAND_REFERENCE` (`&[(syntax, description)]`) is the single source
   both `execute_command`'s dispatch and `ui.rs`'s command-palette help
   popup read from — keep the two in sync by hand if the command set grows.

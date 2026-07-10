@@ -8,6 +8,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Read-only mounted vaults are now fully navigable** — `j`/`k`
+  continue past the active vault into each read-only vault's section
+  instead of stopping at the boundary; `l`/`Space` expand/collapse
+  branches inside a read-only vault (previously roots-only, always
+  collapsed); the body preview, backlinks pane, and breadcrumb all work
+  correctly for whatever's selected, in any mounted vault. Every edit
+  key still refuses with "this vault is read-only" for anything outside
+  the active vault.
+
+### Fixed
+- **`create_child`/`create_sibling` had no guard against acting on a
+  foreign vault's id** — latent since read-only vaults couldn't be
+  selected into at all before now, but would have silently created a
+  stray, wrongly-parented note in the *active* vault the moment
+  `selected` could point elsewhere. Fixed alongside making read-only
+  vaults navigable, which is what would have triggered it.
+- **Breadcrumb showed the wrong vault name** while browsing a read-only
+  note (hardcoded to the active vault, with an empty path) — now
+  resolves and displays whichever vault the current selection is
+  actually in.
+
+### Added
 - **`mycora vault remove`/`vault list` CLI commands** — `vault remove
   <name>` unregisters a vault from `config.toml`; discussed the
   semantics with the user before implementing and confirmed it only

@@ -6,7 +6,7 @@ tags:
 - features
 - multi-vault
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T20:00:00Z
+updated: 2026-07-10T22:00:00Z
 ---
 
 # Multi-vault mounting
@@ -21,14 +21,16 @@ how a `Vault` owns one on-disk directory).
 
 Only one vault — the **active** one — is editable in the TUI; every other
 mounted vault is shown read-only, stacked below the active vault's tree
-with a dimmed separator, roots only, never selectable. Read-only vaults
-are still indexed and still contribute to link-count badges and
-cross-vault link resolution (see [[Cross-links and backlinks]]) — they
-just can't be edited or jumped into via [[Search and indexing]] or
-the backlinks panel, since a jump-to-result needs somewhere in the
-editable tree to land.
+with a dimmed separator. Read-only doesn't mean hidden, though: they're
+fully navigable — `j`/`k` moves into them, branches expand and collapse,
+and the body preview and backlinks panel both work for whatever's
+selected. Read-only vaults are still indexed and still contribute to
+link-count badges and cross-vault link resolution (see
+[[Cross-links and backlinks]]); the one thing that never works on them is
+editing — every mutating key refuses with "this vault is read-only" (see
+[[Guard every mutation against the wrong vault]]). `/` full-text search
+stays scoped to the active vault's notes only, for now.
 
-See [[Read-only secondary vaults]] for why this scope cut was made rather
-than building full multi-vault editing up front, and
-[[Managing vaults from the CLI]] for the `mycora vault ...` commands
-that manage this registry without hand-editing `config.toml`.
+See [[Read-only secondary vaults]] for why full editing wasn't built up
+front, and [[Managing vaults from the CLI]] for the `mycora vault ...`
+commands that manage this registry without hand-editing `config.toml`.
