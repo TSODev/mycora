@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection};
 use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::link::extract_wikilink_titles;
@@ -29,13 +30,27 @@ pub struct SearchHit {
     pub snippet: String,
 }
 
-/// How to combine multiple tags in `Index::filter_by_tags`.
+/// How to combine multiple tags in `Index::filter_by_tags`/`SearchFacets`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TagFilterOp {
     /// Note must have every given tag.
     All,
     /// Note must have at least one of the given tags.
     Any,
+}
+
+/// Optional facets narrowing `Index::search_faceted` beyond its free-text
+/// query — ANDed together with the text match and with each other: a
+/// result must satisfy the query and every facet that's `Some`.
+#[derive(Default)]
+pub struct SearchFacets<'a> {
+    /// Tag membership, reusing `filter_by_tags`'s AND/OR semantics.
+    pub tags: Option<(&'a [String], TagFilterOp)>,
+    /// Inclusive range on `updated`.
+    pub date_range: Option<(OffsetDateTime, OffsetDateTime)>,
+    /// Restrict to these note ids — typically `Tree::subtree_ids(branch_root)`,
+    /// to search "within this branch" rather than the whole vault.
+    pub branch: Option<&'a [NoteId]>,
 }
 
 /// A `[[title]]` reference found in `source`'s body that didn't resolve to
@@ -328,24 +343,98 @@ impl Index {
     /// together, rather than exposing raw FTS5 query syntax to the caller.
     /// Relevance ranking upgrades to tantivy/BM25 in v0.6.
     pub fn search(&self, vault_id: &str, query: &str) -> Result<Vec<SearchHit>> {
+        self.search_faceted(vault_id, query, &SearchFacets::default())
+    }
+
+    /// Full-text search like `search`, plus optional facets (tag, date
+    /// range, tree branch — see `SearchFacets`) ANDed onto the match.
+    /// `search(vault_id, query)` is exactly `search_faceted(vault_id,
+    /// query, &SearchFacets::default())`.
+    pub fn search_faceted(
+        &self,
+        vault_id: &str,
+        query: &str,
+        facets: &SearchFacets,
+    ) -> Result<Vec<SearchHit>> {
         let match_query = Self::build_match_query(query);
         if match_query.is_empty() {
             return Ok(Vec::new());
         }
+        // An empty branch or empty tag list can never match anything —
+        // short-circuit rather than let the SQL below degrade into "no
+        // restriction at all" (an empty `IN ()` list) or a stray error.
+        if matches!(facets.branch, Some(ids) if ids.is_empty())
+            || matches!(&facets.tags, Some((tags, _)) if tags.is_empty())
+        {
+            return Ok(Vec::new());
+        }
 
-        // Column 1 is `body` (see the CREATE VIRTUAL TABLE order:
-        // title=0, body=1, tags=2). `\u{1}`/`\u{2}` are ASCII control
-        // characters used purely as sentinels around each matched term —
-        // never rendered directly, a UI splits on them to style the match
-        // (see `SearchHit`'s doc comment).
-        let mut stmt = self.conn.prepare(
-            "SELECT note_id, title, snippet(notes_fts, 1, '\u{1}', '\u{2}', '…', 16)
+        let branch_ids: Vec<String> = facets
+            .branch
+            .map(|ids| ids.iter().map(|id| id.0.to_string()).collect())
+            .unwrap_or_default();
+        let date_strings: Option<(String, String)> = facets
+            .date_range
+            .map(|(start, end)| -> Result<(String, String)> {
+                Ok((start.format(&Rfc3339)?, end.format(&Rfc3339)?))
+            })
+            .transpose()?;
+        let tag_count: Option<i64> = facets
+            .tags
+            .as_ref()
+            .and_then(|(tags, op)| (*op == TagFilterOp::All).then_some(tags.len() as i64));
+
+        // Column 1 is `body` (see the CREATE VIRTUAL TABLE order: title=0,
+        // body=1, tags=2). `\u{1}`/`\u{2}` are ASCII control characters
+        // used purely as sentinels around each matched term — never
+        // rendered directly, a UI splits on them to style the match (see
+        // `SearchHit`'s doc comment). `notes_fts` stays unaliased (rather
+        // than e.g. `AS nf`) because FTS5's whole-row `MATCH` needs to
+        // name the table directly.
+        let mut sql = String::from(
+            "SELECT notes_fts.note_id, notes_fts.title,
+                    snippet(notes_fts, 1, '\u{1}', '\u{2}', '…', 16)
              FROM notes_fts
-             WHERE notes_fts MATCH ?1 AND vault_id = ?2
-             ORDER BY rank
-             LIMIT 50",
-        )?;
-        let rows = stmt.query_map(params![match_query, vault_id], |row| {
+             JOIN notes AS n ON n.vault_id = notes_fts.vault_id AND n.id = notes_fts.note_id
+             WHERE notes_fts MATCH ? AND notes_fts.vault_id = ?",
+        );
+        let mut query_params: Vec<&dyn rusqlite::ToSql> = vec![&match_query, &vault_id];
+
+        if !branch_ids.is_empty() {
+            let placeholders = branch_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+            sql.push_str(&format!(" AND notes_fts.note_id IN ({placeholders})"));
+            for id in &branch_ids {
+                query_params.push(id);
+            }
+        }
+
+        if let Some((start, end)) = &date_strings {
+            sql.push_str(" AND n.updated BETWEEN ? AND ?");
+            query_params.push(start);
+            query_params.push(end);
+        }
+
+        if let Some((tags, op)) = &facets.tags {
+            let placeholders = tags.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+            sql.push_str(&format!(
+                " AND n.id IN (SELECT note_id FROM tags WHERE vault_id = ? AND tag IN ({placeholders})"
+            ));
+            query_params.push(&vault_id);
+            for tag in *tags {
+                query_params.push(tag);
+            }
+            if *op == TagFilterOp::All {
+                sql.push_str(" GROUP BY note_id HAVING COUNT(DISTINCT tag) = ?)");
+                query_params.push(tag_count.as_ref().unwrap());
+            } else {
+                sql.push(')');
+            }
+        }
+
+        sql.push_str(" ORDER BY rank LIMIT 50");
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(query_params.as_slice(), |row| {
             let note_id: String = row.get(0)?;
             let title: String = row.get(1)?;
             let snippet: String = row.get(2)?;
@@ -637,6 +726,193 @@ mod tests {
         let end = hits[0].snippet.find('\u{2}').unwrap();
         assert!(end > start);
         assert_eq!(&hits[0].snippet[start + 1..end], "borrowing");
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn search_faceted_restricts_results_to_a_given_branch() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let branch_root = tree.create_note("Branch", None);
+        let in_branch = tree.create_note("Inside", Some(branch_root));
+        tree.set_body(in_branch, "shared keyword here");
+        let outside_branch = tree.create_note("Outside", None);
+        tree.set_body(outside_branch, "shared keyword too");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let branch_ids = tree.subtree_ids(branch_root);
+        let facets = SearchFacets {
+            branch: Some(&branch_ids),
+            ..Default::default()
+        };
+        let hits = index
+            .search_faceted("default", "keyword", &facets)
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].note_id, in_branch);
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn search_faceted_with_an_empty_branch_returns_nothing() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let note = tree.create_note("Note", None);
+        tree.set_body(note, "keyword");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let facets = SearchFacets {
+            branch: Some(&[]),
+            ..Default::default()
+        };
+        assert!(index
+            .search_faceted("default", "keyword", &facets)
+            .unwrap()
+            .is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn search_faceted_combines_with_tag_any() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let (rust_note, mut note) = tagged_note("Rust ownership", &["rust"]);
+        note.body = "shared keyword".to_string();
+        tree.insert_loaded(rust_note, note);
+        let (other_note, mut note) = tagged_note("Go channels", &["go"]);
+        note.body = "shared keyword".to_string();
+        tree.insert_loaded(other_note, note);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let tags = vec!["rust".to_string()];
+        let facets = SearchFacets {
+            tags: Some((&tags, TagFilterOp::Any)),
+            ..Default::default()
+        };
+        let hits = index
+            .search_faceted("default", "keyword", &facets)
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].note_id, rust_note);
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn search_faceted_combines_with_tag_all() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let (both_tags, mut note) = tagged_note("Has Both", &["rust", "lang"]);
+        note.body = "shared keyword".to_string();
+        tree.insert_loaded(both_tags, note);
+        let (one_tag, mut note) = tagged_note("Has One", &["rust"]);
+        note.body = "shared keyword".to_string();
+        tree.insert_loaded(one_tag, note);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let tags = vec!["rust".to_string(), "lang".to_string()];
+        let facets = SearchFacets {
+            tags: Some((&tags, TagFilterOp::All)),
+            ..Default::default()
+        };
+        let hits = index
+            .search_faceted("default", "keyword", &facets)
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].note_id, both_tags);
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn search_faceted_with_empty_tags_returns_nothing() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let note = tree.create_note("Note", None);
+        tree.set_body(note, "keyword");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let tags: Vec<String> = vec![];
+        let facets = SearchFacets {
+            tags: Some((&tags, TagFilterOp::Any)),
+            ..Default::default()
+        };
+        assert!(index
+            .search_faceted("default", "keyword", &facets)
+            .unwrap()
+            .is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn search_faceted_restricts_by_date_range() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let mut old_note = crate::note::Note::new("Old", None);
+        old_note.body = "shared keyword".to_string();
+        old_note.updated = OffsetDateTime::parse("2020-01-01T00:00:00Z", &Rfc3339).unwrap();
+        let old_id = NoteId::new();
+        tree.insert_loaded(old_id, old_note);
+
+        let mut recent_note = crate::note::Note::new("Recent", None);
+        recent_note.body = "shared keyword".to_string();
+        recent_note.updated = OffsetDateTime::parse("2026-06-01T00:00:00Z", &Rfc3339).unwrap();
+        let recent_id = NoteId::new();
+        tree.insert_loaded(recent_id, recent_note);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let facets = SearchFacets {
+            date_range: Some((
+                OffsetDateTime::parse("2026-01-01T00:00:00Z", &Rfc3339).unwrap(),
+                OffsetDateTime::parse("2026-12-31T00:00:00Z", &Rfc3339).unwrap(),
+            )),
+            ..Default::default()
+        };
+        let hits = index
+            .search_faceted("default", "keyword", &facets)
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].note_id, recent_id);
 
         std::fs::remove_file(&db_path).ok();
         std::fs::remove_dir_all(&vault_dir).ok();

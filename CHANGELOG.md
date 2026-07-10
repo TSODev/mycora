@@ -8,6 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Faceted search filters (v0.6, closes the version except deferred
+  tantivy)** — `Index::search_faceted(vault_id, query, &SearchFacets {
+  tags, date_range, branch })` ANDs optional tag (AND/OR, reusing v0.4's
+  `filter_by_tags` op), update-date-range, and tree-branch (explicit note
+  ids, typically `Tree::subtree_ids(root)`) facets onto an FTS5 text
+  match. `search(vault_id, query)` is now a thin wrapper around it with
+  every facet `None`, so existing callers/tests are unaffected.
+  Backend/API only, no TUI surface yet — matches how v0.4's tag filter
+  landed.
 - **Search result snippets (v0.6, start)** — `Index::search` now returns
   `SearchHit { note_id, title, snippet }` instead of the plain
   note_id+title pair; `snippet` comes from FTS5's own `snippet()`

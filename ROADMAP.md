@@ -215,12 +215,27 @@ just resolved before writing the tantivy integration rather than after.
       instead of title-only. Manually verified in tmux: searching
       "borrow" against a note containing "borrowing" showed the snippet
       with only that word bold-yellow, rest dimmed
-- [ ] Faceted filters combined with ranked results: tag (building on
-      v0.4's AND/OR tag filter), date range, tree branch
+- [x] Faceted filters combined with ranked results: tag (building on
+      v0.4's AND/OR tag filter), date range, tree branch —
+      `Index::search_faceted(vault_id, query, &SearchFacets { tags,
+      date_range, branch })`, every facet ANDed onto the FTS5 match and
+      onto each other. `tags` reuses `filter_by_tags`'s AND/OR op; `branch`
+      takes explicit note ids (typically `Tree::subtree_ids(root)` from
+      the caller) rather than a recursive SQL lookup, since the caller
+      already has the tree in memory; `date_range` is an inclusive range
+      on `updated`. `search(vault_id, query)` is now a thin wrapper
+      (`search_faceted` with every facet `None`), so it and every existing
+      caller/test kept working unchanged. Backend/API only, matching how
+      v0.4's tag filter landed — this roadmap item didn't call for its own
+      TUI surface (no keybinding for picking facets exists), unlike
+      full-text search itself
 - [ ] Benchmark tantivy vs. FTS5 on a realistic vault size before fully
       committing (keep FTS5 as fallback if tantivy adds too much overhead
       for small vaults) — superseded by the 2026-07-10 note above;
       revisit only if a concrete FTS5 gap shows up
+
+v0.6's goal (relevance-ranked search) is met without tantivy; the two
+remaining boxes are the same deferred item, not outstanding work.
 
 ## v0.7 — UX polish
 
