@@ -54,7 +54,9 @@ Goal: all CRUD + structural operations, safely.
 Goal: fast lookups without scanning the filesystem every time.
 
 - [ ] SQLite schema: `notes` (mirrors frontmatter + path), `tree_edges`,
-      `links` (many-to-many)
+      `links` (many-to-many) — each keyed with a `vault_id` from the start
+      (see "Multiple vaults" below) so multi-vault support doesn't require
+      a schema migration later
 - [ ] Index rebuild command (`mycora reindex`) — index is always disposable
       and regenerable from the Markdown files
 - [ ] Incremental reindex on file change (watch vault directory)
@@ -70,6 +72,10 @@ Goal: notes can reference each other outside the tree.
 
 - [ ] Parse `[[wikilink]]` syntax from note bodies
 - [ ] Persist links in the `links` table, independent of tree position
+- [ ] Cross-vault links: a wikilink can resolve to a note in any *mounted*
+      vault, not just the current one (see "Multiple vaults" below) — this
+      is the intended path for referencing another vault's content, since
+      trees themselves stay single-vault (no cross-vault reparenting)
 - [ ] Backlinks panel: "notes that link here"
 - [ ] Link autocompletion while typing `[[`
 - [ ] Handle broken links (target renamed/deleted) gracefully
@@ -150,5 +156,21 @@ Goal: stability before a public release.
   presence, deferred to v0.5 once the `links` table exists (see v0.3).
 - ~~**Note identity**~~ — resolved in v0.2: UUID v4, generated at creation
   and persisted in frontmatter. Stable across renames/moves.
-- **Multiple vaults**: single vault per instance, or support switching
-  between several vaults without restarting?
+- ~~**Multiple vaults**~~ — resolved 2026-07-10: a registry/mount split,
+  not a merge. `config.toml` gains a list of named vaults (registry:
+  `name` + `path` per entry, replacing the single `vault_path`); `App`
+  holds a `VaultId → (Tree, Vault)` map for whichever of those are
+  currently *mounted* (loaded), and mounting/unmounting is a runtime
+  action with nothing to persist beyond "which vaults were open last
+  session" (v0.7 session state). Each mounted vault keeps its own
+  independent `Tree` with its own `roots` — deliberately **not** merged
+  into one shared tree/root, since that would require either a synthetic
+  super-root or allowing `move_note` to reparent across vaults, and the
+  latter breaks `vault.rs`'s "one `Vault` = one on-disk directory"
+  invariant (a cross-vault move would mean moving a file between two
+  independent directory trees, which no current `Vault` method does).
+  `tree.rs`/`vault.rs` stay untouched by this — mount/unmount lives at
+  the `App` layer only. Cross-vault references are deferred to v0.5's
+  `[[wikilink]]` links rather than tree reparenting; this is also why the
+  v0.4 SQLite schema needs `vault_id` on `notes`/`tree_edges`/`links` from
+  its first version.
