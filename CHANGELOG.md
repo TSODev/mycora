@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Vault registry in config** — `config.toml` can now declare multiple
+  named vaults via `[[vaults]]` (`name` + `path` each) instead of a single
+  `vault_path`. Only one vault is opened at startup for now: the entry
+  named `"default"`, or the first entry if none is named that — actually
+  mounting more than one vault at once (independent trees, switchable at
+  runtime) is tracked separately in ROADMAP.md and not implemented yet.
+  The older single `vault_path` key still works as a fallback when
+  `[[vaults]]` is absent, so existing config files keep working unchanged.
 - **`--help` and `--version`** via `clap` — matches Terapi/jsoned's CLI
   conventions. No other flags/arguments yet.
 

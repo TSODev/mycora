@@ -53,7 +53,7 @@ impl App {
     /// the caller to print before the TUI takes over the terminal.
     pub fn new() -> anyhow::Result<(Self, Vec<String>)> {
         let config = Config::load()?;
-        let mut vault = Vault::open(config.vault_path)?;
+        let mut vault = Vault::open(config.active_vault().path.clone())?;
         let (mut tree, report) = vault.load()?;
 
         let selected = if tree.roots().is_empty() {

@@ -43,14 +43,30 @@ single `q` won't close the app).
 
 ## Configuration
 
-Config file at `~/.config/mycora/config.toml`:
+Config file at `~/.config/mycora/config.toml`. Mycora keeps a registry of
+named vaults; only one is opened at startup for now (mounting more than one
+at once is not implemented yet):
+
+```toml
+[[vaults]]
+name = "default"
+path = "/path/to/your/notes"
+
+[[vaults]]
+name = "work"
+path = "/path/to/work/notes"
+```
+
+The entry named `default` is opened on startup; if none is named `default`,
+the first entry is used. The older single-vault form is still accepted as a
+fallback when `[[vaults]]` is absent:
 
 ```toml
 vault_path = "/path/to/your/notes"
 ```
 
-If the file is missing, or `vault_path` isn't set, Mycora defaults to
-`~/mycora`.
+If the file is missing, or neither `[[vaults]]` nor `vault_path` is set,
+Mycora defaults to a single vault at `~/mycora`.
 
 ## The vault format
 
