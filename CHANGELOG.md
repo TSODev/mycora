@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- **2-line status bar (v0.7)**, harmonized with Terapi/jsoned — a
+  `Length(2)` band split into two `Length(1)` rows, `Color::Indexed(236)`
+  background on both. Row 1 is a contextual breadcrumb (`vault › branch ›
+  note`, via new `App::vault_name()`/`App::breadcrumb_titles()`). Row 2 is
+  the mode label plus keybinding hints, now tokenized on a `"key: label"`
+  convention into bold key / dim colon / muted label spans instead of a
+  plain concatenated string. The delete-confirmation prompt,
+  quit-confirmation notice, and last-error message still take over row 2
+  as before, just leaving row 1's breadcrumb visible above them now
+  instead of replacing the whole bar.
+
 ### Added
 - **Markdown rendering in the body preview pane (v0.7)** — a new
   `src/markdown.rs` module walks `pulldown-cmark`'s event stream and

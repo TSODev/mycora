@@ -799,6 +799,31 @@ impl App {
         self.index.backlinks(&self.vault_id, id).unwrap_or_default()
     }
 
+    /// The active (editable) vault's registry name — the first segment of
+    /// the status bar's breadcrumb.
+    pub fn vault_name(&self) -> &str {
+        &self.vault_id
+    }
+
+    /// Ancestor titles from the selected note's root down to itself
+    /// (inclusive) — the rest of the status bar's breadcrumb. Empty when
+    /// nothing's selected.
+    pub fn breadcrumb_titles(&self) -> Vec<String> {
+        let Some(mut id) = self.selected else {
+            return Vec::new();
+        };
+        let mut titles = Vec::new();
+        while let Some(note) = self.tree.get(id) {
+            titles.push(note.title.clone());
+            match note.parent {
+                Some(parent_id) => id = parent_id,
+                None => break,
+            }
+        }
+        titles.reverse();
+        titles
+    }
+
     /// Total links touching `id`'s subtree (itself + all descendants) — the
     /// aggregate badge shown on a collapsed branch. Best-effort: an index
     /// error just reports 0 rather than surfacing as `last_error`, since

@@ -8,10 +8,12 @@ use ratatui::{
 
 use crate::app::{App, Mode};
 
+/// `Length(2)` status band at the bottom (see `draw_status`) below the
+/// main content — matches Terapi/jsoned's 2-line status bar convention.
 pub fn draw(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .constraints([Constraint::Min(1), Constraint::Length(2)])
         .split(frame.area());
 
     draw_main(frame, chunks[0], app);
@@ -248,7 +250,41 @@ fn draw_backlinks(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(list, area);
 }
 
+/// Background shared by both status rows — matches Terapi/jsoned's status
+/// bar convention rather than the old unstyled default background.
+const STATUS_BG: Color = Color::Indexed(236);
+
+/// Row 1: contextual breadcrumb (`vault › branch › note`). Row 2: mode
+/// indicator + keybinding hints — or, when one applies, the delete
+/// confirmation prompt, the quit-confirmation notice, or the last error,
+/// same precedence as before the 2-line band existed. Hints are styled
+/// per Terapi's hint-parser convention (bold key, dim colon/separator,
+/// muted label) rather than jsoned's plain concatenated string.
 fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Length(1)])
+        .split(area);
+
+    draw_breadcrumb(frame, rows[0], app);
+    draw_hint_row(frame, rows[1], app);
+}
+
+fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
+    let mut text = app.vault_name().to_string();
+    for title in app.breadcrumb_titles() {
+        text.push_str(" › ");
+        text.push_str(&title);
+    }
+
+    let paragraph =
+        Paragraph::new(text).style(Style::default().bg(STATUS_BG).fg(Color::Gray));
+    frame.render_widget(paragraph, area);
+}
+
+fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
+    let bg = Style::default().bg(STATUS_BG);
+
     if app.mode == Mode::ConfirmDelete {
         let title = app.pending_delete_title().unwrap_or("this note");
         let descendants = app.pending_delete_descendant_count().unwrap_or(0);
@@ -257,35 +293,79 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
         } else {
             format!("Delete '{title}'? y/n")
         };
-        let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+        let paragraph =
+            Paragraph::new(text).style(bg.fg(Color::Yellow).add_modifier(Modifier::BOLD));
         frame.render_widget(paragraph, area);
         return;
     }
 
     if app.confirm_quit {
         let paragraph = Paragraph::new("Press q again to quit")
-            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+            .style(bg.fg(Color::Yellow).add_modifier(Modifier::BOLD));
         frame.render_widget(paragraph, area);
         return;
     }
 
     if let Some(err) = &app.last_error {
         let paragraph = Paragraph::new(format!("ERROR  {err}"))
-            .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
+            .style(bg.fg(Color::Red).add_modifier(Modifier::BOLD));
         frame.render_widget(paragraph, area);
         return;
     }
 
-    let text = match app.mode {
-        Mode::Normal => {
-            "NORMAL  j/k move  h/l/space fold  a/o new  y copy  Tab/S-Tab move  K/J reorder  i rename  d delete  u undo  ^R redo  / search  b backlinks  e edit  q quit"
-        }
-        Mode::Insert => "INSERT  Enter confirm  Esc cancel",
-        Mode::Search => "SEARCH  type to filter  Up/Down move  Enter open  Esc cancel",
-        Mode::Backlinks => "BACKLINKS  Up/Down move  Enter open  Esc cancel",
-        Mode::EditBody => "EDIT BODY  Esc save & exit",
+    let (mode_label, hints) = match app.mode {
+        Mode::Normal => (
+            "NORMAL",
+            "j/k: move  h/l/space: fold  a/o: new  y: copy  Tab/S-Tab: move  \
+             K/J: reorder  i: rename  e: edit  d: delete  u: undo  ^R: redo  \
+             /: search  b: backlinks  q: quit",
+        ),
+        Mode::Insert => ("INSERT", "Enter: confirm  Esc: cancel"),
+        Mode::Search => (
+            "SEARCH",
+            "type: filter  Up/Down: move  Enter: open  Esc: cancel",
+        ),
+        Mode::Backlinks => ("BACKLINKS", "Up/Down: move  Enter: open  Esc: cancel"),
+        Mode::EditBody => ("EDIT BODY", "Esc: save & exit"),
         Mode::ConfirmDelete => unreachable!("handled above"),
     };
-    frame.render_widget(Paragraph::new(text), area);
+
+    let mode_style = bg.fg(Color::Cyan).add_modifier(Modifier::BOLD);
+    let key_style = bg.add_modifier(Modifier::BOLD);
+    let sep_style = bg.add_modifier(Modifier::DIM);
+    let label_style = bg.fg(Color::Gray);
+
+    let mut spans = vec![
+        Span::styled(mode_label, mode_style),
+        Span::styled("  ", sep_style),
+    ];
+    spans.extend(spans_from_hints(hints, key_style, sep_style, label_style));
+
+    frame.render_widget(Paragraph::new(Line::from(spans)).style(bg), area);
+}
+
+/// Splits a `"key: label  key: label  ..."` hint string (double-space
+/// separated) into styled spans — bold key, dim colon/separator, muted
+/// label — matching Terapi's hint-parser convention.
+fn spans_from_hints(
+    text: &str,
+    key_style: Style,
+    sep_style: Style,
+    label_style: Style,
+) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    for (i, token) in text.split("  ").filter(|t| !t.is_empty()).enumerate() {
+        if i > 0 {
+            spans.push(Span::styled("  ", sep_style));
+        }
+        match token.split_once(": ") {
+            Some((key, label)) => {
+                spans.push(Span::styled(key.to_string(), key_style));
+                spans.push(Span::styled(": ", sep_style));
+                spans.push(Span::styled(label.to_string(), label_style));
+            }
+            None => spans.push(Span::styled(token.to_string(), key_style)),
+        }
+    }
+    spans
 }

@@ -312,11 +312,23 @@ Goal: make daily use pleasant, not just functional.
       not-yet-scoped concern from "render the Markdown"
 - [ ] Command palette (`:` command mode, à la vim/helix)
 - [ ] Session state: remember last open note, expanded/collapsed branches
-- [ ] 2-line status bar, harmonized with Terapi/jsoned: `Length(2)` band
-      split into two `Length(1)` rows, `Color::Indexed(236)` background.
-      Row 1: contextual breadcrumb (`vault › branch › note`). Row 2:
-      keybinding hints, styled per terapi's hint-parser (bold key tokens,
-      dim separators) rather than jsoned's plain concatenated string.
+- [x] 2-line status bar, harmonized with Terapi/jsoned (2026-07-10):
+      `Length(2)` band split into two `Length(1)` rows, `Color::Indexed(236)`
+      background on both. Row 1 (`draw_breadcrumb`): `vault › branch › note`
+      — `App::vault_name()` plus `App::breadcrumb_titles()` (ancestor
+      titles from the selected note's root down to itself). Row 2
+      (`draw_hint_row`): a cyan bold mode label, then hints tokenized on a
+      `"key: label"` convention (`spans_from_hints`, double-space
+      separated) into bold key / dim colon+separator / muted label spans
+      — every mode's hint string was rewritten from
+      `"j/k move  h/l fold"` to `"j/k: move  h/l: fold"` to fit that
+      shape. The delete-confirmation prompt, the quit-confirm notice, and
+      the last-error message still take over row 2 exactly as before
+      (same precedence), just now with row 1's breadcrumb staying visible
+      above them rather than being replaced too. Manually verified in
+      tmux: breadcrumb correctly showed `default › Parent Note › Child
+      Note` after navigating into a nested note, and the delete prompt
+      left the breadcrumb in place while replacing only row 2
 - [ ] No top-level Tabs bar for now — Mycora's single-view-with-panels
       layout (tree + editor + backlinks) matches jsoned's model, not
       terapi's multi-view one. Revisit only if a genuinely separate
