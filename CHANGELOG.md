@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Command palette (v0.7)** — `:` in Normal mode opens a vim/helix-style
+  command prompt in the status bar's hint row. Starting command set:
+  `:reindex` (manual reindex, with a success/failure message),
+  `:tags <tag1,tag2,...>` (OR-matches any of the listed tags, opening a
+  full-pane result list to jump from), `:q`/`:quit`. Unknown commands and
+  empty `:tags` matches report through the status bar instead of silently
+  no-opping.
 - **Colored split-pane borders (v0.7)** — the tree pane's border is blue,
   the body preview pane's is magenta; the backlinks pane keeps its
   existing default-idle/cyan-when-focused behavior. Colors chosen to

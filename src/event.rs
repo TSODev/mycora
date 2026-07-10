@@ -34,6 +34,8 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::Search => handle_search(app, key.code),
             Mode::Backlinks => handle_backlinks(app, key.code),
             Mode::EditBody => handle_edit_body(app, key),
+            Mode::Command => handle_command(app, key.code),
+            Mode::TagResults => handle_tag_results(app, key.code),
         }
     }
 
@@ -70,6 +72,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Char(']') => app.grow_tree_pane(),
         KeyCode::Char('{') => app.shrink_backlinks_pane(),
         KeyCode::Char('}') => app.grow_backlinks_pane(),
+        KeyCode::Char(':') => app.begin_command(),
         _ => {}
     }
 }
@@ -125,5 +128,25 @@ fn handle_edit_body(app: &mut App, key: KeyEvent) {
         app.save_and_exit_body_edit();
     } else {
         app.body_editor_input(key);
+    }
+}
+
+fn handle_command(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Enter => app.execute_command(),
+        KeyCode::Esc => app.cancel_command(),
+        KeyCode::Backspace => app.command_input_backspace(),
+        KeyCode::Char(c) => app.command_input_push(c),
+        _ => {}
+    }
+}
+
+fn handle_tag_results(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Enter => app.confirm_tag_results(),
+        KeyCode::Esc => app.cancel_tag_results(),
+        KeyCode::Char('j') | KeyCode::Down => app.move_tag_results_selection(1),
+        KeyCode::Char('k') | KeyCode::Up => app.move_tag_results_selection(-1),
+        _ => {}
     }
 }

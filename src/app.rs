@@ -5,7 +5,7 @@ use ratatui::widgets::{Block, Borders};
 use ratatui_textarea::TextArea;
 
 use crate::config::Config;
-use crate::index::{Index, IndexedNote, SearchHit};
+use crate::index::{Index, IndexedNote, SearchHit, TagFilterOp};
 use crate::note::{Note, NoteId};
 use crate::session::Session;
 use crate::tree::Tree;
@@ -57,6 +57,17 @@ pub enum Mode {
     /// separate discard-without-saving path; `u` in Normal mode afterward
     /// undoes the whole edit session as one step if you change your mind.
     EditBody,
+    /// Typing a `:` command; the input replaces the status bar's hint row
+    /// only (see `ui.rs`'s `draw_hint_row`), same as `ConfirmDelete`'s
+    /// prompt — the split-pane layout stays visible underneath, unlike
+    /// `Search`/`EditBody`'s full-pane overlays. See `App::execute_command`
+    /// for the command set.
+    Command,
+    /// Browsing the notes a `:tags` command matched — full-pane overlay,
+    /// same interaction shape as `Search` (`Up`/`Down` move, `Enter`
+    /// jumps, `Esc` cancels) but over a fixed result set rather than a
+    /// live-as-you-type query.
+    TagResults,
 }
 
 /// An action that can be pushed onto `undo_stack`/`redo_stack`. Applying one
@@ -88,6 +99,11 @@ pub struct App {
     pub input: String,
     pub should_quit: bool,
     pub last_error: Option<String>,
+    /// Set by a successful `:` command (e.g. `:reindex`'s note count) —
+    /// shown in the status bar like `last_error`, just not in red. Cleared
+    /// whenever the other one is set, so only the most recent outcome of
+    /// the two shows.
+    pub last_message: Option<String>,
     /// Set by a first `q` press; a second press actually quits, any other
     /// key resets it. Mirrors Terapi's q/q confirm dance.
     pub confirm_quit: bool,
@@ -125,6 +141,10 @@ pub struct App {
     /// default (40/40/20) each launch (deliberate scope cut, confirmed
     /// with the user — persisting it is a trivial follow-up if wanted).
     pane_widths: [u16; 3],
+    /// Text typed after `:` while `mode == Mode::Command`.
+    command_input: String,
+    tag_results: Vec<IndexedNote>,
+    tag_results_selected: usize,
 }
 
 impl App {
@@ -252,6 +272,7 @@ impl App {
             input: String::new(),
             should_quit: false,
             last_error: None,
+            last_message: None,
             confirm_quit: false,
             pending_delete: None,
             undo_stack: Vec::new(),
@@ -266,6 +287,9 @@ impl App {
             body_editor: None,
             session_path,
             pane_widths: [40, 40, 20],
+            command_input: String::new(),
+            tag_results: Vec::new(),
+            tag_results_selected: 0,
         };
 
         Ok((app, warnings))
@@ -702,7 +726,9 @@ impl App {
     /// in-memory tree (including edits made this session that a prior
     /// `mycora reindex` run on disk wouldn't know about), not a stale copy.
     pub fn begin_search(&mut self) {
-        self.reindex_mounted();
+        if let Err(err) = self.reindex_mounted() {
+            self.last_error = Some(format!("reindex failed: {err}"));
+        }
         self.search_query.clear();
         self.search_results.clear();
         self.search_selected = 0;
@@ -821,16 +847,18 @@ impl App {
     /// and `b`, the only two places that need fresh results mid-session.
     /// Errors fold into `last_error` rather than propagating, since these
     /// are UI-triggered entry points that can't fail the whole app.
-    fn reindex_mounted(&mut self) {
+    /// Returns the total note count across every mounted vault on success,
+    /// for callers (`:reindex`) that want to report it — `begin_search`
+    /// just ignores it.
+    fn reindex_mounted(&mut self) -> anyhow::Result<usize> {
         let mut batch: Vec<(&str, &Tree, &Vault)> =
             Vec::with_capacity(1 + self.other_vaults.len());
         batch.push((self.vault_id.as_str(), &self.tree, &self.vault));
         for v in &self.other_vaults {
             batch.push((v.id.as_str(), &v.tree, &v.vault));
         }
-        if let Err(err) = self.index.reindex_mounted(&batch) {
-            self.last_error = Some(format!("reindex failed: {err}"));
-        }
+        let reports = self.index.reindex_mounted(&batch)?;
+        Ok(reports.iter().map(|r| r.note_count).sum())
     }
 
     /// Notes linking to the currently selected note — the split layout's
@@ -1013,5 +1041,149 @@ impl App {
 
     pub fn body_editor(&self) -> Option<&TextArea<'static>> {
         self.body_editor.as_ref()
+    }
+
+    /// `:` — opens the command prompt (see `Mode::Command`'s doc comment).
+    pub fn begin_command(&mut self) {
+        self.command_input.clear();
+        self.mode = Mode::Command;
+    }
+
+    pub fn command_input(&self) -> &str {
+        &self.command_input
+    }
+
+    pub fn command_input_push(&mut self, c: char) {
+        self.command_input.push(c);
+    }
+
+    pub fn command_input_backspace(&mut self) {
+        self.command_input.pop();
+    }
+
+    pub fn cancel_command(&mut self) {
+        self.command_input.clear();
+        self.mode = Mode::Normal;
+    }
+
+    /// Parses and runs the typed command. Unknown commands, and commands
+    /// given the wrong shape of argument, report through `last_error`
+    /// rather than doing nothing silently. The command set is
+    /// deliberately small for now — it exists mainly to give a few
+    /// backend-only features (tag filtering, manual reindex) a way into
+    /// the TUI without inventing a dedicated keybinding for each:
+    ///
+    /// - `q` / `quit` — same as `q` `q` in Normal mode, no confirmation
+    ///   (there's nothing unsaved to protect against — Mycora always
+    ///   writes through immediately)
+    /// - `reindex` — rebuilds the index for every mounted vault, same as
+    ///   `mycora reindex` from the CLI but without leaving the TUI
+    /// - `tags <tag1,tag2,...>` — notes matching *any* of the given tags
+    ///   (`TagFilterOp::Any`); opens `Mode::TagResults` if there are hits
+    pub fn execute_command(&mut self) {
+        let input = std::mem::take(&mut self.command_input);
+        self.mode = Mode::Normal;
+
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        let (name, args) = match trimmed.split_once(char::is_whitespace) {
+            Some((name, args)) => (name, args.trim()),
+            None => (trimmed, ""),
+        };
+
+        match name {
+            "q" | "quit" => self.should_quit = true,
+            "reindex" => self.command_reindex(),
+            "tags" => self.command_tags(args),
+            _ => {
+                self.last_message = None;
+                self.last_error = Some(format!("unknown command: {name}"));
+            }
+        }
+    }
+
+    fn command_reindex(&mut self) {
+        match self.reindex_mounted() {
+            Ok(count) => {
+                self.last_error = None;
+                self.last_message = Some(format!("reindexed {count} note(s)"));
+            }
+            Err(err) => {
+                self.last_message = None;
+                self.last_error = Some(format!("reindex failed: {err}"));
+            }
+        }
+    }
+
+    /// `:tags tag1,tag2` — notes matching any of the given tags. Opens
+    /// `Mode::TagResults` on a hit, otherwise reports through
+    /// `last_message`/`last_error` instead. AND semantics (every tag
+    /// required) and a keybinding for either aren't exposed yet — this is
+    /// the first, simplest entry point for `Index::filter_by_tags`, which
+    /// has had no TUI surface at all since v0.4.
+    fn command_tags(&mut self, args: &str) {
+        let tags: Vec<String> = args
+            .split(',')
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(String::from)
+            .collect();
+        if tags.is_empty() {
+            self.last_message = None;
+            self.last_error = Some("usage: :tags <tag1,tag2,...>".to_string());
+            return;
+        }
+
+        match self.index.filter_by_tags(&self.vault_id, &tags, TagFilterOp::Any) {
+            Ok(hits) if hits.is_empty() => {
+                self.last_error = None;
+                self.last_message = Some(format!("no notes tagged {}", tags.join(", ")));
+            }
+            Ok(hits) => {
+                self.last_error = None;
+                self.last_message = None;
+                self.tag_results = hits;
+                self.tag_results_selected = 0;
+                self.mode = Mode::TagResults;
+            }
+            Err(err) => {
+                self.last_message = None;
+                self.last_error = Some(format!("tag filter failed: {err}"));
+            }
+        }
+    }
+
+    pub fn move_tag_results_selection(&mut self, delta: isize) {
+        if self.tag_results.is_empty() {
+            return;
+        }
+        let len = self.tag_results.len() as isize;
+        let new_pos = (self.tag_results_selected as isize + delta).rem_euclid(len) as usize;
+        self.tag_results_selected = new_pos;
+    }
+
+    /// Jumps to the selected tag-filter result (expanding its ancestors so
+    /// it's visible) and returns to Normal mode.
+    pub fn confirm_tag_results(&mut self) {
+        if let Some(hit) = self.tag_results.get(self.tag_results_selected) {
+            let id = hit.note_id;
+            self.reveal(id);
+            self.selected = Some(id);
+        }
+        self.mode = Mode::Normal;
+    }
+
+    pub fn cancel_tag_results(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    pub fn tag_results(&self) -> &[IndexedNote] {
+        &self.tag_results
+    }
+
+    pub fn tag_results_selected(&self) -> usize {
+        self.tag_results_selected
     }
 }

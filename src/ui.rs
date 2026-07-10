@@ -31,15 +31,17 @@ pub fn draw(frame: &mut Frame, app: &App) {
     draw_status(frame, chunks[1], app);
 }
 
-/// Full-pane overlays (search, the body editor) take over the whole main
-/// area, same as before the split layout. Every other mode — Normal,
-/// Insert (renaming), ConfirmDelete (whose prompt is only in the status
-/// bar), and Backlinks (which shifts focus onto the backlinks pane rather
-/// than opening its own overlay — see `App::focus_backlinks`'s doc
-/// comment) — gets the three-pane split: tree, a read-only body preview,
-/// and the backlinks list, both following the current selection live.
-/// Column widths come from `App::pane_widths` (default 40/40/20,
-/// adjustable with `[`/`]`/`{`/`}` — see that method's doc comment).
+/// Full-pane overlays (search, the body editor, `:tags` results) take over
+/// the whole main area, same as before the split layout. Every other mode
+/// — Normal, Insert (renaming), ConfirmDelete (whose prompt is only in
+/// the status bar), Backlinks (which shifts focus onto the backlinks pane
+/// rather than opening its own overlay — see `App::focus_backlinks`'s doc
+/// comment), and Command (whose `:` prompt also lives in the status bar —
+/// see `draw_hint_row`) — gets the three-pane split: tree, a read-only
+/// body preview, and the backlinks list, both following the current
+/// selection live. Column widths come from `App::pane_widths` (default
+/// 40/40/20, adjustable with `[`/`]`/`{`/`}` — see that method's doc
+/// comment).
 fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
     match app.mode {
         Mode::Search => {
@@ -52,7 +54,11 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
             }
             return;
         }
-        Mode::Normal | Mode::Insert | Mode::ConfirmDelete | Mode::Backlinks => {}
+        Mode::TagResults => {
+            draw_tag_results(frame, area, app);
+            return;
+        }
+        Mode::Normal | Mode::Insert | Mode::ConfirmDelete | Mode::Backlinks | Mode::Command => {}
     }
 
     let widths = app.pane_widths();
@@ -234,6 +240,29 @@ fn draw_search(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(list, area);
 }
 
+/// Notes matched by a `:tags` command — full-pane overlay like `Search`,
+/// but over a fixed result set rather than a live-as-you-type query, so
+/// there's no query text or snippet to show, just titles.
+fn draw_tag_results(frame: &mut Frame, area: Rect, app: &App) {
+    let items: Vec<ListItem> = app
+        .tag_results()
+        .iter()
+        .enumerate()
+        .map(|(i, hit)| {
+            let style = if i == app.tag_results_selected() {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            ListItem::new(Line::from(Span::styled(hit.title.clone(), style)))
+        })
+        .collect();
+
+    let list =
+        List::new(items).block(Block::default().borders(Borders::ALL).title("Tag results"));
+    frame.render_widget(list, area);
+}
+
 /// Splits an FTS5 snippet on the `\u{1}`/`\u{2}` sentinels
 /// `Index::search` wraps each matched term in (see `SearchHit`'s doc
 /// comment) into styled spans — `base` for surrounding context, `matched`
@@ -299,6 +328,17 @@ fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
 fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
     let bg = Style::default().bg(STATUS_BG);
 
+    // Checked before last_error/last_message/confirm_quit: those are
+    // independent fields that could still be set from before `:` was
+    // pressed, but the live command input is what the user's looking at
+    // right now and should always win while typing it.
+    if app.mode == Mode::Command {
+        let text = format!(":{}", app.command_input());
+        let paragraph = Paragraph::new(text).style(bg.fg(Color::Gray));
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
     if app.mode == Mode::ConfirmDelete {
         let title = app.pending_delete_title().unwrap_or("this note");
         let descendants = app.pending_delete_descendant_count().unwrap_or(0);
@@ -327,13 +367,19 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
+    if let Some(msg) = &app.last_message {
+        let paragraph = Paragraph::new(msg.as_str()).style(bg.fg(Color::Cyan));
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
     let (mode_label, hints) = match app.mode {
         Mode::Normal => (
             "NORMAL",
             "j/k: move  h/l/space: fold  a/o: new  y: copy  Tab/S-Tab: move  \
              K/J: reorder  i: rename  e: edit  d: delete  u: undo  ^R: redo  \
              /: search  b: backlinks  [/]: tree width  {/}: backlinks width  \
-             q: quit",
+             colon: command  q: quit",
         ),
         Mode::Insert => ("INSERT", "Enter: confirm  Esc: cancel"),
         Mode::Search => (
@@ -345,7 +391,8 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
             "j/k: move  Enter: jump  Esc/b: back to tree",
         ),
         Mode::EditBody => ("EDIT BODY", "Esc: save & exit"),
-        Mode::ConfirmDelete => unreachable!("handled above"),
+        Mode::TagResults => ("TAG RESULTS", "j/k: move  Enter: open  Esc: cancel"),
+        Mode::ConfirmDelete | Mode::Command => unreachable!("handled above"),
     };
 
     let mode_style = bg.fg(Color::Cyan).add_modifier(Modifier::BOLD);

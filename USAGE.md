@@ -1,13 +1,14 @@
 # Mycora — Usage Guide
 
-> Reflects what's actually implemented today (v0.1–v0.6, plus a start on
+> Reflects what's actually implemented today (v0.1–v0.6, plus most of
 > v0.7): an in-memory tree with Markdown persistence, full structural
 > operations, SQLite-backed search (with snippets and faceted filters) and
 > tag filtering, read-only multi-vault mounting, `[[wikilink]]` cross-links
 > (including cross-vault ones) with a backlinks panel and link-count
-> badges, a full-pane note-body editor, and a three-pane layout (tree,
-> rendered-Markdown body preview, backlinks). No pane resizing, link
-> autocompletion, or configurable keybindings/theming yet — see
+> badges, a full-pane note-body editor, a resizable three-pane layout
+> (tree, rendered-Markdown body preview, backlinks) with light/dark-aware
+> colors, and a `:` command palette (`:reindex`, `:tags`, `:q`). No link
+> autocompletion or configurable keybindings yet — see
 > [ROADMAP.md](./ROADMAP.md) for what's still ahead.
 
 ## Table of Contents
@@ -21,6 +22,7 @@
 - [Layout](#layout)
 - [Searching](#searching)
 - [Backlinks](#backlinks)
+- [Command palette](#command-palette)
 - [Creating and renaming notes](#creating-and-renaming-notes)
 - [Editing a note's body](#editing-a-notes-body)
 - [Moving notes](#moving-notes)
@@ -292,6 +294,27 @@ Unlike search, focusing the backlinks pane doesn't reindex first — it
 reads whatever the last reindex resolved, same as the pane's live view
 does when it's not focused (and same as the link-count badges).
 
+## Command palette
+
+`:` in Normal mode opens a command prompt — vim/helix-style, replacing
+just the status bar's hint row (the breadcrumb above it stays visible).
+Type a command, `Enter` to run it, `Esc` to cancel without doing
+anything.
+
+- `:reindex` — manually reindexes the mounted vaults (the same reindex
+  search already triggers automatically), reporting how many notes were
+  indexed
+- `:tags <tag1,tag2,...>` — comma-separated, matches notes with *any* of
+  the listed tags (not all — there's no AND syntax yet). Opens a
+  full-pane result list: `j`/`k` to move, `Enter` jumps to the selected
+  note (expanding its ancestors, same as Search and Backlinks), `Esc`
+  cancels back to Normal without changing your selection. If nothing
+  matches, the status bar says so instead of opening an empty list.
+- `:q` / `:quit` — quits Mycora, same as `q` `q` in Normal mode
+
+An unrecognized command shows an error in the status bar rather than
+doing nothing silently.
+
 ## Creating and renaming notes
 
 - `a` — new child of the selected note
@@ -315,12 +338,12 @@ does when it's not focused (and same as the link-count badges).
 - An edit session that changes nothing doesn't write to disk or create an
   undo entry
 
-Not rendered as formatted Markdown, and not split alongside the tree yet
-— both are separate, still-open items (see [ROADMAP.md](./ROADMAP.md)).
-This is also what unblocks writing `[[wikilinks]]` from inside the TUI
-instead of editing the file by hand (see [The search
-index](#the-search-index)) — though autocompleting them as you type isn't
-implemented yet.
+Still a full-pane overlay rather than editing in place alongside the tree
+— true split-pane editing is a separate, still-open item (see
+[ROADMAP.md](./ROADMAP.md)). This is also what unblocks writing
+`[[wikilinks]]` from inside the TUI instead of editing the file by hand
+(see [The search index](#the-search-index)) — though autocompleting them
+as you type isn't implemented yet.
 
 ## Moving notes
 
@@ -388,6 +411,7 @@ session. Not persisted across restarts.
 | `b` | Focus the backlinks pane (see [Backlinks](#backlinks)) |
 | `[` / `]` | Shrink / grow the tree pane (see [Layout](#layout)) |
 | `{` / `}` | Shrink / grow the backlinks pane |
+| `:` | Open the command palette (see [Command palette](#command-palette)) |
 | `q` `q` | Quit (press twice — any other key cancels) |
 | `Ctrl+C` | Quit immediately — bypasses any prompt or confirmation |
 
@@ -429,3 +453,19 @@ session. Not persisted across restarts.
 | `j` / `k` / `↑` / `↓` | Move between entries |
 | `Enter` | Jump to the focused entry (see [Backlinks](#backlinks)) |
 | `Esc` / `b` | Return focus to the tree, keeping the current selection |
+
+### Command
+
+| Key | Action |
+|---|---|
+| *(type)* | Edit the command (see [Command palette](#command-palette)) |
+| `Enter` | Run the command |
+| `Esc` | Cancel without running anything |
+
+### Tag results
+
+| Key | Action |
+|---|---|
+| `j` / `k` / `↑` / `↓` | Move between results |
+| `Enter` | Jump to the selected note |
+| `Esc` | Cancel, keeping the current selection |

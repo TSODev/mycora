@@ -381,7 +381,40 @@ Goal: make daily use pleasant, not just functional.
       `[[wikilinks]]` aren't CommonMark syntax so they render as literal
       bracketed text too — highlighting them specially is a separate,
       not-yet-scoped concern from "render the Markdown"
-- [ ] Command palette (`:` command mode, à la vim/helix)
+- [x] Command palette (`:` command mode, à la vim/helix) (2026-07-10) —
+      `:` in Normal mode enters `Mode::Command`; the input replaces only
+      the status bar's hint row (row 2), leaving the breadcrumb (row 1)
+      visible underneath, same footprint as `ConfirmDelete`'s prompt
+      rather than a full-pane overlay like Search/EditBody. Explained the
+      concept to the user before implementing (vim/helix `:` commands)
+      and confirmed the starting command set via `AskUserQuestion`:
+      `:reindex`, `:tags <tag1,tag2,...>`, `:q`/`:quit` — chosen because
+      all three expose functionality that already existed in the backend
+      with no keybinding of its own (manual reindex, v0.4's tag
+      filtering), rather than inventing new behavior. `:tags` only
+      supports OR/Any semantics for now (`TagFilterOp::Any`, matches any
+      of the listed tags) — no AND syntax exposed yet, a deliberate
+      first-pass simplification noted in the method's doc comment.
+      Matches open a new full-pane `Mode::TagResults` overlay (same
+      interaction shape as Search: `j`/`k` move, `Enter` jumps and
+      expands ancestors, `Esc` cancels) since a tag query is a fresh,
+      unrelated result set rather than context tied to the currently
+      selected note. Unknown commands and `:tags` with no matches report
+      through the status bar rather than silently no-opping: added a new
+      `last_message: Option<String>` field (cyan, non-error feedback like
+      "reindexed N note(s)") alongside the existing `last_error` (red).
+      `reindex_mounted`'s signature changed from a void return to
+      `anyhow::Result<usize>` so `:reindex` can report success/failure
+      explicitly; `begin_search`'s existing call site was updated to
+      match on the `Result` instead of the error being silently absorbed.
+      Manually verified in tmux against a scratch vault with two
+      `lang`-tagged notes and one untagged note: `:reindex` showed
+      "reindexed 3 note(s)"; `:tags lang` opened Tag results listing both
+      matches, `j` then `Enter` jumped to and selected the right note;
+      `:tags nope` showed "no notes tagged nope" with no mode change;
+      `:bogus` showed "ERROR unknown command: bogus"; `Esc` mid-command
+      returned to Normal without executing anything; `:q` quit the app
+      cleanly.
 - [x] Session state: remember last open note, expanded/collapsed branches
       (2026-07-10) — new `src/session.rs`: `Session::load`/`save` read and
       write `~/.local/share/mycora/session.toml` (XDG data dir alongside
