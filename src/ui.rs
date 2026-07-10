@@ -2,11 +2,11 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
-use crate::app::{App, Mode};
+use crate::app::{App, Mode, COMMAND_REFERENCE};
 
 /// Split-pane border accents. Named ANSI colors, not RGB/indexed — the
 /// terminal maps these to whatever's actually configured (light theme,
@@ -41,7 +41,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
 /// body preview, and the backlinks list, both following the current
 /// selection live. Column widths come from `App::pane_widths` (default
 /// 40/40/20, adjustable with `[`/`]`/`{`/`}` — see that method's doc
-/// comment).
+/// comment). `Mode::Command` additionally overlays a small help popup
+/// listing every recognized command (see `draw_command_help`) — shown for
+/// as long as the `:` prompt is open, on request, so commands are
+/// discoverable without leaving the prompt to look them up.
 fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
     match app.mode {
         Mode::Search => {
@@ -74,6 +77,10 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
     draw_tree(frame, panes[0], app);
     draw_body_preview(frame, panes[1], app);
     draw_backlinks_pane(frame, panes[2], app);
+
+    if app.mode == Mode::Command {
+        draw_command_help(frame, area);
+    }
 }
 
 fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
@@ -261,6 +268,65 @@ fn draw_tag_results(frame: &mut Frame, area: Rect, app: &App) {
     let list =
         List::new(items).block(Block::default().borders(Borders::ALL).title("Tag results"));
     frame.render_widget(list, area);
+}
+
+/// Small reference popup listing every command `App::execute_command`
+/// recognizes (`COMMAND_REFERENCE`), anchored to the bottom of the main
+/// area — directly above the status bar row where the `:` prompt itself
+/// is being typed (see `draw_hint_row`'s `Mode::Command` branch). Static:
+/// it doesn't filter as you type, just lists everything, since the
+/// command set is small enough that filtering wouldn't save much. `Clear`
+/// first so it reads as an opaque popup over the tree/body/backlinks
+/// panes rather than blending with whatever text is underneath it.
+fn draw_command_help(frame: &mut Frame, area: Rect) {
+    let width = COMMAND_REFERENCE
+        .iter()
+        .map(|(cmd, desc)| cmd.len() + desc.len() + 4)
+        .max()
+        .unwrap_or(20) as u16
+        + 2; // borders
+    let height = COMMAND_REFERENCE.len() as u16 + 2; // borders
+
+    let popup = popup_rect(area, width, height);
+    frame.render_widget(Clear, popup);
+
+    let cmd_style = Style::default()
+        .fg(Color::Cyan)
+        .add_modifier(Modifier::BOLD);
+    let desc_style = Style::default().add_modifier(Modifier::DIM);
+
+    let lines: Vec<Line> = COMMAND_REFERENCE
+        .iter()
+        .map(|(cmd, desc)| {
+            Line::from(vec![
+                Span::styled(*cmd, cmd_style),
+                Span::raw("  "),
+                Span::styled(*desc, desc_style),
+            ])
+        })
+        .collect();
+
+    let paragraph = Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Commands"),
+    );
+    frame.render_widget(paragraph, popup);
+}
+
+/// A `width`x`height` rect anchored to the bottom-center of `area`,
+/// clamped so it never exceeds `area`'s own bounds.
+fn popup_rect(area: Rect, width: u16, height: u16) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    let x = area.x + (area.width.saturating_sub(width)) / 2;
+    let y = area.y + area.height.saturating_sub(height);
+    Rect {
+        x,
+        y,
+        width,
+        height,
+    }
 }
 
 /// Splits an FTS5 snippet on the `\u{1}`/`\u{2}` sentinels

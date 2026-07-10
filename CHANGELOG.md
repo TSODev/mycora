@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Command palette help popup (v0.7)** — pressing `:` now also shows a
+  small popup listing every recognized command (`:reindex`, `:tags`,
+  `:q`/`:quit`) with a one-line description each, for as long as the
+  prompt is open; you keep typing your command over it as before. Static
+  list, not filtered by what's typed.
 - **Example showcase vault** (`examples/showcase-vault/`) — a real,
   committed Mycora vault documenting Mycora itself: 28 interlinked notes
   covering its philosophy, interface, features, and design decisions,

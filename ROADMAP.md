@@ -414,7 +414,24 @@ Goal: make daily use pleasant, not just functional.
       `:tags nope` showed "no notes tagged nope" with no mode change;
       `:bogus` showed "ERROR unknown command: bogus"; `Esc` mid-command
       returned to Normal without executing anything; `:q` quit the app
-      cleanly.
+      cleanly. **Since extended** (2026-07-10): a help popup listing every
+      recognized command now shows automatically for the whole duration
+      of `Mode::Command`, rather than requiring a `:help` command of its
+      own — the user's own suggestion when asked how they wanted it
+      triggered ("`:` produces the popup, then you continue typing the
+      command over it"). `App::COMMAND_REFERENCE` is a small
+      `&[(syntax, description)]` array, the single source both
+      `execute_command`'s dispatch and `ui.rs`'s `draw_command_help`
+      popup read from (kept in sync by hand, not generated — only three
+      entries). The popup is a small bordered box (`ui.rs`'s
+      `popup_rect`, `Clear`-first so it reads as opaque) anchored to the
+      bottom-center of the main area, directly above the status-bar row
+      where the `:` input itself is being typed; static, not filtered by
+      what's typed so far. Manually verified in tmux: pressing `:` showed
+      the popup with all three commands listed, typing `reindex` and
+      `Enter` continued to work normally with the popup visible the whole
+      time, and it disappeared once the command executed and the mode
+      returned to Normal.
 - [x] Session state: remember last open note, expanded/collapsed branches
       (2026-07-10) — new `src/session.rs`: `Session::load`/`save` read and
       write `~/.local/share/mycora/session.toml` (XDG data dir alongside

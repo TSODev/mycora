@@ -306,8 +306,9 @@ does when it's not focused (and same as the link-count badges).
 
 `:` in Normal mode opens a command prompt — vim/helix-style, replacing
 just the status bar's hint row (the breadcrumb above it stays visible).
-Type a command, `Enter` to run it, `Esc` to cancel without doing
-anything.
+A popup listing every recognized command also appears, above the prompt,
+for as long as it's open — no need to remember the command set. Type a
+command, `Enter` to run it, `Esc` to cancel without doing anything.
 
 - `:reindex` — manually reindexes the mounted vaults (the same reindex
   search already triggers automatically), reporting how many notes were

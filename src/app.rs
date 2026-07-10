@@ -147,6 +147,19 @@ pub struct App {
     tag_results_selected: usize,
 }
 
+/// `(syntax, description)` pairs for every command `execute_command`
+/// recognizes — rendered by `ui.rs`'s command-palette help popup, shown
+/// automatically for the duration of `Mode::Command` so the available
+/// commands are discoverable without leaving the prompt to look them up.
+pub const COMMAND_REFERENCE: &[(&str, &str)] = &[
+    (":reindex", "rebuild the search index"),
+    (
+        ":tags <tag1,tag2,...>",
+        "list notes matching any of the given tags",
+    ),
+    (":q, :quit", "quit Mycora"),
+];
+
 impl App {
     /// Loads config + vault from disk and returns the ready-to-run app along
     /// with any load warnings (malformed files, orphaned/duplicate ids) for
@@ -1080,6 +1093,9 @@ impl App {
     ///   `mycora reindex` from the CLI but without leaving the TUI
     /// - `tags <tag1,tag2,...>` — notes matching *any* of the given tags
     ///   (`TagFilterOp::Any`); opens `Mode::TagResults` if there are hits
+    ///
+    /// Kept in sync with `COMMAND_REFERENCE` below by hand — only three
+    /// entries, not worth generating one from the other.
     pub fn execute_command(&mut self) {
         let input = std::mem::take(&mut self.command_input);
         self.mode = Mode::Normal;
