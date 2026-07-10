@@ -7,8 +7,12 @@ notes — mind-map-style trees — while letting individual notes reference each
 other across branches, the way a mycelial network links the root systems of
 otherwise separate trees.
 
-> Status: early design phase. This README describes the target shape of the
-> project; see [ROADMAP.md](./ROADMAP.md) for the implementation plan.
+> Status: working, in active development. Hierarchical notes, Markdown
+> persistence, full tree editing with undo/redo, and SQLite-backed
+> full-text search are all shipped today (v0.1–v0.4). The "mycelial"
+> cross-link half of the name — `[[wikilink]]`-style references between
+> notes — hasn't landed yet; see [ROADMAP.md](./ROADMAP.md) for what's
+> built vs. still ahead, and [USAGE.md](./USAGE.md) to actually use it.
 
 ---
 
@@ -70,21 +74,37 @@ names the part of the design that's actually differentiating: not the tree
   return relevant results fast, with ranking that reflects relevance
   (BM25-class scoring), not just substring matches.
 
-## Planned features
+## Built (v0.1–v0.4)
 
-- **Tree operations**: create, edit, delete, move (with subtree reparenting),
-  copy (deep copy vs. link — user's choice), reorder siblings.
+- **Tree operations**: create, rename, delete (the whole subtree moves to
+  `.trash/`, never erased outright), move/reparent with cycle detection,
+  reorder siblings, deep-copy a subtree (fresh ids, no shared identity).
+- **Undo/redo**: every structural operation is reversible for the rest of
+  the session.
+- **Local-first storage**: Markdown + YAML frontmatter is the sole source
+  of truth; malformed files, duplicate ids, and orphaned parents are
+  self-healed with a warning rather than causing a crash or data loss.
+- **Full-text search**: SQLite FTS5 over titles + bodies, with a live `/`
+  search overlay in the TUI; `mycora reindex --watch` keeps the index in
+  sync as files change on disk.
+- **Tag filtering**: AND/OR set-filtering over tags — index/API level only
+  so far, no TUI command yet.
+
+## Still ahead
+
 - **Cross-links**: `[[wikilink]]`-style references between any two notes,
   independent of tree position; backlinks panel per note.
-- **Search engine**: full-text search across all notes and metadata (tags,
-  titles, frontmatter fields), with fast incremental indexing.
-- **Undo/redo**: every destructive tree operation (delete, move) is
-  reversible within a session.
-- **Local-first storage**: Markdown files on disk by default; index cached
-  in SQLite; sync to an external store is an optional layer on top, not a
-  requirement.
-- **Import/export**: read/write compatibility with common plain-text vault
-  formats (Obsidian-style wikilinks, frontmatter) so notes remain portable.
+- **Copy-as-link**: today's `y` always deep-copies; a link-only copy is
+  really a cross-link with tree presence, so it waits on cross-links
+  landing (the index's `links` table already exists, just unused until
+  then).
+- **Relevance-ranked search**: upgrading from FTS5 to tantivy/BM25 scoring.
+- **A richer layout**: split-pane (tree + body + backlinks), theming, a
+  command palette.
+- **Import/export**: Obsidian-style vault import, flattened Markdown
+  export.
+
+See [ROADMAP.md](./ROADMAP.md) for the full staged plan.
 
 ## Planned architecture
 
@@ -100,21 +120,31 @@ names the part of the design that's actually differentiating: not the tree
 └──────────────┴──────────────┘
 ```
 
-## Planned tech stack
+## Tech stack
+
+In use today:
 
 - **ratatui** + **crossterm** — terminal UI rendering and input
-- **tokio** — async runtime for file I/O and indexing
-- **serde** + **serde_yaml** — frontmatter (de)serialization
-- **rusqlite** / **sqlx** — local index (tree cache, backlinks, FTS5)
-- **tantivy** — candidate upgrade path for full-text search once FTS5's
-  ranking proves insufficient
-- **pulldown-cmark** — Markdown parsing for wikilink extraction
+- **serde** + **serde_yaml** + **toml** — frontmatter and config
+  (de)serialization
+- **rusqlite** (`bundled`) — the disposable SQLite index behind full-text
+  search and tag filtering, no system libsqlite3 dependency
+- **notify** — filesystem watching for `mycora reindex --watch`
+- **uuid**, **time**, **anyhow**, **clap** — note ids, timestamps, error
+  handling, CLI parsing
+
+Not adopted yet, candidates for later stages:
+
+- **tantivy** — upgrade path for full-text search once FTS5's ranking
+  proves insufficient (v0.6)
+- **pulldown-cmark** — Markdown parsing, for wikilink extraction (v0.5)
+  and rendering the note body pane (v0.7)
 
 ## How Mycora compares
 
 | | Structure | Cross-links | Storage | Search | Interface |
 |---|---|---|---|---|---|
-| **Mycora** | strict tree | yes | Markdown + SQLite index | FTS5 → tantivy | TUI |
+| **Mycora** | strict tree | planned (v0.5) | Markdown + SQLite index | FTS5 (tantivy planned) | TUI |
 | Obsidian | free-form graph | yes | Markdown | plugin-dependent | GUI |
 | `zk` (Go) | flat, tag/link-based | yes | Markdown | fzf-based | CLI |
 | `zk-cli` (Rust) | flat, tag/link-based | yes | Markdown | fuzzy (skim) | CLI |
@@ -123,11 +153,13 @@ names the part of the design that's actually differentiating: not the tree
 
 ## Status
 
-Early but usable — v0.1 through v0.3 are done (in-memory tree, Markdown
-persistence, and full structural operations: move, copy, reorder, delete
-with confirmation and a trash, undo/redo). See [USAGE.md](./USAGE.md) for
-how to use it today, and [ROADMAP.md](./ROADMAP.md) for what's still ahead
-(search, cross-links, a richer layout) through to a stable v1.0.
+Working and daily-usable — v0.1 through v0.4 are done: in-memory tree,
+Markdown persistence, full structural operations (move, copy, reorder,
+delete with confirmation and a trash, undo/redo), and SQLite-backed search
+(FTS5 full-text, tag filtering, `mycora reindex --watch`). See
+[USAGE.md](./USAGE.md) for how to use it today, and
+[ROADMAP.md](./ROADMAP.md) for what's still ahead (cross-links, a richer
+layout, import/export) through to a stable v1.0.
 
 ## License
 
