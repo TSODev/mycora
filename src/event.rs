@@ -31,6 +31,7 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::Normal => handle_normal(app, key),
             Mode::Insert => handle_insert(app, key.code),
             Mode::ConfirmDelete => handle_confirm_delete(app, key.code),
+            Mode::Search => handle_search(app, key.code),
         }
     }
 
@@ -60,6 +61,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Char('K') => app.reorder_up(),
         KeyCode::Char('J') => app.reorder_down(),
         KeyCode::Char('u') => app.undo(),
+        KeyCode::Char('/') => app.begin_search(),
         _ => {}
     }
 }
@@ -80,6 +82,18 @@ fn handle_confirm_delete(app: &mut App, code: KeyCode) {
     match code {
         KeyCode::Char('y') | KeyCode::Enter => app.confirm_delete(),
         KeyCode::Char('n') | KeyCode::Esc => app.cancel_delete(),
+        _ => {}
+    }
+}
+
+fn handle_search(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Enter => app.confirm_search(),
+        KeyCode::Esc => app.cancel_search(),
+        KeyCode::Backspace => app.search_backspace(),
+        KeyCode::Up => app.move_search_selection(-1),
+        KeyCode::Down => app.move_search_selection(1),
+        KeyCode::Char(c) => app.search_input(c),
         _ => {}
     }
 }

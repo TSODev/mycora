@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::config::Config;
+use crate::index::{Index, SearchHit};
 use crate::note::{Note, NoteId};
 use crate::tree::Tree;
 use crate::vault::Vault;
@@ -11,6 +12,8 @@ pub enum Mode {
     Insert,
     /// Awaiting y/n confirmation for `pending_delete`.
     ConfirmDelete,
+    /// Typing a full-text query; `search_results` updates on every keystroke.
+    Search,
 }
 
 /// An action that can be pushed onto `undo_stack`/`redo_stack`. Applying one
@@ -45,6 +48,12 @@ pub struct App {
     pending_delete: Option<NoteId>,
     undo_stack: Vec<UndoAction>,
     redo_stack: Vec<UndoAction>,
+    index: Index,
+    /// The active vault's registry name — used as the index's `vault_id`.
+    vault_id: String,
+    search_query: String,
+    search_results: Vec<SearchHit>,
+    search_selected: usize,
 }
 
 impl App {
@@ -53,7 +62,8 @@ impl App {
     /// the caller to print before the TUI takes over the terminal.
     pub fn new() -> anyhow::Result<(Self, Vec<String>)> {
         let config = Config::load()?;
-        let mut vault = Vault::open(config.active_vault().path.clone())?;
+        let active = config.active_vault().clone();
+        let mut vault = Vault::open(active.path.clone())?;
         let (mut tree, report) = vault.load()?;
 
         let selected = if tree.roots().is_empty() {
@@ -75,6 +85,14 @@ impl App {
             expanded.insert(id);
         }
 
+        let index_path = Index::default_path(&config.home);
+        let mut index = Index::open(&index_path)?;
+        // Reindex once at startup so search reflects the vault as loaded,
+        // without requiring `mycora reindex` to have been run separately —
+        // the index is disposable, so rebuilding it here is just as valid
+        // a source as an on-disk one from a previous session.
+        index.reindex(&active.name, &tree, &vault)?;
+
         let app = Self {
             tree,
             vault,
@@ -88,6 +106,11 @@ impl App {
             pending_delete: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            index,
+            vault_id: active.name,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            search_selected: 0,
         };
 
         Ok((app, report.warnings))
@@ -500,5 +523,84 @@ impl App {
                 Some(UndoAction::Remove { root_id })
             }
         }
+    }
+
+    /// Enters search mode. Reindexes first so results reflect the live
+    /// in-memory tree (including edits made this session that a prior
+    /// `mycora reindex` run on disk wouldn't know about), not a stale copy.
+    pub fn begin_search(&mut self) {
+        if let Err(err) = self.index.reindex(&self.vault_id, &self.tree, &self.vault) {
+            self.last_error = Some(format!("reindex failed: {err}"));
+        }
+        self.search_query.clear();
+        self.search_results.clear();
+        self.search_selected = 0;
+        self.mode = Mode::Search;
+    }
+
+    pub fn search_input(&mut self, c: char) {
+        self.search_query.push(c);
+        self.update_search_results();
+    }
+
+    pub fn search_backspace(&mut self) {
+        self.search_query.pop();
+        self.update_search_results();
+    }
+
+    fn update_search_results(&mut self) {
+        self.search_results = match self.index.search(&self.vault_id, &self.search_query) {
+            Ok(hits) => hits,
+            Err(err) => {
+                self.last_error = Some(format!("search failed: {err}"));
+                Vec::new()
+            }
+        };
+        self.search_selected = 0;
+    }
+
+    pub fn move_search_selection(&mut self, delta: isize) {
+        if self.search_results.is_empty() {
+            return;
+        }
+        let len = self.search_results.len() as isize;
+        let new_pos = (self.search_selected as isize + delta).rem_euclid(len) as usize;
+        self.search_selected = new_pos;
+    }
+
+    /// Jumps to the selected search hit (expanding its ancestors so it's
+    /// visible) and returns to normal mode.
+    pub fn confirm_search(&mut self) {
+        if let Some(hit) = self.search_results.get(self.search_selected) {
+            let id = hit.note_id;
+            self.reveal(id);
+            self.selected = Some(id);
+        }
+        self.mode = Mode::Normal;
+    }
+
+    pub fn cancel_search(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    /// Expands every ancestor of `id` so it's visible in `visible_notes()`.
+    fn reveal(&mut self, id: NoteId) {
+        let mut current = self.tree.get(id).and_then(|note| note.parent);
+        while let Some(ancestor) = current {
+            self.expanded.insert(ancestor);
+            current = self.tree.get(ancestor).and_then(|note| note.parent);
+        }
+    }
+
+    pub fn search_query(&self) -> &str {
+        &self.search_query
+    }
+
+    pub fn search_results(&self) -> &[SearchHit] {
+        &self.search_results
+    }
+
+    pub fn search_selected(&self) -> usize {
+        self.search_selected
     }
 }

@@ -34,6 +34,9 @@ pub struct Config {
     /// a single `"default"` entry at `~/mycora` (or `vault_path`, see above)
     /// when the config declares none.
     pub vaults: Vec<VaultEntry>,
+    /// The resolved `$HOME`, kept around so callers that need an XDG-style
+    /// path (e.g. `Index::default_path`) don't each re-read the env var.
+    pub home: String,
 }
 
 impl Config {
@@ -79,7 +82,10 @@ impl Config {
             }
         }
 
-        Ok(Self { vaults })
+        Ok(Self {
+            vaults,
+            home: home.to_string(),
+        })
     }
 
     /// The vault to open on startup. Until App-level mounting exists (only

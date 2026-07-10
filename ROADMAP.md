@@ -68,9 +68,13 @@ Goal: fast lookups without scanning the filesystem every time.
       `notes_fts` (title, body, tags), rebuilt alongside `notes`/`tree_edges`
       in `reindex`. `Index::search()` turns free-text input into an ANDed,
       per-term prefix match (`"term"*`) rather than exposing raw FTS5 query
-      syntax to callers; ranked by FTS5's built-in `rank`. No TUI hookup yet
-      — that's the next item
-- [ ] Search overlay in the TUI (fuzzy-ish substring search to start)
+      syntax to callers; ranked by FTS5's built-in `rank`
+- [x] Search overlay in the TUI (fuzzy-ish substring search to start) — `/`
+      in Normal mode enters `Mode::Search`, reindexing first so results
+      reflect the live in-memory tree rather than a stale on-disk index.
+      Results update on every keystroke; Up/Down cycles them; Enter expands
+      the hit's ancestors and selects it in the tree; Esc cancels without
+      touching the current selection
 - [ ] Tag filtering: filter notes by one or more tags with AND/OR boolean
       logic (baseline set-filtering over the `notes`/tags index, no
       relevance ranking yet — that's v0.6's job)

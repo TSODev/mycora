@@ -1,6 +1,5 @@
 use std::io;
 
-use anyhow::Context;
 use clap::{Parser, Subcommand};
 use crossterm::{
     execute,
@@ -82,8 +81,7 @@ fn reindex() -> anyhow::Result<()> {
         eprintln!("mycora: {warning}");
     }
 
-    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-    let index_path = Index::default_path(&home);
+    let index_path = Index::default_path(&config.home);
     let mut index = Index::open(&index_path)?;
     let count = index.reindex(&active.name, &tree, &vault)?;
 
