@@ -9,10 +9,19 @@ use crate::note::NoteId;
 use crate::tree::Tree;
 use crate::vault::Vault;
 
-/// One full-text search hit, ranked best-first.
-pub struct SearchHit {
+/// A note found via the index — by full-text search or by tag filter.
+pub struct IndexedNote {
     pub note_id: NoteId,
     pub title: String,
+}
+
+/// How to combine multiple tags in `Index::filter_by_tags`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagFilterOp {
+    /// Note must have every given tag.
+    All,
+    /// Note must have at least one of the given tags.
+    Any,
 }
 
 /// A disposable SQLite index over one or more vaults' notes, rebuilt from
@@ -71,6 +80,12 @@ impl Index {
                 target   TEXT NOT NULL,
                 PRIMARY KEY (vault_id, source, target)
             );
+            CREATE TABLE IF NOT EXISTS tags (
+                vault_id TEXT NOT NULL,
+                note_id  TEXT NOT NULL,
+                tag      TEXT NOT NULL,
+                PRIMARY KEY (vault_id, note_id, tag)
+            );
             CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
                 title,
                 body,
@@ -98,6 +113,7 @@ impl Index {
             "DELETE FROM notes_fts WHERE vault_id = ?1",
             params![vault_id],
         )?;
+        tx.execute("DELETE FROM tags WHERE vault_id = ?1", params![vault_id])?;
 
         let mut count = 0;
         for (id, note) in tree.iter() {
@@ -137,6 +153,12 @@ impl Index {
                  VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![note.title, note.body, tags, vault_id, id.0.to_string()],
             )?;
+            for tag in &note.tags {
+                tx.execute(
+                    "INSERT OR IGNORE INTO tags (vault_id, note_id, tag) VALUES (?1, ?2, ?3)",
+                    params![vault_id, id.0.to_string(), tag],
+                )?;
+            }
             count += 1;
         }
 
@@ -149,7 +171,7 @@ impl Index {
     /// whitespace-separated term becomes an FTS5 prefix match, ANDed
     /// together, rather than exposing raw FTS5 query syntax to the caller.
     /// Relevance ranking upgrades to tantivy/BM25 in v0.6.
-    pub fn search(&self, vault_id: &str, query: &str) -> Result<Vec<SearchHit>> {
+    pub fn search(&self, vault_id: &str, query: &str) -> Result<Vec<IndexedNote>> {
         let match_query = Self::build_match_query(query);
         if match_query.is_empty() {
             return Ok(Vec::new());
@@ -172,7 +194,7 @@ impl Index {
             let (note_id, title) = row?;
             let uuid = Uuid::parse_str(&note_id)
                 .with_context(|| format!("indexed note id {note_id} is not a valid UUID"))?;
-            hits.push(SearchHit {
+            hits.push(IndexedNote {
                 note_id: NoteId(uuid),
                 title,
             });
@@ -191,6 +213,69 @@ impl Index {
             .map(|term| format!("\"{}\"*", term.replace('"', "\"\"")))
             .collect::<Vec<_>>()
             .join(" ")
+    }
+
+    /// Baseline set-filtering over the `tags` index: notes in `vault_id`
+    /// that have all (`TagFilterOp::All`) or any (`TagFilterOp::Any`) of
+    /// `tags`, ordered by title. No relevance ranking — that's v0.6's job,
+    /// once tantivy's faceted filters land alongside this.
+    pub fn filter_by_tags(
+        &self,
+        vault_id: &str,
+        tags: &[String],
+        op: TagFilterOp,
+    ) -> Result<Vec<IndexedNote>> {
+        if tags.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let placeholders = tags.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = match op {
+            TagFilterOp::Any => format!(
+                "SELECT DISTINCT n.id, n.title
+                 FROM notes n
+                 JOIN tags t ON t.vault_id = n.vault_id AND t.note_id = n.id
+                 WHERE n.vault_id = ? AND t.tag IN ({placeholders})
+                 ORDER BY n.title"
+            ),
+            TagFilterOp::All => format!(
+                "SELECT n.id, n.title
+                 FROM notes n
+                 JOIN tags t ON t.vault_id = n.vault_id AND t.note_id = n.id
+                 WHERE n.vault_id = ? AND t.tag IN ({placeholders})
+                 GROUP BY n.id, n.title
+                 HAVING COUNT(DISTINCT t.tag) = ?
+                 ORDER BY n.title"
+            ),
+        };
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut query_params: Vec<&dyn rusqlite::ToSql> = vec![&vault_id];
+        for tag in tags {
+            query_params.push(tag);
+        }
+        let tag_count = tags.len() as i64;
+        if op == TagFilterOp::All {
+            query_params.push(&tag_count);
+        }
+
+        let rows = stmt.query_map(query_params.as_slice(), |row| {
+            let note_id: String = row.get(0)?;
+            let title: String = row.get(1)?;
+            Ok((note_id, title))
+        })?;
+
+        let mut hits = Vec::new();
+        for row in rows {
+            let (note_id, title) = row?;
+            let uuid = Uuid::parse_str(&note_id)
+                .with_context(|| format!("indexed note id {note_id} is not a valid UUID"))?;
+            hits.push(IndexedNote {
+                note_id: NoteId(uuid),
+                title,
+            });
+        }
+        Ok(hits)
     }
 
     pub fn note_count(&self, vault_id: &str) -> Result<i64> {
@@ -318,5 +403,113 @@ mod tests {
 
         std::fs::remove_file(&db_path).ok();
         std::fs::remove_dir_all(&vault_a_dir).ok();
+    }
+
+    fn tagged_note(title: &str, tags: &[&str]) -> (NoteId, crate::note::Note) {
+        let mut note = crate::note::Note::new(title, None);
+        note.tags = tags.iter().map(|t| t.to_string()).collect();
+        (NoteId::new(), note)
+    }
+
+    #[test]
+    fn filter_by_tags_any_matches_notes_with_at_least_one_given_tag() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let (rust_note, note) = tagged_note("Rust ownership", &["rust", "lang"]);
+        tree.insert_loaded(rust_note, note);
+        let (go_note, note) = tagged_note("Go channels", &["go", "lang"]);
+        tree.insert_loaded(go_note, note);
+        let (_cooking_note, note) = tagged_note("Bread recipe", &["cooking"]);
+        tree.insert_loaded(_cooking_note, note);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let tags = vec!["rust".to_string(), "go".to_string()];
+        let mut hits = index
+            .filter_by_tags("default", &tags, TagFilterOp::Any)
+            .unwrap();
+        hits.sort_by(|a, b| a.title.cmp(&b.title));
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].title, "Go channels");
+        assert_eq!(hits[1].title, "Rust ownership");
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn filter_by_tags_all_requires_every_given_tag() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let (rust_note, note) = tagged_note("Rust ownership", &["rust", "lang"]);
+        tree.insert_loaded(rust_note, note);
+        let (go_note, note) = tagged_note("Go channels", &["go", "lang"]);
+        tree.insert_loaded(go_note, note);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let tags = vec!["rust".to_string(), "lang".to_string()];
+        let hits = index
+            .filter_by_tags("default", &tags, TagFilterOp::All)
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].note_id, rust_note);
+
+        let no_match = vec!["rust".to_string(), "go".to_string()];
+        assert!(index
+            .filter_by_tags("default", &no_match, TagFilterOp::All)
+            .unwrap()
+            .is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn filter_by_tags_is_scoped_to_its_vault_id() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree_a = Tree::new();
+        let (note_a, note) = tagged_note("A", &["shared"]);
+        tree_a.insert_loaded(note_a, note);
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+        index.reindex("a", &tree_a, &vault_a).unwrap();
+
+        let tags = vec!["shared".to_string()];
+        assert_eq!(
+            index
+                .filter_by_tags("a", &tags, TagFilterOp::Any)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(index
+            .filter_by_tags("b", &tags, TagFilterOp::Any)
+            .unwrap()
+            .is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
+    }
+
+    #[test]
+    fn filter_by_tags_with_no_tags_returns_nothing() {
+        let db_path = scratch_db_path();
+        let index = Index::open(&db_path).unwrap();
+        assert!(index
+            .filter_by_tags("default", &[], TagFilterOp::Any)
+            .unwrap()
+            .is_empty());
+        std::fs::remove_file(&db_path).ok();
     }
 }

@@ -85,9 +85,17 @@ Goal: fast lookups without scanning the filesystem every time.
       Results update on every keystroke; Up/Down cycles them; Enter expands
       the hit's ancestors and selects it in the tree; Esc cancels without
       touching the current selection
-- [ ] Tag filtering: filter notes by one or more tags with AND/OR boolean
+- [x] Tag filtering: filter notes by one or more tags with AND/OR boolean
       logic (baseline set-filtering over the `notes`/tags index, no
-      relevance ranking yet — that's v0.6's job)
+      relevance ranking yet — that's v0.6's job) — new `tags` table
+      (`vault_id`, `note_id`, `tag`), populated in `reindex`.
+      `Index::filter_by_tags(vault_id, tags, TagFilterOp::{All,Any})`.
+      Backend/index only, matching this bullet's scope as written (unlike
+      full-text search, this item never called for its own TUI overlay);
+      a tag-browsing UI is left for whenever v0.7's UX polish or a later
+      pass picks it up
+
+v0.4 is now feature-complete against this list.
 
 ## v0.5 — Cross-links (the "mycelial" layer)
 

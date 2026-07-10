@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Tag filtering (v0.4, closes the version)** — a new `tags` table
+  (`vault_id`, `note_id`, `tag`), populated by `reindex`.
+  `Index::filter_by_tags(vault_id, tags, TagFilterOp::{All,Any})` does
+  baseline AND/OR set-filtering, no relevance ranking (that's v0.6's
+  tantivy work). Backend/index only — this roadmap item never called for
+  a TUI overlay the way full-text search did, so there's no keybinding
+  for it yet. `Index::SearchHit` is renamed `IndexedNote` since it's now
+  shared between full-text search and tag-filter results.
 - **`mycora reindex --watch` (v0.4)** — stays running and reindexes the
   active vault automatically whenever a file in it changes, via the
   `notify` crate (non-recursive, matching `Vault::load`). Debounces
