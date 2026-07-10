@@ -289,10 +289,16 @@ You generally don't need to manage this yourself — the TUI reindexes
 every mounted vault automatically on startup, and reindexes the default
 vault again every time you open search with `/`, so results always
 reflect it as loaded (including edits made earlier in the same session).
-The backlinks pane and its link-count badges don't trigger a reindex —
-they read whatever the last one resolved. The CLI commands below are for
-headless use: rebuilding the index without opening the TUI, or keeping it
-warm in the background for some other tool to query directly.
+"Every mounted vault" means exactly that: read-only mounted vaults (see
+[Configuration](#configuration)) get indexed right alongside the active
+one, not just the one you can edit — that's what backlinks,
+[Layout](#layout)'s link-count badges, and read-only tree navigation are
+actually reading. `/` full-text search is the one exception that stays
+scoped to the active vault's notes only, for now. The backlinks pane and
+its link-count badges don't trigger a reindex — they read whatever the
+last one resolved. The CLI commands below are for headless use:
+rebuilding the index without opening the TUI, or keeping it warm in the
+background for some other tool to query directly.
 
 ```sh
 mycora reindex          # rebuild every mounted vault once, then exit
