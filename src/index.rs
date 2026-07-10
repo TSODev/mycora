@@ -305,6 +305,36 @@ impl Index {
         Ok(hits)
     }
 
+    /// Notes in `vault_id` that link to `target` — i.e. `target`'s
+    /// backlinks, ordered by title. Reads whatever `links` rows `reindex`
+    /// last resolved; does not itself trigger a reindex.
+    pub fn backlinks(&self, vault_id: &str, target: NoteId) -> Result<Vec<IndexedNote>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT n.id, n.title
+             FROM links l
+             JOIN notes n ON n.vault_id = l.vault_id AND n.id = l.source
+             WHERE l.vault_id = ?1 AND l.target = ?2
+             ORDER BY n.title",
+        )?;
+        let rows = stmt.query_map(params![vault_id, target.0.to_string()], |row| {
+            let note_id: String = row.get(0)?;
+            let title: String = row.get(1)?;
+            Ok((note_id, title))
+        })?;
+
+        let mut hits = Vec::new();
+        for row in rows {
+            let (note_id, title) = row?;
+            let uuid = Uuid::parse_str(&note_id)
+                .with_context(|| format!("indexed note id {note_id} is not a valid UUID"))?;
+            hits.push(IndexedNote {
+                note_id: NoteId(uuid),
+                title,
+            });
+        }
+        Ok(hits)
+    }
+
     pub fn note_count(&self, vault_id: &str) -> Result<i64> {
         self.conn
             .query_row(
@@ -656,6 +686,72 @@ mod tests {
             vec![(source_a.0.to_string(), target_a.0.to_string())]
         );
         assert!(links_for(&index, "b").is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
+    }
+
+    #[test]
+    fn backlinks_returns_every_note_linking_to_the_target() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let target = tree.create_note("Target Note", None);
+        let source_a = tree.create_note("Source A", None);
+        tree.set_body(source_a, "[[Target Note]]");
+        let source_b = tree.create_note("Source B", None);
+        tree.set_body(source_b, "also [[Target Note]]");
+        let unrelated = tree.create_note("Unrelated", None);
+        tree.set_body(unrelated, "no link here");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let hits = index.backlinks("default", target).unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].title, "Source A");
+        assert_eq!(hits[1].title, "Source B");
+        assert!(!hits.iter().any(|h| h.note_id == unrelated));
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn backlinks_is_empty_for_a_note_nothing_links_to() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let lonely = tree.create_note("Lonely Note", None);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        assert!(index.backlinks("default", lonely).unwrap().is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn backlinks_is_scoped_to_its_vault_id() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree_a = Tree::new();
+        let target_a = tree_a.create_note("Target", None);
+        let source_a = tree_a.create_note("Source", None);
+        tree_a.set_body(source_a, "[[Target]]");
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+        index.reindex("a", &tree_a, &vault_a).unwrap();
+
+        assert_eq!(index.backlinks("a", target_a).unwrap().len(), 1);
+        assert!(index.backlinks("b", target_a).unwrap().is_empty());
 
         std::fs::remove_file(&db_path).ok();
         std::fs::remove_dir_all(&vault_a_dir).ok();

@@ -14,6 +14,8 @@ pub enum Mode {
     ConfirmDelete,
     /// Typing a full-text query; `search_results` updates on every keystroke.
     Search,
+    /// Browsing notes that link to the note selected when `b` was pressed.
+    Backlinks,
 }
 
 /// An action that can be pushed onto `undo_stack`/`redo_stack`. Applying one
@@ -54,6 +56,8 @@ pub struct App {
     search_query: String,
     search_results: Vec<IndexedNote>,
     search_selected: usize,
+    backlinks_results: Vec<IndexedNote>,
+    backlinks_selected: usize,
 }
 
 impl App {
@@ -111,6 +115,8 @@ impl App {
             search_query: String::new(),
             search_results: Vec::new(),
             search_selected: 0,
+            backlinks_results: Vec::new(),
+            backlinks_selected: 0,
         };
 
         Ok((app, report.warnings))
@@ -602,5 +608,56 @@ impl App {
 
     pub fn search_selected(&self) -> usize {
         self.search_selected
+    }
+
+    /// Enters backlinks mode for the currently selected note: reindexes
+    /// first (same reasoning as `begin_search` — reflect the live tree, not
+    /// a stale on-disk index), then looks up which notes link to it.
+    pub fn show_backlinks(&mut self) {
+        let Some(id) = self.selected else { return };
+        if let Err(err) = self.index.reindex(&self.vault_id, &self.tree, &self.vault) {
+            self.last_error = Some(format!("reindex failed: {err}"));
+        }
+        self.backlinks_results = match self.index.backlinks(&self.vault_id, id) {
+            Ok(hits) => hits,
+            Err(err) => {
+                self.last_error = Some(format!("backlinks lookup failed: {err}"));
+                Vec::new()
+            }
+        };
+        self.backlinks_selected = 0;
+        self.mode = Mode::Backlinks;
+    }
+
+    pub fn move_backlinks_selection(&mut self, delta: isize) {
+        if self.backlinks_results.is_empty() {
+            return;
+        }
+        let len = self.backlinks_results.len() as isize;
+        let new_pos = (self.backlinks_selected as isize + delta).rem_euclid(len) as usize;
+        self.backlinks_selected = new_pos;
+    }
+
+    /// Jumps to the selected backlink (expanding its ancestors so it's
+    /// visible) and returns to normal mode.
+    pub fn confirm_backlinks(&mut self) {
+        if let Some(hit) = self.backlinks_results.get(self.backlinks_selected) {
+            let id = hit.note_id;
+            self.reveal(id);
+            self.selected = Some(id);
+        }
+        self.mode = Mode::Normal;
+    }
+
+    pub fn cancel_backlinks(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    pub fn backlinks_results(&self) -> &[IndexedNote] {
+        &self.backlinks_results
+    }
+
+    pub fn backlinks_selected(&self) -> usize {
+        self.backlinks_selected
     }
 }

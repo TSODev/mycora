@@ -112,14 +112,21 @@ Goal: notes can reference each other outside the tree.
       not silently guessing); a title matching no note is simply skipped
       (that's what "broken link" means here) rather than erroring, and a
       note linking to its own title is skipped too. Manually verified via
-      `mycora reindex` against real vault files. Backlinks *querying* isn't
-      exposed yet (no `Index` method beyond what's needed for `reindex`
-      itself) — that's the next item
+      `mycora reindex` against real vault files.
 - [ ] Cross-vault links: a wikilink can resolve to a note in any *mounted*
       vault, not just the current one (see "Multiple vaults" below) — this
       is the intended path for referencing another vault's content, since
       trees themselves stay single-vault (no cross-vault reparenting)
-- [ ] Backlinks panel: "notes that link here"
+- [x] Backlinks panel: "notes that link here" — `Index::backlinks(vault_id,
+      target)` (title-ordered, reads whatever `reindex` last resolved,
+      doesn't reindex itself). TUI: `b` in Normal mode reindexes then opens
+      `Mode::Backlinks` over the selected note's incoming links, reusing
+      the same list/Up/Down/Enter/Esc pattern as the search overlay (`b`
+      is a read of the currently selected note, not a query, so no typing
+      state needed). Manually verified in tmux: two notes linking to a
+      third both showed up, jumping to one moved the tree selection, and
+      re-opening backlinks on the newly selected (unlinked) note correctly
+      showed an empty list
 - [ ] Link autocompletion while typing `[[`
 - [ ] Handle broken links (target renamed/deleted) gracefully
 - [ ] Link-count badge on collapsed tree branches: aggregate link count

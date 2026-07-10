@@ -23,6 +23,10 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
         draw_search(frame, area, app);
         return;
     }
+    if app.mode == Mode::Backlinks {
+        draw_backlinks(frame, area, app);
+        return;
+    }
 
     let items: Vec<ListItem> = app
         .visible_notes()
@@ -82,6 +86,31 @@ fn draw_search(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(list, area);
 }
 
+fn draw_backlinks(frame: &mut Frame, area: Rect, app: &App) {
+    let items: Vec<ListItem> = app
+        .backlinks_results()
+        .iter()
+        .enumerate()
+        .map(|(i, hit)| {
+            let style = if i == app.backlinks_selected() {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            ListItem::new(Line::from(Span::styled(hit.title.clone(), style)))
+        })
+        .collect();
+
+    let target_title = app
+        .selected
+        .and_then(|id| app.tree.get(id))
+        .map(|note| note.title.as_str())
+        .unwrap_or("");
+    let title = format!("Backlinks: {target_title}");
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
+    frame.render_widget(list, area);
+}
+
 fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
     if app.mode == Mode::ConfirmDelete {
         let title = app.pending_delete_title().unwrap_or("this note");
@@ -113,10 +142,11 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
 
     let text = match app.mode {
         Mode::Normal => {
-            "NORMAL  j/k move  h/l/space fold  a/o new  y copy  Tab/S-Tab move  K/J reorder  i rename  d delete  u undo  ^R redo  / search  q quit"
+            "NORMAL  j/k move  h/l/space fold  a/o new  y copy  Tab/S-Tab move  K/J reorder  i rename  d delete  u undo  ^R redo  / search  b backlinks  q quit"
         }
         Mode::Insert => "INSERT  Enter confirm  Esc cancel",
         Mode::Search => "SEARCH  type to filter  Up/Down move  Enter open  Esc cancel",
+        Mode::Backlinks => "BACKLINKS  Up/Down move  Enter open  Esc cancel",
         Mode::ConfirmDelete => unreachable!("handled above"),
     };
     frame.render_widget(Paragraph::new(text), area);

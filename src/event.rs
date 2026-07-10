@@ -32,6 +32,7 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::Insert => handle_insert(app, key.code),
             Mode::ConfirmDelete => handle_confirm_delete(app, key.code),
             Mode::Search => handle_search(app, key.code),
+            Mode::Backlinks => handle_backlinks(app, key.code),
         }
     }
 
@@ -62,6 +63,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Char('J') => app.reorder_down(),
         KeyCode::Char('u') => app.undo(),
         KeyCode::Char('/') => app.begin_search(),
+        KeyCode::Char('b') => app.show_backlinks(),
         _ => {}
     }
 }
@@ -94,6 +96,16 @@ fn handle_search(app: &mut App, code: KeyCode) {
         KeyCode::Up => app.move_search_selection(-1),
         KeyCode::Down => app.move_search_selection(1),
         KeyCode::Char(c) => app.search_input(c),
+        _ => {}
+    }
+}
+
+fn handle_backlinks(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Enter => app.confirm_backlinks(),
+        KeyCode::Esc => app.cancel_backlinks(),
+        KeyCode::Up => app.move_backlinks_selection(-1),
+        KeyCode::Down => app.move_backlinks_selection(1),
         _ => {}
     }
 }

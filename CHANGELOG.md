@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Backlinks panel (v0.5)** — `b` in Normal mode reindexes, then opens a
+  panel listing notes that link to the selected one (`Index::backlinks`),
+  reusing the search overlay's Up/Down/Enter/Esc pattern: Enter jumps to
+  the selected backlink (expanding its ancestors), Esc cancels leaving
+  the current selection untouched.
 - **`[[wikilink]]` parsing and link persistence (start of v0.5)** — a new
   `link` module extracts `[[title]]` occurrences from note bodies (a small
   hand-rolled scanner, no new dependency), and `reindex` resolves each
