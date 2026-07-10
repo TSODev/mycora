@@ -10,10 +10,23 @@ use crate::note::NoteId;
 use crate::tree::Tree;
 use crate::vault::Vault;
 
-/// A note found via the index — by full-text search or by tag filter.
+/// A note found via the index — by tag filter or backlinks lookup, neither
+/// of which has anything snippet-worthy to show (see `SearchHit` for the
+/// full-text-search equivalent, which does).
 pub struct IndexedNote {
     pub note_id: NoteId,
     pub title: String,
+}
+
+/// One full-text search hit: a resolved note plus an FTS5-generated
+/// snippet — body text around the match, with every matched term wrapped
+/// in `\u{1}`...`\u{2}` sentinels (never shown to the user directly; a
+/// renderer splits on them to style the match distinctly, the way
+/// `ui.rs`'s `spans_from_snippet` does).
+pub struct SearchHit {
+    pub note_id: NoteId,
+    pub title: String,
+    pub snippet: String,
 }
 
 /// How to combine multiple tags in `Index::filter_by_tags`.
@@ -314,14 +327,20 @@ impl Index {
     /// whitespace-separated term becomes an FTS5 prefix match, ANDed
     /// together, rather than exposing raw FTS5 query syntax to the caller.
     /// Relevance ranking upgrades to tantivy/BM25 in v0.6.
-    pub fn search(&self, vault_id: &str, query: &str) -> Result<Vec<IndexedNote>> {
+    pub fn search(&self, vault_id: &str, query: &str) -> Result<Vec<SearchHit>> {
         let match_query = Self::build_match_query(query);
         if match_query.is_empty() {
             return Ok(Vec::new());
         }
 
+        // Column 1 is `body` (see the CREATE VIRTUAL TABLE order:
+        // title=0, body=1, tags=2). `\u{1}`/`\u{2}` are ASCII control
+        // characters used purely as sentinels around each matched term —
+        // never rendered directly, a UI splits on them to style the match
+        // (see `SearchHit`'s doc comment).
         let mut stmt = self.conn.prepare(
-            "SELECT note_id, title FROM notes_fts
+            "SELECT note_id, title, snippet(notes_fts, 1, '\u{1}', '\u{2}', '…', 16)
+             FROM notes_fts
              WHERE notes_fts MATCH ?1 AND vault_id = ?2
              ORDER BY rank
              LIMIT 50",
@@ -329,17 +348,19 @@ impl Index {
         let rows = stmt.query_map(params![match_query, vault_id], |row| {
             let note_id: String = row.get(0)?;
             let title: String = row.get(1)?;
-            Ok((note_id, title))
+            let snippet: String = row.get(2)?;
+            Ok((note_id, title, snippet))
         })?;
 
         let mut hits = Vec::new();
         for row in rows {
-            let (note_id, title) = row?;
+            let (note_id, title, snippet) = row?;
             let uuid = Uuid::parse_str(&note_id)
                 .with_context(|| format!("indexed note id {note_id} is not a valid UUID"))?;
-            hits.push(IndexedNote {
+            hits.push(SearchHit {
                 note_id: NoteId(uuid),
                 title,
+                snippet,
             });
         }
         Ok(hits)
@@ -588,6 +609,34 @@ mod tests {
         assert_eq!(title_hits[0].note_id, rust_note);
 
         assert!(index.search("default", "xyzzy").unwrap().is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn search_wraps_the_matched_term_in_the_snippet_with_sentinels() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let note = tree.create_note("Rust ownership", None);
+        tree.set_body(note, "Notes about borrowing and lifetimes in Rust.");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let hits = index.search("default", "borrow").unwrap();
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].snippet.contains('\u{1}'));
+        assert!(hits[0].snippet.contains('\u{2}'));
+        // The matched term itself (case as stored) appears between the
+        // sentinels, not just somewhere in the snippet.
+        let start = hits[0].snippet.find('\u{1}').unwrap();
+        let end = hits[0].snippet.find('\u{2}').unwrap();
+        assert!(end > start);
+        assert_eq!(&hits[0].snippet[start + 1..end], "borrowing");
 
         std::fs::remove_file(&db_path).ok();
         std::fs::remove_dir_all(&vault_dir).ok();

@@ -104,18 +104,59 @@ fn draw_search(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, hit)| {
-            let style = if i == app.search_selected() {
+            let title_style = if i == app.search_selected() {
                 Style::default().add_modifier(Modifier::REVERSED)
             } else {
-                Style::default()
+                Style::default().add_modifier(Modifier::BOLD)
             };
-            ListItem::new(Line::from(Span::styled(hit.title.clone(), style)))
+            let snippet_base = Style::default().add_modifier(Modifier::DIM);
+            let snippet_match = Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD);
+
+            let title_line = Line::from(Span::styled(hit.title.clone(), title_style));
+            let snippet_line = Line::from(spans_from_snippet(
+                &hit.snippet,
+                snippet_base,
+                snippet_match,
+            ));
+            ListItem::new(vec![title_line, snippet_line])
         })
         .collect();
 
     let title = format!("Search: {}", app.search_query());
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     frame.render_widget(list, area);
+}
+
+/// Splits an FTS5 snippet on the `\u{1}`/`\u{2}` sentinels
+/// `Index::search` wraps each matched term in (see `SearchHit`'s doc
+/// comment) into styled spans — `base` for surrounding context, `matched`
+/// for whatever was inside the sentinels. The sentinels themselves are
+/// never included in the output.
+fn spans_from_snippet(snippet: &str, base: Style, matched: Style) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let mut rest = snippet;
+    while let Some(start) = rest.find('\u{1}') {
+        if start > 0 {
+            spans.push(Span::styled(rest[..start].to_string(), base));
+        }
+        let after_start = &rest[start + '\u{1}'.len_utf8()..];
+        match after_start.find('\u{2}') {
+            Some(end) => {
+                spans.push(Span::styled(after_start[..end].to_string(), matched));
+                rest = &after_start[end + '\u{2}'.len_utf8()..];
+            }
+            None => {
+                spans.push(Span::styled(after_start.to_string(), base));
+                return spans;
+            }
+        }
+    }
+    if !rest.is_empty() {
+        spans.push(Span::styled(rest.to_string(), base));
+    }
+    spans
 }
 
 fn draw_backlinks(frame: &mut Frame, area: Rect, app: &App) {

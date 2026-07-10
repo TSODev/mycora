@@ -8,6 +8,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Search result snippets (v0.6, start)** — `Index::search` now returns
+  `SearchHit { note_id, title, snippet }` instead of the plain
+  note_id+title pair; `snippet` comes from FTS5's own `snippet()`
+  function, with each matched term wrapped in sentinel characters (never
+  shown directly) that `ui.rs` splits on to style the match distinctly.
+  The search overlay now shows a 2-line entry per result (title + snippet,
+  matched term bold-yellow) instead of title-only.
+
+### Changed
+- **v0.6 no longer plans to adopt tantivy on spec** — FTS5 (v0.4) already
+  does BM25 ranking and ships its own `snippet()`; the roadmap's
+  "benchmark before committing" was resolved by not writing the
+  integration in the first place. Revisit only if a concrete FTS5 gap
+  shows up. See ROADMAP.md's v0.6 section for the full reasoning.
+
+### Added
 - **Cross-vault `[[wikilink]]` resolution (v0.5, closes the version except
   autocompletion)** — a wikilink in one mounted vault can now resolve to a
   note in any other mounted vault, not just its own. Required reshaping

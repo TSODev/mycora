@@ -222,6 +222,8 @@ own notes.
   matches "Architecture"), and every word you've typed must match
   somewhere in the title or body — not a raw substring search, and not
   fuzzy/typo-tolerant yet
+- Each result shows its title plus a snippet of body text around the
+  match, with the matched word or phrase highlighted
 - `↑` / `↓` — move between results
 - `Enter` — jump to the selected result: expands its ancestors so it's
   visible, selects it in the tree, and returns to Normal mode

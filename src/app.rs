@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::config::Config;
-use crate::index::{Index, IndexedNote};
+use crate::index::{Index, IndexedNote, SearchHit};
 use crate::note::{Note, NoteId};
 use crate::tree::Tree;
 use crate::vault::Vault;
@@ -71,7 +71,7 @@ pub struct App {
     /// The active vault's registry name — used as the index's `vault_id`.
     vault_id: String,
     search_query: String,
-    search_results: Vec<IndexedNote>,
+    search_results: Vec<SearchHit>,
     search_selected: usize,
     backlinks_results: Vec<IndexedNote>,
     backlinks_selected: usize,
@@ -679,7 +679,7 @@ impl App {
         &self.search_query
     }
 
-    pub fn search_results(&self) -> &[IndexedNote] {
+    pub fn search_results(&self) -> &[SearchHit] {
         &self.search_results
     }
 

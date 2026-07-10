@@ -190,14 +190,37 @@ as noted above.
 
 Goal: relevance-ranked search, not just substring matches.
 
+**Reconsidered 2026-07-10**: the goal above is already met without
+tantivy — FTS5 (v0.4) already does BM25 ranking natively (`ORDER BY
+rank`, already in `Index::search`) and already ships `snippet()`. So
+rather than adding a second full-text engine on spec, this version's
+scope shifted to squeezing more out of FTS5 first (snippet generation,
+faceted filters) and treating tantivy as something to revisit only if a
+concrete gap shows up (typo tolerance, ranking quality at a large vault
+size, etc.) — matching the "benchmark before committing" item below,
+just resolved before writing the tantivy integration rather than after.
+
 - [ ] Introduce tantivy as the primary full-text index, fed from the same
-      Markdown source
-- [ ] BM25-ranked results; snippet/highlight generation
+      Markdown source — **deferred**, not attempted yet; see above
+- [x] BM25-ranked results — already true since v0.4 (FTS5's `rank`);
+      **snippet/highlight generation** added now: `Index::search` returns
+      `SearchHit { note_id, title, snippet }`, `snippet` built via FTS5's
+      own `snippet()` function (body column, `…` ellipsis, 16-token
+      window), with each matched term wrapped in `\u{1}`/`\u{2}` sentinel
+      characters rather than visible markup — keeps the delimiter choice
+      out of index.rs's business and lets a renderer decide how to style
+      a match. `ui.rs`'s `spans_from_snippet` splits on those sentinels
+      into styled ratatui spans (dim context, bold-yellow match); the
+      search overlay now renders a 2-line entry per hit (title + snippet)
+      instead of title-only. Manually verified in tmux: searching
+      "borrow" against a note containing "borrowing" showed the snippet
+      with only that word bold-yellow, rest dimmed
 - [ ] Faceted filters combined with ranked results: tag (building on
       v0.4's AND/OR tag filter), date range, tree branch
 - [ ] Benchmark tantivy vs. FTS5 on a realistic vault size before fully
       committing (keep FTS5 as fallback if tantivy adds too much overhead
-      for small vaults)
+      for small vaults) — superseded by the 2026-07-10 note above;
+      revisit only if a concrete FTS5 gap shows up
 
 ## v0.7 — UX polish
 
