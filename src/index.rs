@@ -26,6 +26,21 @@ pub enum TagFilterOp {
     Any,
 }
 
+/// A `[[title]]` reference found in `source`'s body that didn't resolve to
+/// any note during the last `reindex` — a broken link. Reported, not
+/// treated as an error: a note referencing a not-yet-written or
+/// since-renamed/deleted title is expected, not exceptional.
+pub struct BrokenLink {
+    pub source: NoteId,
+    pub title: String,
+}
+
+/// The result of a `reindex` call.
+pub struct ReindexReport {
+    pub note_count: usize,
+    pub broken_links: Vec<BrokenLink>,
+}
+
 /// A disposable SQLite index over one or more vaults' notes, rebuilt from
 /// the Markdown source on demand (`reindex`) rather than treated as a
 /// second source of truth. Deliberately not scoped to a single vault
@@ -104,7 +119,7 @@ impl Index {
     /// Rebuilds every row belonging to `vault_id` from `tree`/`vault`'s
     /// current state: drops then reinserts, since the index is always
     /// disposable and cheaper to regenerate wholesale than to diff.
-    pub fn reindex(&mut self, vault_id: &str, tree: &Tree, vault: &Vault) -> Result<usize> {
+    pub fn reindex(&mut self, vault_id: &str, tree: &Tree, vault: &Vault) -> Result<ReindexReport> {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM notes WHERE vault_id = ?1", params![vault_id])?;
         tx.execute(
@@ -128,6 +143,7 @@ impl Index {
         }
 
         let mut count = 0;
+        let mut broken_links = Vec::new();
         for (id, note) in tree.iter() {
             let path = vault
                 .path(id)
@@ -173,7 +189,8 @@ impl Index {
             }
             for title in extract_wikilink_titles(&note.body) {
                 let Some(targets) = titles.get(title.as_str()) else {
-                    continue; // broken link: no note has this title
+                    broken_links.push(BrokenLink { source: id, title });
+                    continue;
                 };
                 for &target in targets {
                     if target == id {
@@ -190,7 +207,10 @@ impl Index {
         }
 
         tx.commit()?;
-        Ok(count)
+        Ok(ReindexReport {
+            note_count: count,
+            broken_links,
+        })
     }
 
     /// Full-text search over title + body (+ tags) within `vault_id`,
@@ -373,8 +393,8 @@ mod tests {
         let vault_dir = temp_vault_dir();
         let vault = Vault::open(vault_dir.clone()).unwrap();
 
-        let count = index.reindex("default", &tree, &vault).unwrap();
-        assert_eq!(count, 2);
+        let report = index.reindex("default", &tree, &vault).unwrap();
+        assert_eq!(report.note_count, 2);
         assert_eq!(index.note_count("default").unwrap(), 2);
 
         std::fs::remove_file(&db_path).ok();
@@ -755,5 +775,46 @@ mod tests {
 
         std::fs::remove_file(&db_path).ok();
         std::fs::remove_dir_all(&vault_a_dir).ok();
+    }
+
+    #[test]
+    fn reindex_reports_a_wikilink_whose_title_matches_no_note_as_broken() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let source = tree.create_note("Source Note", None);
+        tree.set_body(source, "See [[Nonexistent Title]].");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        let report = index.reindex("default", &tree, &vault).unwrap();
+
+        assert_eq!(report.broken_links.len(), 1);
+        assert_eq!(report.broken_links[0].source, source);
+        assert_eq!(report.broken_links[0].title, "Nonexistent Title");
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn reindex_does_not_report_a_resolved_wikilink_as_broken() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        tree.create_note("Target Note", None);
+        let source = tree.create_note("Source Note", None);
+        tree.set_body(source, "See [[Target Note]].");
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        let report = index.reindex("default", &tree, &vault).unwrap();
+
+        assert!(report.broken_links.is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
     }
 }

@@ -68,7 +68,7 @@ impl App {
         let config = Config::load()?;
         let active = config.active_vault().clone();
         let mut vault = Vault::open(active.path.clone())?;
-        let (mut tree, report) = vault.load()?;
+        let (mut tree, mut report) = vault.load()?;
 
         let selected = if tree.roots().is_empty() {
             let welcome = tree.create_note("Welcome to Mycora", None);
@@ -95,7 +95,17 @@ impl App {
         // without requiring `mycora reindex` to have been run separately —
         // the index is disposable, so rebuilding it here is just as valid
         // a source as an on-disk one from a previous session.
-        index.reindex(&active.name, &tree, &vault)?;
+        let reindex_report = index.reindex(&active.name, &tree, &vault)?;
+        for broken in &reindex_report.broken_links {
+            let source_title = tree
+                .get(broken.source)
+                .map(|note| note.title.as_str())
+                .unwrap_or("?");
+            report.warnings.push(format!(
+                "broken link in \"{source_title}\": [[{}]] matches no note",
+                broken.title
+            ));
+        }
 
         let app = Self {
             tree,

@@ -145,7 +145,9 @@ fn watch_reindex() -> anyhow::Result<()> {
 }
 
 /// Loads the active vault fresh from disk and rebuilds its index rows.
-/// Shared by the one-shot and `--watch` reindex paths.
+/// Shared by the one-shot and `--watch` reindex paths. Prints a warning per
+/// broken wikilink (a `[[title]]` that didn't resolve to any note) the same
+/// way `vault.load()`'s own warnings are printed — reported, not an error.
 fn perform_reindex(config: &Config) -> anyhow::Result<(usize, std::path::PathBuf)> {
     let active = config.active_vault();
     let mut vault = Vault::open(active.path.clone())?;
@@ -156,8 +158,18 @@ fn perform_reindex(config: &Config) -> anyhow::Result<(usize, std::path::PathBuf
 
     let index_path = Index::default_path(&config.home);
     let mut index = Index::open(&index_path)?;
-    let count = index.reindex(&active.name, &tree, &vault)?;
-    Ok((count, index_path))
+    let reindex_report = index.reindex(&active.name, &tree, &vault)?;
+    for broken in &reindex_report.broken_links {
+        let source_title = tree
+            .get(broken.source)
+            .map(|note| note.title.as_str())
+            .unwrap_or("?");
+        eprintln!(
+            "mycora: broken link in \"{source_title}\": [[{}]] matches no note",
+            broken.title
+        );
+    }
+    Ok((reindex_report.note_count, index_path))
 }
 
 fn run(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> anyhow::Result<()> {

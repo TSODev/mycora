@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Broken link reporting (v0.5)** — `Index::reindex` now returns a
+  `ReindexReport { note_count, broken_links }` instead of a bare count;
+  a `[[title]]` that resolves to no note becomes a `BrokenLink` entry
+  instead of being silently dropped. `mycora reindex`/`--watch` print a
+  warning per broken link; `App::new()` surfaces the same warnings
+  before the TUI starts, alongside the existing vault-load warnings.
+
+### Changed
+- **`Index::reindex`'s return type** — was `Result<usize>`, now
+  `Result<ReindexReport>` (`.note_count` replaces the old bare count).
+  Source-breaking for anything calling it directly.
+
+### Added
 - **Backlinks panel (v0.5)** — `b` in Normal mode reindexes, then opens a
   panel listing notes that link to the selected one (`Index::backlinks`),
   reusing the search overlay's Up/Down/Enter/Esc pattern: Enter jumps to

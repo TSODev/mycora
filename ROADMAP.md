@@ -127,8 +127,23 @@ Goal: notes can reference each other outside the tree.
       third both showed up, jumping to one moved the tree selection, and
       re-opening backlinks on the newly selected (unlinked) note correctly
       showed an empty list
-- [ ] Link autocompletion while typing `[[`
-- [ ] Handle broken links (target renamed/deleted) gracefully
+- [ ] Link autocompletion while typing `[[` — blocked: there is no note-body
+      editor in the TUI yet (`Mode::Insert` only edits titles), so there's
+      nowhere to type `[[` and trigger this. Waits on v0.7's editor pane
+      (deliberate choice, 2026-07-10 — not attempting a standalone body
+      editor early just to unblock this one item)
+- [x] Handle broken links (target renamed/deleted) gracefully — `reindex`
+      now returns a `ReindexReport { note_count, broken_links }` instead of
+      a bare count; each unresolved `[[title]]` becomes a `BrokenLink {
+      source, title }` rather than being silently dropped. `mycora
+      reindex`/`--watch` print one warning per broken link (mirroring how
+      `vault.load()`'s own warnings print); `App::new()` folds the same
+      warnings into the list already printed before the TUI starts. Since
+      link resolution is by title, a rename or delete that leaves a
+      `[[title]]` with no match is exactly this case — no special-casing
+      needed beyond what "no note has this title" already covers. Manually
+      verified via both `mycora reindex` and TUI startup against a vault
+      with a genuinely unresolvable link
 - [ ] Link-count badge on collapsed tree branches: aggregate link count
       across the collapsed subtree (e.g. `▸ Research (12 links)`), computed
       on the fly from the `links` table rather than cached — expected to
