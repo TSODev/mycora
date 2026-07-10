@@ -269,12 +269,13 @@ Goal: make daily use pleasant, not just functional.
 - [ ] Theming (at minimum: light/dark, respecting terminal colors)
 - [x] Split-pane layout: tree + note body + backlinks (2026-07-10) — three
       columns in Normal/Insert/ConfirmDelete modes, fixed proportions
-      (40/40/20). **Not yet resizable**: interactive resizing was
-      deliberately kept as its own open item rather than folded in here
-      (confirmed with the user before implementing), so it's still
-      unchecked below on purpose. The body pane is a read-only plain-text
-      preview of the selected note (Markdown rendering is the separate
-      item right below, also still open) — it doesn't reuse `Mode::EditBody`'s
+      (40/40/20) at the time. **Since made resizable**: interactive
+      resizing was deliberately kept as its own open item rather than
+      folded in here (confirmed with the user before implementing), and
+      landed later the same day — see the "Resizable panes" entry below.
+      The body pane was a read-only plain-text preview of the selected note
+      at the time (Markdown rendering was the separate item right below,
+      resolved later the same day too) — it doesn't reuse `Mode::EditBody`'s
       full-pane overlay, which stays exactly as it was; pressing `e` still
       takes over the whole screen rather than editing in-place. The
       backlinks pane is similarly read-only and passive: it follows the
@@ -290,8 +291,24 @@ Goal: make daily use pleasant, not just functional.
       and backlinks panes live, and all three full-pane overlays (search,
       the backlinks picker, the body editor) still take over the whole
       screen exactly as before rather than showing the split
-- [ ] Resizable panes for the split layout above — kept open on purpose,
-      see that entry's note
+- [x] Resizable panes for the split layout above (2026-07-10) — `[`/`]`
+      shrink/grow the tree pane, `{`/`}` shrink/grow the backlinks pane,
+      always active in Normal mode (no dedicated resize mode — confirmed
+      with the user before implementing: simpler, no new `Mode` variant or
+      "which boundary is active" state to track). The body pane is never
+      resized directly; it's the middle column, so it just absorbs
+      whatever width the other two give up or take
+      (`App::resize_pane`/`PANE_STEP_PCT` = 5, `PANE_MIN_PCT` = 10, floor
+      applies to whichever of the two panes involved would cross it).
+      **In-memory only, not persisted** in `session.toml` — deliberate
+      scope cut, also confirmed with the user: pane widths are a display
+      preference, not per-vault navigation state the way `selected`/
+      `expanded` are, so they reset to the 40/40/20 default each launch;
+      persisting them is a trivial follow-up if wanted later. Manually
+      verified in tmux: `]` visibly widened the tree pane (taking space
+      from body), `{` visibly narrowed the backlinks pane down to its
+      floor and stopped changing on further presses past that point, and
+      widths survived opening and closing the search overlay
 - [x] Interactive backlinks pane (2026-07-10) — `b` no longer opens a
       separate full-screen overlay (`Mode::Backlinks` used to); it shifts
       keyboard focus onto the already-visible backlinks pane instead:

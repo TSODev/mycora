@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Resizable split-pane layout (v0.7)** — `[`/`]` shrink/grow the tree
+  pane, `{`/`}` shrink/grow the backlinks pane, always active in Normal
+  mode (no dedicated resize mode). The body pane is never resized
+  directly — it's the middle column, so it just absorbs whatever width
+  the other two give up or take. Floor of 10% per pane, 5% per keypress.
+  In-memory only, not persisted in `session.toml`: pane widths are a
+  display preference, not per-vault navigation state, so they reset to
+  the 40/40/20 default each launch.
+
 ### Changed
 - **Interactive backlinks pane replaces the `b` overlay (v0.7)** — `b` no
   longer opens a separate full-screen overlay; it shifts keyboard focus

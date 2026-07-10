@@ -118,6 +118,13 @@ pub struct App {
     /// Where `save_session` writes on exit — computed once from
     /// `config.home` so later saves don't need a `Config` around.
     session_path: PathBuf,
+    /// Percent widths of the split layout's three columns (tree, body,
+    /// backlinks — see `ui.rs`'s `draw_main`), always summing to 100.
+    /// In-memory only, not persisted in `Session`: this is a display
+    /// preference, not per-vault navigation state, and resets to the
+    /// default (40/40/20) each launch (deliberate scope cut, confirmed
+    /// with the user — persisting it is a trivial follow-up if wanted).
+    pane_widths: [u16; 3],
 }
 
 impl App {
@@ -258,6 +265,7 @@ impl App {
             other_vaults,
             body_editor: None,
             session_path,
+            pane_widths: [40, 40, 20],
         };
 
         Ok((app, warnings))
@@ -842,6 +850,53 @@ impl App {
     /// the status bar's breadcrumb.
     pub fn vault_name(&self) -> &str {
         &self.vault_id
+    }
+
+    /// Current percent widths of the split layout's tree/body/backlinks
+    /// columns, always summing to 100.
+    pub fn pane_widths(&self) -> [u16; 3] {
+        self.pane_widths
+    }
+
+    /// Floor no pane may shrink past.
+    const PANE_MIN_PCT: u16 = 10;
+    /// How much one `[`/`]`/`{`/`}` press adjusts a pane by.
+    const PANE_STEP_PCT: u16 = 5;
+
+    /// Grows or shrinks `pane_widths[target]` (0 = tree, 2 = backlinks) by
+    /// `PANE_STEP_PCT`, transferring the difference to/from the body pane
+    /// (index 1) — body is never resized directly, it just absorbs
+    /// whatever the other two give up or take. No-op if either pane would
+    /// drop below `PANE_MIN_PCT`.
+    fn resize_pane(&mut self, target: usize, grow: bool) {
+        let step = Self::PANE_STEP_PCT as i32 * if grow { 1 } else { -1 };
+        let new_target = self.pane_widths[target] as i32 + step;
+        let new_body = self.pane_widths[1] as i32 - step;
+        if new_target < Self::PANE_MIN_PCT as i32 || new_body < Self::PANE_MIN_PCT as i32 {
+            return;
+        }
+        self.pane_widths[target] = new_target as u16;
+        self.pane_widths[1] = new_body as u16;
+    }
+
+    /// `[` — shrinks the tree pane, giving the width to the body pane.
+    pub fn shrink_tree_pane(&mut self) {
+        self.resize_pane(0, false);
+    }
+
+    /// `]` — grows the tree pane, taking the width from the body pane.
+    pub fn grow_tree_pane(&mut self) {
+        self.resize_pane(0, true);
+    }
+
+    /// `{` — shrinks the backlinks pane, giving the width to the body pane.
+    pub fn shrink_backlinks_pane(&mut self) {
+        self.resize_pane(2, false);
+    }
+
+    /// `}` — grows the backlinks pane, taking the width from the body pane.
+    pub fn grow_backlinks_pane(&mut self) {
+        self.resize_pane(2, true);
     }
 
     /// Ancestor titles from the selected note's root down to itself

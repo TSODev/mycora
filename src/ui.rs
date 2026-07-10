@@ -27,9 +27,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
 /// than opening its own overlay — see `App::focus_backlinks`'s doc
 /// comment) — gets the three-pane split: tree, a read-only body preview,
 /// and the backlinks list, both following the current selection live.
-/// Fixed proportions for now (40/40/20) — interactive resizing is a
-/// separate, still-open ROADMAP item, deliberately not attempted alongside
-/// the layout itself.
+/// Column widths come from `App::pane_widths` (default 40/40/20,
+/// adjustable with `[`/`]`/`{`/`}` — see that method's doc comment).
 fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
     match app.mode {
         Mode::Search => {
@@ -45,12 +44,13 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
         Mode::Normal | Mode::Insert | Mode::ConfirmDelete | Mode::Backlinks => {}
     }
 
+    let widths = app.pane_widths();
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(40),
-            Constraint::Percentage(40),
-            Constraint::Percentage(20),
+            Constraint::Percentage(widths[0]),
+            Constraint::Percentage(widths[1]),
+            Constraint::Percentage(widths[2]),
         ])
         .split(area);
 
@@ -311,7 +311,8 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
             "NORMAL",
             "j/k: move  h/l/space: fold  a/o: new  y: copy  Tab/S-Tab: move  \
              K/J: reorder  i: rename  e: edit  d: delete  u: undo  ^R: redo  \
-             /: search  b: backlinks  q: quit",
+             /: search  b: backlinks  [/]: tree width  {/}: backlinks width  \
+             q: quit",
         ),
         Mode::Insert => ("INSERT", "Enter: confirm  Esc: cancel"),
         Mode::Search => (

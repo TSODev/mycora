@@ -66,6 +66,10 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Char('/') => app.begin_search(),
         KeyCode::Char('b') => app.focus_backlinks(),
         KeyCode::Char('e') => app.begin_edit_body(),
+        KeyCode::Char('[') => app.shrink_tree_pane(),
+        KeyCode::Char(']') => app.grow_tree_pane(),
+        KeyCode::Char('{') => app.shrink_backlinks_pane(),
+        KeyCode::Char('}') => app.grow_backlinks_pane(),
         _ => {}
     }
 }

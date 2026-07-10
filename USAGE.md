@@ -237,8 +237,11 @@ it in place.
   `b` to move keyboard focus into it (cyan border, highlighted entry) —
   see [Backlinks](#backlinks) below.
 
-Column widths are fixed (40%/40%/20%) for now — interactive resizing is
-still an open item.
+Column widths start at 40%/40%/20% and are adjustable: `[`/`]` shrink/grow
+the tree pane, `{`/`}` shrink/grow the backlinks pane — the body pane
+always absorbs whatever width the other two give up or take, down to a
+10% floor per pane. Not persisted: they reset to the default each time
+you launch Mycora.
 
 Search (`/`) and the body editor (`e`) still take over the whole screen as
 full-pane overlays rather than living inside these columns. The backlinks
@@ -377,6 +380,8 @@ session. Not persisted across restarts.
 | `Ctrl+R` | Redo |
 | `/` | Open search (see [Searching](#searching)) |
 | `b` | Focus the backlinks pane (see [Backlinks](#backlinks)) |
+| `[` / `]` | Shrink / grow the tree pane (see [Layout](#layout)) |
+| `{` / `}` | Shrink / grow the backlinks pane |
 | `q` `q` | Quit (press twice — any other key cancels) |
 | `Ctrl+C` | Quit immediately — bypasses any prompt or confirmation |
 
