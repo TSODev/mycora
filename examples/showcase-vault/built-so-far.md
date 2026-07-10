@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-10T20:00:00Z
 ---
 
 # Built so far
@@ -29,3 +29,6 @@ updated: 2026-07-10T09:00:00Z
   [[Layout]] with resizing, interactive backlinks focus, Markdown
   rendering in the body preview, the [[Command palette]], [[Session persistence]] — everything except configurable keybindings (see
   [[Deferred: configurable keybindings]])
+- **Since v0.7** — a full `mycora vault ...` CLI for the registry:
+  [[Managing vaults from the CLI]] (`add`, `init`, `rename`, `promote`,
+  `mount`, `unmount`, `remove`, `list`)

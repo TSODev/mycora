@@ -5,7 +5,7 @@ order: 3
 tags:
 - design-decision
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-10T20:00:00Z
 ---
 
 # Design decisions
@@ -19,6 +19,7 @@ behind each — the "why," not just the "what."
 - [[Full-pane body editor, save on exit]]
 - [[Deferred: configurable keybindings]]
 - [[Disposable SQLite index]]
+- [[CLI vault management stays registry-only]]
 
 Most of these were resolved as open questions during development, not
 decided upfront — see [[Roadmap]] for the versioned history each one is

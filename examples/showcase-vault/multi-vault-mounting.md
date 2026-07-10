@@ -6,7 +6,7 @@ tags:
 - features
 - multi-vault
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-10T20:00:00Z
 ---
 
 # Multi-vault mounting
@@ -29,4 +29,6 @@ the backlinks panel, since a jump-to-result needs somewhere in the
 editable tree to land.
 
 See [[Read-only secondary vaults]] for why this scope cut was made rather
-than building full multi-vault editing up front.
+than building full multi-vault editing up front, and
+[[Managing vaults from the CLI]] for the `mycora vault ...` commands
+that manage this registry without hand-editing `config.toml`.
