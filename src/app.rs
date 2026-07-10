@@ -670,4 +670,16 @@ impl App {
     pub fn backlinks_selected(&self) -> usize {
         self.backlinks_selected
     }
+
+    /// Total links touching `id`'s subtree (itself + all descendants) — the
+    /// aggregate badge shown on a collapsed branch. Best-effort: an index
+    /// error just reports 0 rather than surfacing as `last_error`, since
+    /// this runs during rendering on an immutable `&App` and a badge
+    /// miscount isn't worth interrupting the user over.
+    pub fn link_count_for(&self, id: NoteId) -> i64 {
+        let subtree = self.tree.subtree_ids(id);
+        self.index
+            .link_count_for_subtree(&self.vault_id, &subtree)
+            .unwrap_or(0)
+    }
 }

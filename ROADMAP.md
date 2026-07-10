@@ -144,11 +144,16 @@ Goal: notes can reference each other outside the tree.
       needed beyond what "no note has this title" already covers. Manually
       verified via both `mycora reindex` and TUI startup against a vault
       with a genuinely unresolvable link
-- [ ] Link-count badge on collapsed tree branches: aggregate link count
+- [x] Link-count badge on collapsed tree branches: aggregate link count
       across the collapsed subtree (e.g. `▸ Research (12 links)`), computed
       on the fly from the `links` table rather than cached — expected to
       stay well under the 50ms search-latency budget even at thousands of
-      notes
+      notes. `Index::link_count_for_subtree(vault_id, ids)` counts distinct
+      `links` rows where source or target is in the subtree (an internal
+      link between two notes both inside it still counts once, not twice).
+      Shown only when count > 0, to avoid cluttering every collapsed
+      leaf-only branch with "(0 links)". Manually verified in tmux: a
+      branch with two outgoing wikilinks showed "(2 links)" once collapsed
 
 ## v0.6 — Search engine upgrade (tantivy)
 

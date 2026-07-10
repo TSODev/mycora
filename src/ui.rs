@@ -49,7 +49,19 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
             let label = if app.mode == Mode::Insert && app.selected == Some(id) {
                 format!("{indent}{marker}{}", app.input)
             } else {
-                format!("{indent}{marker}{}", note.title)
+                let collapsed_with_children =
+                    !app.expanded.contains(&id) && !app.tree.children(id).is_empty();
+                if collapsed_with_children {
+                    let count = app.link_count_for(id);
+                    if count > 0 {
+                        let plural = if count == 1 { "" } else { "s" };
+                        format!("{indent}{marker}{} ({count} link{plural})", note.title)
+                    } else {
+                        format!("{indent}{marker}{}", note.title)
+                    }
+                } else {
+                    format!("{indent}{marker}{}", note.title)
+                }
             };
 
             let style = if app.selected == Some(id) {

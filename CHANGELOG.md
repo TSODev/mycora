@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Link-count badge on collapsed branches (v0.5)** — a collapsed note
+  with children shows an aggregate link count, e.g. `▸ Research (2
+  links)`, when that count is greater than zero. `Index::link_count_for_subtree`
+  counts distinct `links` rows touching any note in the subtree (source
+  or target), counting an internal link between two notes both inside
+  it once, not twice. Computed fresh on every render rather than
+  cached, per ROADMAP.md's v0.5 entry.
 - **Broken link reporting (v0.5)** — `Index::reindex` now returns a
   `ReindexReport { note_count, broken_links }` instead of a bare count;
   a `[[title]]` that resolves to no note becomes a `BrokenLink` entry

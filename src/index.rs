@@ -355,6 +355,37 @@ impl Index {
         Ok(hits)
     }
 
+    /// Total distinct `links` rows touching any note in `subtree` (source
+    /// or target, counted once even for a link between two notes both
+    /// inside the subtree) — the aggregate badge for a collapsed tree
+    /// branch, e.g. "▸ Research (12 links)". Computed fresh from indexed
+    /// lookups on every call rather than cached, per ROADMAP.md's v0.5
+    /// entry: expected to stay well under the search-latency budget even
+    /// at thousands of notes.
+    pub fn link_count_for_subtree(&self, vault_id: &str, subtree: &[NoteId]) -> Result<i64> {
+        if subtree.is_empty() {
+            return Ok(0);
+        }
+        let ids: Vec<String> = subtree.iter().map(|id| id.0.to_string()).collect();
+        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            "SELECT COUNT(*) FROM links
+             WHERE vault_id = ?
+               AND (source IN ({placeholders}) OR target IN ({placeholders}))"
+        );
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut query_params: Vec<&dyn rusqlite::ToSql> = vec![&vault_id];
+        for id in &ids {
+            query_params.push(id);
+        }
+        for id in &ids {
+            query_params.push(id);
+        }
+        stmt.query_row(query_params.as_slice(), |row| row.get(0))
+            .context("counting links for subtree")
+    }
+
     pub fn note_count(&self, vault_id: &str) -> Result<i64> {
         self.conn
             .query_row(
@@ -816,5 +847,64 @@ mod tests {
 
         std::fs::remove_file(&db_path).ok();
         std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn link_count_for_subtree_counts_internal_incoming_and_outgoing_links_once_each() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let a = tree.create_note("A", None);
+        let _b = tree.create_note("B", Some(a));
+        let _c = tree.create_note("C", None);
+        let d = tree.create_note("D", None);
+        let e = tree.create_note("E", None);
+        let _f = tree.create_note("F", None);
+        tree.set_body(a, "[[C]] and [[B]]"); // A -> C (outgoing), A -> B (internal)
+        tree.set_body(d, "[[B]]"); // D -> B (incoming)
+        tree.set_body(e, "[[F]]"); // unrelated to the subtree
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let subtree = tree.subtree_ids(a);
+        assert_eq!(subtree.len(), 2); // A and B
+
+        let count = index
+            .link_count_for_subtree("default", &subtree)
+            .unwrap();
+        assert_eq!(count, 3); // A->C, A->B, D->B
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn link_count_for_subtree_is_zero_for_an_unconnected_note() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let lonely = tree.create_note("Lonely", None);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let subtree = tree.subtree_ids(lonely);
+        assert_eq!(index.link_count_for_subtree("default", &subtree).unwrap(), 0);
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn link_count_for_subtree_with_no_ids_is_zero() {
+        let db_path = scratch_db_path();
+        let index = Index::open(&db_path).unwrap();
+        assert_eq!(index.link_count_for_subtree("default", &[]).unwrap(), 0);
+        std::fs::remove_file(&db_path).ok();
     }
 }
