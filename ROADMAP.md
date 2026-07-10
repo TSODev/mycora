@@ -155,11 +155,10 @@ Goal: notes can reference each other outside the tree.
       third both showed up, jumping to one moved the tree selection, and
       re-opening backlinks on the newly selected (unlinked) note correctly
       showed an empty list
-- [ ] Link autocompletion while typing `[[` — blocked: there is no note-body
-      editor in the TUI yet (`Mode::Insert` only edits titles), so there's
-      nowhere to type `[[` and trigger this. Waits on v0.7's editor pane
-      (deliberate choice, 2026-07-10 — not attempting a standalone body
-      editor early just to unblock this one item)
+- [ ] Link autocompletion while typing `[[` — was blocked on a note-body
+      editor existing at all; that landed in v0.7 (2026-07-10,
+      `ratatui-textarea`-based), so this is unblocked now but still not
+      implemented itself
 - [x] Handle broken links (target renamed/deleted) gracefully — `reindex`
       now returns a `ReindexReport { note_count, broken_links }` instead of
       a bare count; each unresolved `[[title]]` becomes a `BrokenLink {
@@ -241,6 +240,31 @@ remaining boxes are the same deferred item, not outstanding work.
 
 Goal: make daily use pleasant, not just functional.
 
+- [x] Note-body editor (2026-07-10) — `e` in Normal mode opens the selected
+      note's body in a full-pane overlay (`Mode::EditBody`), built on
+      `ratatui-textarea` rather than a hand-rolled multi-line editor: it's
+      exactly the kind of easy-to-get-wrong functionality (UTF-8 cursor
+      movement, line editing) worth an established crate for. Checked
+      compatibility first — `tui-textarea` (the best-known one) is stale
+      (Oct 2024) and pinned to the pre-split ratatui `^0.29`, incompatible
+      with our 0.30; `ratatui-textarea` targets the same `ratatui-core
+      ^0.1`/`ratatui-widgets ^0.3` our 0.30.2 already resolves to, so no
+      version conflict. `Esc` saves and exits — deliberately no separate
+      discard-without-saving path; a whole edit session is one `u`-undoable
+      step if you want to back out after the fact, consistent with the
+      rest of the app's "no explicit save" philosophy. A no-op edit
+      (nothing changed) skips the disk write and the undo entry entirely.
+      **Deliberately full-pane, not the split-pane layout below** — that's
+      its own separate item, kept open on purpose rather than folded into
+      this one, so a real tree+body+backlinks layout can still be designed
+      properly later instead of being backed into by the editor. This also
+      retroactively unblocks v0.5's "Link autocompletion while typing
+      `[[`" (there's now somewhere to type `[[`) — autocomplete itself
+      still isn't implemented, just no longer blocked. Manually verified
+      in tmux: existing body loaded correctly, multi-line editing (Enter
+      for newlines) worked, `Esc` persisted to disk, `u` correctly
+      reverted the file, and a no-change edit session left the file's
+      `updated` timestamp untouched
 - [ ] Configurable keybindings
 - [ ] Theming (at minimum: light/dark, respecting terminal colors)
 - [ ] Split-pane layout: tree + note body + backlinks, resizable

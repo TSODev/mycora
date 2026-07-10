@@ -33,6 +33,7 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::ConfirmDelete => handle_confirm_delete(app, key.code),
             Mode::Search => handle_search(app, key.code),
             Mode::Backlinks => handle_backlinks(app, key.code),
+            Mode::EditBody => handle_edit_body(app, key),
         }
     }
 
@@ -64,6 +65,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Char('u') => app.undo(),
         KeyCode::Char('/') => app.begin_search(),
         KeyCode::Char('b') => app.show_backlinks(),
+        KeyCode::Char('e') => app.begin_edit_body(),
         _ => {}
     }
 }
@@ -107,5 +109,17 @@ fn handle_backlinks(app: &mut App, code: KeyCode) {
         KeyCode::Up => app.move_backlinks_selection(-1),
         KeyCode::Down => app.move_backlinks_selection(1),
         _ => {}
+    }
+}
+
+/// `Esc` saves and exits (see `Mode::EditBody`'s doc comment on why —
+/// there's no separate discard, `u` afterward covers that). Everything
+/// else — including `Enter` for newlines, arrow keys, `Tab` — goes
+/// straight to the textarea widget rather than being special-cased here.
+fn handle_edit_body(app: &mut App, key: KeyEvent) {
+    if key.code == KeyCode::Esc {
+        app.save_and_exit_body_edit();
+    } else {
+        app.body_editor_input(key);
     }
 }

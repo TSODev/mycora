@@ -1,12 +1,13 @@
 # Mycora — Usage Guide
 
-> Reflects what's actually implemented today (v0.1–v0.5, minus link
-> autocompletion): an in-memory tree with Markdown persistence, full
-> structural operations, SQLite-backed search/tag filtering, read-only
-> multi-vault mounting, and `[[wikilink]]` cross-links (including
-> cross-vault ones) with a backlinks panel and link-count badges. No
-> note-body editor or multi-pane layout yet — see
-> [ROADMAP.md](./ROADMAP.md) for what's still ahead.
+> Reflects what's actually implemented today (v0.1–v0.6, plus a start on
+> v0.7): an in-memory tree with Markdown persistence, full structural
+> operations, SQLite-backed search (with snippets and faceted filters) and
+> tag filtering, read-only multi-vault mounting, `[[wikilink]]` cross-links
+> (including cross-vault ones) with a backlinks panel and link-count
+> badges, and a full-pane note-body editor. No split-pane layout, Markdown
+> rendering, link autocompletion, or configurable keybindings/theming yet
+> — see [ROADMAP.md](./ROADMAP.md) for what's still ahead.
 
 ## Table of Contents
 
@@ -19,6 +20,7 @@
 - [Layout](#layout)
 - [Searching](#searching)
 - [Creating and renaming notes](#creating-and-renaming-notes)
+- [Editing a note's body](#editing-a-notes-body)
 - [Moving notes](#moving-notes)
 - [Reordering siblings](#reordering-siblings)
 - [Copying notes](#copying-notes)
@@ -248,6 +250,26 @@ out of both, even though they're indexed and their link-count badges work
 - `i` — rename the selected note (prefills its current title so you can
   edit it, rather than starting blank)
 
+## Editing a note's body
+
+- `e` — opens the selected note's Markdown body in a full-pane editor,
+  loaded with whatever text it already has
+- Type normally — multi-line, `Enter` inserts a newline (it doesn't
+  confirm/exit, unlike renaming)
+- `Esc` — saves and returns to Normal mode. There's no separate
+  discard-without-saving: if you want to back out of an edit after the
+  fact, `u` in Normal mode undoes the whole session as one step
+  (see [Undo and redo](#undo-and-redo))
+- An edit session that changes nothing doesn't write to disk or create an
+  undo entry
+
+Not rendered as formatted Markdown, and not split alongside the tree yet
+— both are separate, still-open items (see [ROADMAP.md](./ROADMAP.md)).
+This is also what unblocks writing `[[wikilinks]]` from inside the TUI
+instead of editing the file by hand (see [The search
+index](#the-search-index)) — though autocompleting them as you type isn't
+implemented yet.
+
 ## Moving notes
 
 - `Tab` — indent: reparents the selected note under its immediately
@@ -301,6 +323,7 @@ session. Not persisted across restarts.
 | `a` | New child note |
 | `o` | New sibling note |
 | `i` | Rename selected note |
+| `e` | Edit body (see [Editing a note's body](#editing-a-notes-body)) |
 | `y` | Copy selected note (deep-copy) |
 | `Tab` | Indent (reparent under previous sibling) |
 | `Shift+Tab` | Outdent (reparent as sibling of parent) |
@@ -336,3 +359,10 @@ session. Not persisted across restarts.
 | `↑` / `↓` | Move between results |
 | `Enter` | Jump to the selected result |
 | `Esc` | Cancel, keeping the current selection |
+
+### Edit body
+
+| Key | Action |
+|---|---|
+| *(type)* | Edit the body, multi-line — `Enter` inserts a newline |
+| `Esc` | Save and return to Normal mode (see [Editing a note's body](#editing-a-notes-body)) |

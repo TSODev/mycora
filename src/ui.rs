@@ -27,6 +27,12 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
         draw_backlinks(frame, area, app);
         return;
     }
+    if app.mode == Mode::EditBody {
+        if let Some(editor) = app.body_editor() {
+            frame.render_widget(editor, area);
+        }
+        return;
+    }
 
     let mut items: Vec<ListItem> = app
         .visible_notes()
@@ -215,11 +221,12 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
 
     let text = match app.mode {
         Mode::Normal => {
-            "NORMAL  j/k move  h/l/space fold  a/o new  y copy  Tab/S-Tab move  K/J reorder  i rename  d delete  u undo  ^R redo  / search  b backlinks  q quit"
+            "NORMAL  j/k move  h/l/space fold  a/o new  y copy  Tab/S-Tab move  K/J reorder  i rename  d delete  u undo  ^R redo  / search  b backlinks  e edit  q quit"
         }
         Mode::Insert => "INSERT  Enter confirm  Esc cancel",
         Mode::Search => "SEARCH  type to filter  Up/Down move  Enter open  Esc cancel",
         Mode::Backlinks => "BACKLINKS  Up/Down move  Enter open  Esc cancel",
+        Mode::EditBody => "EDIT BODY  Esc save & exit",
         Mode::ConfirmDelete => unreachable!("handled above"),
     };
     frame.render_widget(Paragraph::new(text), area);

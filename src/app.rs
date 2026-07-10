@@ -1,5 +1,8 @@
 use std::collections::HashSet;
 
+use ratatui::widgets::{Block, Borders};
+use ratatui_textarea::TextArea;
+
 use crate::config::Config;
 use crate::index::{Index, IndexedNote, SearchHit};
 use crate::note::{Note, NoteId};
@@ -33,6 +36,12 @@ pub enum Mode {
     Search,
     /// Browsing notes that link to the note selected when `b` was pressed.
     Backlinks,
+    /// Editing the selected note's Markdown body in a full-pane overlay
+    /// (see `App::body_editor`'s doc comment for why full-pane rather than
+    /// a split layout). `Esc` saves and returns to Normal — there's no
+    /// separate discard-without-saving path; `u` in Normal mode afterward
+    /// undoes the whole edit session as one step if you change your mind.
+    EditBody,
 }
 
 /// An action that can be pushed onto `undo_stack`/`redo_stack`. Applying one
@@ -49,6 +58,10 @@ enum UndoAction {
     /// Applying this reinserts a previously removed subtree and produces a
     /// `Remove` pointing back at its (now live again) root.
     Restore { snapshot: Vec<(NoteId, Note)> },
+    /// Applying this replaces `id`'s body with `body` and produces another
+    /// `EditBody` holding what the body was before — one entry per whole
+    /// edit session, not per keystroke.
+    EditBody { id: NoteId, body: String },
 }
 
 pub struct App {
@@ -77,6 +90,14 @@ pub struct App {
     backlinks_selected: usize,
     /// Every other mounted vault (see `Config::mounted_vaults`), read-only.
     other_vaults: Vec<ReadOnlyVault>,
+    /// The active `ratatui-textarea` widget state while `mode ==
+    /// Mode::EditBody`; `None` otherwise. Full-pane overlay rather than a
+    /// split layout (tree + body pane) — the latter is its own separate
+    /// v0.7 roadmap item (resizable panes, etc.); this gets editing
+    /// working without waiting on that. Which note is being edited is
+    /// just `selected` — navigation is disabled in `EditBody` mode so it
+    /// can't change out from under the editor.
+    body_editor: Option<TextArea<'static>>,
 }
 
 impl App {
@@ -196,6 +217,7 @@ impl App {
             backlinks_results: Vec::new(),
             backlinks_selected: 0,
             other_vaults,
+            body_editor: None,
         };
 
         Ok((app, warnings))
@@ -607,6 +629,16 @@ impl App {
                 self.selected = Some(root_id);
                 Some(UndoAction::Remove { root_id })
             }
+            UndoAction::EditBody { id, body } => {
+                let previous = self.tree.get(id)?.body.clone();
+                self.tree.set_body(id, body);
+                self.persist(id);
+                self.selected = Some(id);
+                Some(UndoAction::EditBody {
+                    id,
+                    body: previous,
+                })
+            }
         }
     }
 
@@ -794,5 +826,60 @@ impl App {
                 (v.id.as_str(), roots)
             })
             .collect()
+    }
+
+    /// Opens the selected note's body for editing. No-op if nothing's
+    /// selected (there's no note to edit) — mirrors `begin_rename`'s guard.
+    pub fn begin_edit_body(&mut self) {
+        let Some(id) = self.selected else { return };
+        let Some(note) = self.tree.get(id) else { return };
+        let lines: Vec<String> = if note.body.is_empty() {
+            vec![String::new()]
+        } else {
+            note.body.lines().map(String::from).collect()
+        };
+        let mut editor = TextArea::new(lines);
+        editor.set_block(Block::default().borders(Borders::ALL).title(note.title.clone()));
+        self.body_editor = Some(editor);
+        self.mode = Mode::EditBody;
+    }
+
+    /// Forwards one key event into the active body editor. No-op outside
+    /// `Mode::EditBody` (nothing to forward into).
+    pub fn body_editor_input(&mut self, key: crossterm::event::KeyEvent) {
+        if let Some(editor) = &mut self.body_editor {
+            editor.input(key);
+        }
+    }
+
+    /// Writes the editor's current text back to the note being edited and
+    /// returns to Normal mode. Persist-on-exit: there's no per-keystroke
+    /// write-through here (unlike title edits) since a body can be large
+    /// enough that writing on every keystroke would be wasteful. A no-op
+    /// edit (body unchanged) skips both the disk write and the undo entry.
+    pub fn save_and_exit_body_edit(&mut self) {
+        self.mode = Mode::Normal;
+        let Some(editor) = self.body_editor.take() else {
+            return;
+        };
+        let Some(id) = self.selected else { return };
+        let Some(previous_body) = self.tree.get(id).map(|note| note.body.clone()) else {
+            return;
+        };
+
+        let new_body = editor.lines().join("\n");
+        if new_body == previous_body {
+            return;
+        }
+        self.tree.set_body(id, new_body);
+        self.persist(id);
+        self.record(UndoAction::EditBody {
+            id,
+            body: previous_body,
+        });
+    }
+
+    pub fn body_editor(&self) -> Option<&TextArea<'static>> {
+        self.body_editor.as_ref()
     }
 }

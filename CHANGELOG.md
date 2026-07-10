@@ -8,6 +8,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Note-body editor (v0.7, start)** — `e` in Normal mode opens the
+  selected note's body in a full-pane overlay (`Mode::EditBody`), built on
+  the `ratatui-textarea` crate. `Esc` saves and returns to Normal
+  (persist-on-exit, not per-keystroke); a whole edit session is one
+  `u`-undoable step. A no-op edit (nothing changed) skips both the disk
+  write and the undo entry. Deliberately full-pane rather than the
+  separate split-pane (tree + body + backlinks) layout item, which stays
+  open for later. Also retroactively unblocks v0.5's link autocompletion
+  (there's now somewhere to type `[[`), though autocomplete itself isn't
+  implemented yet.
 - **Faceted search filters (v0.6, closes the version except deferred
   tantivy)** — `Index::search_faceted(vault_id, query, &SearchFacets {
   tags, date_range, branch })` ANDs optional tag (AND/OR, reusing v0.4's
