@@ -786,6 +786,19 @@ impl App {
         }
     }
 
+    /// Notes linking to the currently selected note — the split layout's
+    /// passive backlinks pane. Best-effort and read-only like
+    /// `link_count_for`: doesn't reindex first, just reflects whatever the
+    /// last reindex resolved, since this also runs during rendering on an
+    /// immutable `&App`. The interactive `b` overlay (`Mode::Backlinks`)
+    /// is still the way to actually jump to one of these.
+    pub fn live_backlinks(&self) -> Vec<IndexedNote> {
+        let Some(id) = self.selected else {
+            return Vec::new();
+        };
+        self.index.backlinks(&self.vault_id, id).unwrap_or_default()
+    }
+
     /// Total links touching `id`'s subtree (itself + all descendants) — the
     /// aggregate badge shown on a collapsed branch. Best-effort: an index
     /// error just reports 0 rather than surfacing as `last_error`, since

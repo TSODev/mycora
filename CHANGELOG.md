@@ -8,6 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Split-pane layout (v0.7)** — Normal/Insert/ConfirmDelete modes now
+  show three columns (fixed 40/40/20 proportions): the tree, a read-only
+  plain-text preview of the selected note's body, and a read-only
+  backlinks list that both follow the current selection live. Interactive
+  resizing, an interactive backlinks pane (jump without the separate `b`
+  overlay), and Markdown rendering in the body pane are all deliberately
+  left for later — this pass is just the three-pane skeleton. Search, the
+  backlinks picker, and the body editor still take over the whole screen
+  as full-pane overlays, unchanged.
 - **Note-body editor (v0.7, start)** — `e` in Normal mode opens the
   selected note's body in a full-pane overlay (`Mode::EditBody`), built on
   the `ratatui-textarea` crate. `Esc` saves and returns to Normal

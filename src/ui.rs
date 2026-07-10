@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
@@ -14,26 +14,52 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(frame.area());
 
-    draw_tree(frame, chunks[0], app);
+    draw_main(frame, chunks[0], app);
     draw_status(frame, chunks[1], app);
 }
 
-fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
-    if app.mode == Mode::Search {
-        draw_search(frame, area, app);
-        return;
-    }
-    if app.mode == Mode::Backlinks {
-        draw_backlinks(frame, area, app);
-        return;
-    }
-    if app.mode == Mode::EditBody {
-        if let Some(editor) = app.body_editor() {
-            frame.render_widget(editor, area);
+/// Full-pane overlays (search, the backlinks picker, the body editor) take
+/// over the whole main area, same as before the split layout. Every other
+/// mode — Normal, Insert (renaming), ConfirmDelete (whose prompt is only
+/// in the status bar) — gets the three-pane split: tree, a read-only body
+/// preview, and a read-only backlinks list, both following the current
+/// selection live. Fixed proportions for now (40/40/20) — interactive
+/// resizing is a separate, still-open ROADMAP item, deliberately not
+/// attempted alongside the layout itself.
+fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
+    match app.mode {
+        Mode::Search => {
+            draw_search(frame, area, app);
+            return;
         }
-        return;
+        Mode::Backlinks => {
+            draw_backlinks(frame, area, app);
+            return;
+        }
+        Mode::EditBody => {
+            if let Some(editor) = app.body_editor() {
+                frame.render_widget(editor, area);
+            }
+            return;
+        }
+        Mode::Normal | Mode::Insert | Mode::ConfirmDelete => {}
     }
 
+    let panes = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(40),
+            Constraint::Percentage(40),
+            Constraint::Percentage(20),
+        ])
+        .split(area);
+
+    draw_tree(frame, panes[0], app);
+    draw_body_preview(frame, panes[1], app);
+    draw_backlinks_pane(frame, panes[2], app);
+}
+
+fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
     let mut items: Vec<ListItem> = app
         .visible_notes()
         .into_iter()
@@ -101,6 +127,38 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Mycora"));
+    frame.render_widget(list, area);
+}
+
+/// Read-only preview of the selected note's body — plain text, not
+/// rendered Markdown (that's a separate, still-open ROADMAP item). Empty
+/// when nothing's selected or the note has no body yet.
+fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
+    let note = app.selected.and_then(|id| app.tree.get(id));
+    let title = note.map(|n| n.title.as_str()).unwrap_or("");
+    let body = note.map(|n| n.body.as_str()).unwrap_or("");
+
+    let paragraph = Paragraph::new(body)
+        .wrap(Wrap { trim: false })
+        .block(Block::default().borders(Borders::ALL).title(title));
+    frame.render_widget(paragraph, area);
+}
+
+/// Read-only list of notes linking to the selected note — follows the
+/// current selection live. Doesn't reindex first, same as
+/// `App::link_count_for`'s badges: reflects whatever the last reindex
+/// resolved (on startup, or the next time `/` or `b` is used), not a
+/// live-as-you-type view of unreindexed edits. Jumping to one of these
+/// still goes through the interactive `b` overlay (`Mode::Backlinks`),
+/// unchanged — this pane is a glance, not a picker.
+fn draw_backlinks_pane(frame: &mut Frame, area: Rect, app: &App) {
+    let items: Vec<ListItem> = app
+        .live_backlinks()
+        .iter()
+        .map(|hit| ListItem::new(Line::from(Span::raw(hit.title.clone()))))
+        .collect();
+
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Backlinks"));
     frame.render_widget(list, area);
 }
 

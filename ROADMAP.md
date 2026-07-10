@@ -267,7 +267,31 @@ Goal: make daily use pleasant, not just functional.
       `updated` timestamp untouched
 - [ ] Configurable keybindings
 - [ ] Theming (at minimum: light/dark, respecting terminal colors)
-- [ ] Split-pane layout: tree + note body + backlinks, resizable
+- [x] Split-pane layout: tree + note body + backlinks (2026-07-10) — three
+      columns in Normal/Insert/ConfirmDelete modes, fixed proportions
+      (40/40/20). **Not yet resizable**: interactive resizing was
+      deliberately kept as its own open item rather than folded in here
+      (confirmed with the user before implementing), so it's still
+      unchecked below on purpose. The body pane is a read-only plain-text
+      preview of the selected note (Markdown rendering is the separate
+      item right below, also still open) — it doesn't reuse `Mode::EditBody`'s
+      full-pane overlay, which stays exactly as it was; pressing `e` still
+      takes over the whole screen rather than editing in-place. The
+      backlinks pane is similarly read-only and passive: it follows the
+      current selection but doesn't reindex first (same as the link-count
+      badges), and jumping to one of its entries still goes through the
+      existing interactive `b` overlay (`Mode::Backlinks`) rather than
+      being merged into the pane itself — a deliberate scope cut, agreed
+      with the user before implementing, to keep this pass to "show a
+      third pane" rather than "rebuild backlinks navigation." Manually
+      verified in tmux: selecting a different note updated both the body
+      and backlinks panes live, and all three full-pane overlays (search,
+      the backlinks picker, the body editor) still take over the whole
+      screen exactly as before rather than showing the split
+- [ ] Resizable panes for the split layout above — kept open on purpose,
+      see that entry's note
+- [ ] Interactive backlinks pane (jump to an entry without the separate
+      `b` overlay) — kept open on purpose, see the split-layout entry's note
 - [ ] Render note body as formatted markdown in the preview pane, built on
       `pulldown-cmark` (already in the stack for wikilink extraction)
       rather than a dedicated rendering crate — evaluated `ratatui-markdown`

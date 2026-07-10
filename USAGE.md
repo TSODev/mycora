@@ -5,9 +5,10 @@
 > operations, SQLite-backed search (with snippets and faceted filters) and
 > tag filtering, read-only multi-vault mounting, `[[wikilink]]` cross-links
 > (including cross-vault ones) with a backlinks panel and link-count
-> badges, and a full-pane note-body editor. No split-pane layout, Markdown
-> rendering, link autocompletion, or configurable keybindings/theming yet
-> — see [ROADMAP.md](./ROADMAP.md) for what's still ahead.
+> badges, a full-pane note-body editor, and a three-pane layout (tree,
+> body preview, backlinks). No pane resizing, Markdown rendering, link
+> autocompletion, or configurable keybindings/theming yet — see
+> [ROADMAP.md](./ROADMAP.md) for what's still ahead.
 
 ## Table of Contents
 
@@ -205,17 +206,29 @@ only reachable through the Rust API (`Index::filter_by_tags`) for now. See
 
 ## Layout
 
-A single pane: an indented, collapsible tree of notes, with a one-line
-status bar at the bottom showing the current mode and the relevant
-keybinding hints. A richer split-pane layout (note body, backlinks) is
-planned for v0.7.
+Three columns, plus a one-line status bar at the bottom showing the
+current mode and the relevant keybinding hints:
 
-If other vaults are mounted alongside the default one (see
-[Configuration](#configuration)), their root notes appear stacked below
-it, each vault preceded by a dimmed `── name ──` separator. These rows are
-read-only: `j`/`k` never selects into them, and their link-count badges
-work the same as the default vault's, just computed against that vault's
-own notes.
+- **Tree** (left) — the indented, collapsible note tree, same as before.
+  If other vaults are mounted alongside the default one (see
+  [Configuration](#configuration)), their root notes appear stacked below
+  it, each vault preceded by a dimmed `── name ──` separator. These rows
+  are read-only: `j`/`k` never selects into them, and their link-count
+  badges work the same as the default vault's, just computed against that
+  vault's own notes.
+- **Body preview** (middle) — the selected note's body as plain text, not
+  rendered Markdown (that's a separate, still-open item). Updates live as
+  you move the selection.
+- **Backlinks** (right) — notes linking to the selected note, also live.
+  Read-only glance list: jumping to one of them still goes through the
+  interactive backlinks overlay (`b`), not this pane directly.
+
+Column widths are fixed (40%/40%/20%) for now — interactive resizing is
+still an open item.
+
+Search (`/`), the backlinks overlay (`b`), and the body editor (`e`) all
+still take over the whole screen as full-pane overlays rather than living
+inside these columns.
 
 ## Searching
 
