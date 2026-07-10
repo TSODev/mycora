@@ -730,9 +730,9 @@ Goal: stability before a public release.
   it mutates `expanded` while needing a live tree reference at the same
   time — same reason the existing free-function `reveal_ancestors` isn't
   a method either. Deliberately didn't add a "(read-only)" badge anywhere
-  — the corrected breadcrumb (showing the real vault name) plus the tree
-  pane's dimmed read-only rows already make it unambiguous, without
-  adding more UI surface. Manually verified end-to-end in tmux against a
+  at first — the corrected breadcrumb (showing the real vault name) plus
+  the tree pane's dimmed read-only rows seemed like enough signal without
+  more UI surface. Manually verified end-to-end in tmux against a
   two-vault scratch setup (active vault with a nested branch, read-only
   vault with its own nested branch and a note targeted by a cross-vault
   wikilink from the active vault): `j`/`k` crossed the boundary into the
@@ -746,3 +746,22 @@ Goal: stability before a public release.
   (confirmed via `md5sum`) — critically, `a` did *not* leak a stray note
   into the active vault; the same keys still worked normally afterward
   against a note in the active vault.
+  **Since extended a seventh time** (2026-07-10, user-requested): the
+  "deliberately didn't add a badge" call above got revisited — a
+  `READ-ONLY` label now sits right-aligned on the breadcrumb row (row 1
+  of the [[Status bar]]) whenever the selection is read-only, via a new
+  `App::selected_is_read_only()` and a fixed-width
+  (`READ_ONLY_MARKER_WIDTH = 12`) right-hand column in `ui.rs`'s
+  `draw_breadcrumb`, split off from the breadcrumb text with a `Layout`
+  the same way the rest of the split-pane UI already does. Fixed-width
+  rather than only-as-wide-as-the-text so the breadcrumb's own column
+  doesn't shift width as you move in and out of read-only vaults; blank
+  (but still painted with the status bar's background) when editable, so
+  the row's background stays a solid, unbroken band either way. Styled
+  dim/italic gray rather than a louder color, to match the tree pane's
+  existing read-only dimming rather than introducing a new "this needs
+  your attention" color on top of the established
+  red=error/yellow=confirm/cyan=focused palette. Manually verified in
+  tmux: the marker appeared exactly when a read-only note was selected
+  and disappeared exactly when selection returned to the active vault,
+  with the breadcrumb's own text never shifting width.

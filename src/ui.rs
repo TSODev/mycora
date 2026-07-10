@@ -372,6 +372,12 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
     draw_hint_row(frame, rows[1], app);
 }
 
+/// `READ-ONLY` label reserved on the right of the breadcrumb row — a
+/// fixed-width column so the breadcrumb's own width doesn't shift as you
+/// move in and out of read-only vaults. Blank (but still painted with
+/// `STATUS_BG`) when the selection is editable.
+const READ_ONLY_MARKER_WIDTH: u16 = 12;
+
 fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
     let mut text = app.vault_name().to_string();
     for title in app.breadcrumb_titles() {
@@ -379,9 +385,32 @@ fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
         text.push_str(&title);
     }
 
-    let paragraph =
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(READ_ONLY_MARKER_WIDTH),
+        ])
+        .split(area);
+
+    let breadcrumb =
         Paragraph::new(text).style(Style::default().bg(STATUS_BG).fg(Color::Gray));
-    frame.render_widget(paragraph, area);
+    frame.render_widget(breadcrumb, chunks[0]);
+
+    let marker = if app.selected_is_read_only() {
+        "READ-ONLY"
+    } else {
+        ""
+    };
+    let marker = Paragraph::new(marker)
+        .style(
+            Style::default()
+                .bg(STATUS_BG)
+                .fg(Color::Gray)
+                .add_modifier(Modifier::ITALIC),
+        )
+        .alignment(ratatui::layout::Alignment::Right);
+    frame.render_widget(marker, chunks[1]);
 }
 
 fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {

@@ -320,11 +320,12 @@ only reachable through the Rust API (`Index::filter_by_tags`) for now. See
 ## Layout
 
 Three columns, plus a 2-line status bar at the bottom: the top row is a
-breadcrumb (`vault › branch › note`) for the selected note; the bottom row
-shows the current mode and the relevant keybinding hints (`key: label`,
-key in bold). A prompt — the delete confirmation, the quit-confirm notice,
-or an error — replaces the bottom row only, leaving the breadcrumb above
-it in place.
+breadcrumb (`vault › branch › note`) for the selected note, with a
+`READ-ONLY` marker on the right whenever that selection is in a
+read-only mounted vault; the bottom row shows the current mode and the
+relevant keybinding hints (`key: label`, key in bold). A prompt — the
+delete confirmation, the quit-confirm notice, or an error — replaces the
+bottom row only, leaving the breadcrumb above it in place.
 
 - **Tree** (left, blue border) — the indented, collapsible note tree, same
   as before. If other vaults are mounted alongside the default one (see

@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`READ-ONLY` marker on the status bar's breadcrumb row** — appears
+  right-aligned whenever the current selection is in a read-only mounted
+  vault, fixed-width so the breadcrumb text doesn't shift as you move in
+  and out of read-only vaults.
 - **Read-only mounted vaults are now fully navigable** — `j`/`k`
   continue past the active vault into each read-only vault's section
   instead of stopping at the boundary; `l`/`Space` expand/collapse

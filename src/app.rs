@@ -1100,6 +1100,12 @@ impl App {
             .unwrap_or(self.vault_id.as_str())
     }
 
+    /// `true` if the current selection is in a read-only mounted vault —
+    /// drives the breadcrumb row's "READ-ONLY" marker in `ui.rs`.
+    pub fn selected_is_read_only(&self) -> bool {
+        self.selected.is_some_and(|id| self.tree.get(id).is_none())
+    }
+
     /// Current percent widths of the split layout's tree/body/backlinks
     /// columns, always summing to 100.
     pub fn pane_widths(&self) -> [u16; 3] {
