@@ -6,7 +6,7 @@ tags:
 - interface
 - layout
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-10T18:00:00Z
 ---
 
 # Layout
@@ -26,8 +26,8 @@ Three columns, plus the [[Status bar]] at the bottom:
 
 Column widths start at 40%/40%/20% and are resizable: `[`/`]` shrink/grow
 the tree pane, `{`/`}` shrink/grow the backlinks pane, down to a 10%
-floor per pane. Not persisted across restarts — a deliberate scope cut,
-see [[Design decisions]].
+floor per pane. Remembered across restarts, alongside the rest of
+[[Session persistence]].
 
 Search (`/`) and the body editor (`e`) still take over the whole screen as
 full-pane overlays rather than living inside these columns; the backlinks

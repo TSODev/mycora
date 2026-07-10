@@ -93,7 +93,8 @@ Mycora" note, if it doesn't exist yet. Press `q` twice to quit (a stray
 single `q` won't close the app).
 
 Which note was selected and which branches were expanded/collapsed are
-remembered per vault and restored the next time you open it — whether you
+remembered per vault, and pane widths (see [Layout](#layout)) are
+remembered too — all restored the next time you open Mycora, whether you
 quit with `q`/`q` or `Ctrl+C`. Stored at
 `~/.local/share/mycora/session.toml`, safe to delete if you ever want to
 reset it.
@@ -251,8 +252,8 @@ it in place.
 Column widths start at 40%/40%/20% and are adjustable: `[`/`]` shrink/grow
 the tree pane, `{`/`}` shrink/grow the backlinks pane — the body pane
 always absorbs whatever width the other two give up or take, down to a
-10% floor per pane. Not persisted: they reset to the default each time
-you launch Mycora.
+10% floor per pane. Remembered across restarts, same as your last
+selected note.
 
 Every color Mycora uses is a named terminal color, not a fixed RGB value,
 so it adapts to whatever light/dark/Solarized/etc. theme your terminal

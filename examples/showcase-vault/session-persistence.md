@@ -7,7 +7,7 @@ tags:
 - session
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-10T18:00:00Z
 ---
 
 # Session persistence
@@ -23,6 +23,9 @@ changed) are simply dropped rather than kept dangling, and the restored
 selection's ancestors are always expanded so it's actually visible on
 screen, regardless of what was saved.
 
-Pane widths (see [[Layout]]) are deliberately **not** part of this: they're
-a display preference, not per-vault navigation state, so they reset to
-the 40/40/20 default on every launch.
+Pane widths (see [[Layout]]) are also remembered, but not per-vault like
+selection/expand state: they're a single, vault-agnostic entry, since
+only one vault is ever navigable at a time and the layout applies
+regardless of which one that is. Restored with validation — a saved
+layout that doesn't sum to 100% or dips below the resize floor falls
+back to the 40/40/20 default instead of being applied as-is.

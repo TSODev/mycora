@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Persisted pane widths (v0.7)** — resizing the split layout with
+  `[`/`]`/`{`/`}` is now remembered across restarts, in
+  `session.toml`'s new vault-agnostic `pane_widths` field (unlike
+  `selected`/`expanded`, layout applies regardless of which vault is
+  active). Restored with validation — a hand-edited or stale file whose
+  widths don't sum to 100 or dip below the resize floor falls back to
+  the 40/40/20 default rather than being applied as-is. Supersedes the
+  "in-memory only" scope cut from when resizing first shipped.
 - **Command palette help popup (v0.7)** — pressing `:` now also shows a
   small popup listing every recognized command (`:reindex`, `:tags`,
   `:q`/`:quit`) with a one-line description each, for as long as the

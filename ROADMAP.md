@@ -333,15 +333,23 @@ Goal: make daily use pleasant, not just functional.
       whatever width the other two give up or take
       (`App::resize_pane`/`PANE_STEP_PCT` = 5, `PANE_MIN_PCT` = 10, floor
       applies to whichever of the two panes involved would cross it).
-      **In-memory only, not persisted** in `session.toml` — deliberate
-      scope cut, also confirmed with the user: pane widths are a display
-      preference, not per-vault navigation state the way `selected`/
-      `expanded` are, so they reset to the 40/40/20 default each launch;
-      persisting them is a trivial follow-up if wanted later. Manually
-      verified in tmux: `]` visibly widened the tree pane (taking space
-      from body), `{` visibly narrowed the backlinks pane down to its
-      floor and stopped changing on further presses past that point, and
-      widths survived opening and closing the search overlay
+      Originally in-memory only, not persisted — a deliberate initial
+      scope cut, confirmed with the user, since pane widths are a display
+      preference rather than per-vault navigation state the way
+      `selected`/`expanded` are. **Since persisted** (2026-07-10, on
+      request): `Session`'s `pane_widths: Option<[u16; 3]>` is
+      vault-agnostic (unlike the per-vault `selected`/`expanded` entries),
+      since only one vault is ever navigable at a time and the layout
+      applies regardless of which one that is. Saved at the same shutdown
+      point as everything else in `Session` (`App::save_session`), and
+      restored in `App::new` with validation (must sum to 100, no pane
+      below `PANE_MIN_PCT`) so a hand-edited or stale session file can't
+      hand `ui.rs` a layout it can't render sanely — falls back to the
+      40/40/20 default if validation fails or nothing was ever saved.
+      Manually verified in tmux: `]`/`{` visibly resized the tree/
+      backlinks panes (tree wider, backlinks down to its floor), `q`/`q`
+      quit, the saved `session.toml` showed the new widths, and
+      relaunching restored the exact same layout.
 - [x] Interactive backlinks pane (2026-07-10) — `b` no longer opens a
       separate full-screen overlay (`Mode::Backlinks` used to); it shifts
       keyboard focus onto the already-visible backlinks pane instead:

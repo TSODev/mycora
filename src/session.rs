@@ -10,6 +10,14 @@ use crate::note::NoteId;
 struct RawSession {
     #[serde(default)]
     vaults: HashMap<String, VaultSession>,
+    /// Percent widths of the split layout's tree/body/backlinks columns —
+    /// vault-agnostic (unlike `vaults`), since only one vault is ever
+    /// navigable/editable at a time and the layout is a display preference,
+    /// not per-vault state. Validated by the caller (`App::new`) before
+    /// use, not here: a hand-edited or stale file could hold widths that
+    /// no longer sum to 100 or dip below the resize floor.
+    #[serde(default)]
+    pane_widths: Option<[u16; 3]>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -20,10 +28,13 @@ struct VaultSession {
 }
 
 /// The last-known selection and expand/collapse state per mounted vault —
-/// "remember last open note, expanded/collapsed branches" across restarts.
-/// Keyed by vault name (not just the active one) so switching which vault
-/// is `default` in the config doesn't clobber another vault's remembered
+/// "remember last open note, expanded/collapsed branches" across restarts —
+/// plus the split layout's pane widths. Selection/expand state is keyed by
+/// vault name (not just the active one) so switching which vault is
+/// `default` in the config doesn't clobber another vault's remembered
 /// position, even though only one vault is ever navigable at a time today.
+/// Pane widths aren't vault-keyed, since they're a display preference that
+/// applies regardless of which vault happens to be active.
 ///
 /// Read once at startup (`App::new`) and written once at shutdown — not
 /// write-through on every expand/collapse or selection change, unlike note
@@ -66,16 +77,26 @@ impl Session {
         Some((selected, expanded))
     }
 
-    /// Records `vault_name`'s current selection/expand state and writes
-    /// the whole session file — other vaults' entries are preserved
-    /// unchanged (this re-reads the file first rather than assuming
-    /// in-memory state from `load` is still current, since another
-    /// mycora process could have written its own vault's entry meanwhile).
+    /// The previously saved split-layout pane widths, if any were ever
+    /// saved. Not validated here (sum-to-100, floor per pane) — that's
+    /// `App::new`'s job, since this module doesn't know the layout's own
+    /// constraints.
+    pub fn pane_widths(&self) -> Option<[u16; 3]> {
+        self.raw.pane_widths
+    }
+
+    /// Records `vault_name`'s current selection/expand state and the
+    /// current pane widths, and writes the whole session file — other
+    /// vaults' entries are preserved unchanged (this re-reads the file
+    /// first rather than assuming in-memory state from `load` is still
+    /// current, since another mycora process could have written its own
+    /// vault's entry meanwhile).
     pub fn save(
         &mut self,
         vault_name: &str,
         selected: Option<NoteId>,
         expanded: &HashSet<NoteId>,
+        pane_widths: [u16; 3],
     ) -> anyhow::Result<()> {
         let mut fresh = Self::load(&self.path);
         fresh.raw.vaults.insert(
@@ -85,6 +106,7 @@ impl Session {
                 expanded: expanded.iter().map(|id| id.0).collect(),
             },
         );
+        fresh.raw.pane_widths = Some(pane_widths);
         self.raw = fresh.raw;
 
         if let Some(parent) = self.path.parent() {
@@ -109,6 +131,7 @@ mod tests {
         let path = scratch_path();
         let session = Session::load(&path);
         assert!(session.for_vault("default").is_none());
+        assert!(session.pane_widths().is_none());
     }
 
     #[test]
@@ -120,12 +143,29 @@ mod tests {
         let a = NoteId::new();
         let b = NoteId::new();
         let expanded: HashSet<NoteId> = [a, b].into_iter().collect();
-        session.save("default", Some(selected), &expanded).unwrap();
+        session
+            .save("default", Some(selected), &expanded, [40, 40, 20])
+            .unwrap();
 
         let reloaded = Session::load(&path);
         let (saved_selected, saved_expanded) = reloaded.for_vault("default").unwrap();
         assert_eq!(saved_selected, Some(selected));
         assert_eq!(saved_expanded, expanded);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn save_then_load_round_trips_pane_widths() {
+        let path = scratch_path();
+        let mut session = Session::load(&path);
+
+        session
+            .save("default", None, &HashSet::new(), [30, 50, 20])
+            .unwrap();
+
+        let reloaded = Session::load(&path);
+        assert_eq!(reloaded.pane_widths(), Some([30, 50, 20]));
 
         std::fs::remove_file(&path).ok();
     }
@@ -137,12 +177,12 @@ mod tests {
 
         let a_selected = NoteId::new();
         session
-            .save("a", Some(a_selected), &HashSet::new())
+            .save("a", Some(a_selected), &HashSet::new(), [40, 40, 20])
             .unwrap();
 
         let b_selected = NoteId::new();
         session
-            .save("b", Some(b_selected), &HashSet::new())
+            .save("b", Some(b_selected), &HashSet::new(), [40, 40, 20])
             .unwrap();
 
         let reloaded = Session::load(&path);
@@ -158,6 +198,7 @@ mod tests {
         std::fs::write(&path, "not valid toml {{{").unwrap();
         let session = Session::load(&path);
         assert!(session.for_vault("default").is_none());
+        assert!(session.pane_widths().is_none());
         std::fs::remove_file(&path).ok();
     }
 }

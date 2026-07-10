@@ -136,10 +136,10 @@ pub struct App {
     session_path: PathBuf,
     /// Percent widths of the split layout's three columns (tree, body,
     /// backlinks — see `ui.rs`'s `draw_main`), always summing to 100.
-    /// In-memory only, not persisted in `Session`: this is a display
-    /// preference, not per-vault navigation state, and resets to the
-    /// default (40/40/20) each launch (deliberate scope cut, confirmed
-    /// with the user — persisting it is a trivial follow-up if wanted).
+    /// Persisted in `Session` (vault-agnostic, unlike `selected`/
+    /// `expanded`) and restored in `App::new`, falling back to the
+    /// default (40/40/20) if nothing was saved or the saved widths fail
+    /// validation (don't sum to 100, or a pane is below `PANE_MIN_PCT`).
     pane_widths: [u16; 3],
     /// Text typed after `:` while `mode == Mode::Command`.
     command_input: String,
@@ -232,6 +232,18 @@ impl App {
             }
         }
 
+        // A hand-edited or stale session file could hold widths that no
+        // longer sum to 100 or dip below the resize floor — fall back to
+        // the default rather than handing `ui.rs` a layout it can't
+        // render sanely.
+        let pane_widths = session
+            .pane_widths()
+            .filter(|widths| {
+                widths.iter().sum::<u16>() == 100
+                    && widths.iter().all(|w| *w >= Self::PANE_MIN_PCT)
+            })
+            .unwrap_or([40, 40, 20]);
+
         let index_path = Index::default_path(&config.home);
         let mut index = Index::open(&index_path)?;
         // Reindex every mounted vault together at startup, so search and
@@ -299,7 +311,7 @@ impl App {
             other_vaults,
             body_editor: None,
             session_path,
-            pane_widths: [40, 40, 20],
+            pane_widths,
             command_input: String::new(),
             tag_results: Vec::new(),
             tag_results_selected: 0,
@@ -313,7 +325,12 @@ impl App {
     /// not write-through — see `Session`'s doc comment for why.
     pub fn save_session(&self) -> anyhow::Result<()> {
         let mut session = Session::load(&self.session_path);
-        session.save(&self.vault_id, self.selected, &self.expanded)
+        session.save(
+            &self.vault_id,
+            self.selected,
+            &self.expanded,
+            self.pane_widths,
+        )
     }
 
     /// Depth-first (id, depth) pairs for notes currently visible, respecting
