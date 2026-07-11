@@ -44,16 +44,18 @@ enum Command {
         #[command(subcommand)]
         action: VaultCommand,
     },
-    /// Flatten a note's subtree to a single Markdown file.
+    /// Flatten a note's subtree to a single Markdown or PDF file.
     ///
     /// Matches by exact title within the active vault. Errors if zero or
     /// multiple notes share that title — use the TUI's `:export` instead
     /// to disambiguate by direct selection. Refuses if the output path
-    /// already exists rather than overwriting it.
+    /// already exists rather than overwriting it. Output format is
+    /// inferred from the path's extension: `.pdf` renders a paginated
+    /// PDF, anything else is written as plain Markdown.
     Export {
         /// Exact title of the note whose subtree to export.
         title: String,
-        /// Path to write the flattened Markdown to.
+        /// Path to write the export to (.pdf for PDF, anything else for Markdown).
         output: PathBuf,
     },
     /// Import an existing Obsidian-style vault as a new Mycora vault.
@@ -363,8 +365,9 @@ fn vault_list() -> anyhow::Result<()> {
 /// [[wikilink]] resolution's own fan-out behavior, but a CLI export needs
 /// one unambiguous target and has no selection context (unlike the TUI's
 /// `:export`) to disambiguate with — then writes its subtree
-/// (`mycora::export::flatten_subtree`) to `output`. Refuses if `output`
-/// already exists rather than overwriting it.
+/// (`mycora::export::flatten_subtree`) to `output`, rendering it to a PDF
+/// instead of writing raw Markdown if `output` ends in `.pdf`. Refuses if
+/// `output` already exists rather than overwriting it.
 fn export_note(title: &str, output: PathBuf) -> anyhow::Result<()> {
     let config = Config::load()?;
     let active = config.active_vault();
@@ -397,7 +400,8 @@ fn export_note(title: &str, output: PathBuf) -> anyhow::Result<()> {
     }
 
     let content = mycora::export::flatten_subtree(&tree, id);
-    std::fs::write(&output, content)
+    mycora::export::write_output(&content, &output)
+        .map_err(|err| anyhow::anyhow!(err))
         .with_context(|| format!("writing {}", output.display()))?;
     println!("mycora: exported \"{title}\" to {}", output.display());
     Ok(())

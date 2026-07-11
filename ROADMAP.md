@@ -696,23 +696,47 @@ Goal: notes are never trapped in Mycora.
       `:export <path>` on the same note produced byte-identical output
       to the CLI path; `:export` with no argument showed the usage
       error.
-- [ ] Export a subtree to a PDF file — user-requested (2026-07-10). Most
-      likely built on top of the Markdown export just above (flatten the
-      subtree first, then render *that* to PDF) rather than a separate
-      pipeline, so it should land after/alongside it, not before — that
-      export now exists (see above), so this is unblocked whenever it's
-      picked up. Rendering approach not decided yet: shelling out to an
-      already-installed tool (`pandoc`, `wkhtmltopdf`) needs no new Rust
-      dependency but requires that tool to be present on the user's
-      machine; a pure-Rust PDF crate (e.g. `printpdf`, `typst-as-lib`) is
-      self-contained but adds real weight, and likely can't reuse
-      `markdown.rs`'s ratatui-specific renderer as-is (that one targets
-      `ratatui::text::Line`, not a page-layout output) — pick the
-      rendering approach before starting implementation, not while
-      mid-way through it. Command surface not scoped yet either — a `:`
-      command (`:export pdf`?) vs. a `mycora export` CLI flag are both
-      plausible, same open question the Markdown export above resolved
-      by just doing both.
+- [x] Export a subtree to a PDF file (2026-07-11) — user-requested
+      (2026-07-10), built directly on top of the Markdown export above:
+      `flatten_subtree` produces the same Markdown either way, so PDF
+      export is "that Markdown, rendered to a page layout" rather than a
+      separate pipeline. Two forks confirmed with the user before
+      implementing:
+      - **Rendering approach**: a pure-Rust crate over shelling out to
+        `pandoc`/`wkhtmltopdf` — those need a whole LaTeX toolchain or a
+        largely-unmaintained HTML-to-PDF binary preinstalled, which isn't
+        reliably true on the user's machine, vs. a self-contained
+        dependency that behaves identically everywhere. Landed on
+        [`markdown2pdf`](https://crates.io/crates/markdown2pdf) (checked
+        the actual crate source, not just its docs, before committing to
+        it): actively maintained, edition 2024, takes Markdown straight
+        in and a page-laid-out PDF straight out (headings, bold/italic,
+        code blocks, lists, links), pinned to a current `printpdf 0.9`
+        rather than the years-stale `genpdf`/forks (last released 2021,
+        pinned to `printpdf 0.3.4`) that were the other realistic
+        pure-Rust option. Its `fetch`/`svg` cargo features (network
+        image fetch, SVG rasterization) are both off — Mycora doesn't
+        need either and left them opt-in.
+      - **Command surface**: extend `:export`/`mycora export` rather
+        than add a dedicated command — the output *path*'s extension
+        decides the format (`.pdf` renders through `markdown2pdf`,
+        anything else is written as plain Markdown, same as before), so
+        there's nothing new to learn or document as a separate command
+        surface, just one more extension the existing one understands.
+      New `export::write_output(content, path) -> Result<(), String>`
+      (`export.rs`) is the single place both the TUI's `:export` and the
+      CLI's `mycora export` now call to actually write the file, sharing
+      the extension check (`is_pdf_path`) between them instead of
+      duplicating the branch at each call site. 4 new unit tests
+      (extension detection case-insensitivity, a non-`.pdf` path writes
+      Markdown verbatim, a `.pdf` path produces bytes starting with the
+      real `%PDF-` magic number). Manually verified: CLI `mycora export
+      <title> out.pdf` and the TUI's `:export out.pdf` on the same note
+      both produced a valid PDF (`file` reported "PDF document, version
+      1.5"; `pdftotext` round-tripped the heading hierarchy, paragraphs,
+      and list items back out correctly); re-running against the same
+      `.pdf` path refused with "already exists", same as the Markdown
+      path already did.
 - [ ] Optional Postman/Terapi-style templating hooks (stretch — evaluate
       whether this belongs here or in a separate tool)
 

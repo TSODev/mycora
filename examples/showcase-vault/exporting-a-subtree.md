@@ -7,14 +7,14 @@ tags:
 - export
 - v0.8
 created: 2026-07-11T09:00:00Z
-updated: 2026-07-11T09:00:00Z
+updated: 2026-07-11T11:30:00Z
 ---
 
 # Exporting a subtree
 
 The first [[Roadmap]] v0.8 item: flattening a note and its whole
-subtree into a single, portable Markdown document — notes should never
-be trapped in Mycora.
+subtree into a single, portable document — notes should never be
+trapped in Mycora.
 
 - Titles become headings by depth: the exported root note is `#`, its
   children `##`, grandchildren `###`, and so on.
@@ -42,6 +42,8 @@ overwriting it: a path outside a vault has none of Mycora's usual
 safety net ([[Undo and redo]], the trash) to fall back on if it went
 wrong.
 
-Exporting to PDF is next on the [[Roadmap]] — most likely built on top
-of this Markdown export (flatten first, then render that), with the
-rendering approach and command surface still open questions.
+**The output format is inferred from the path's extension**: a `.pdf`
+path renders a paginated PDF instead of writing Markdown — same
+command, same two entry points, nothing new to learn. See
+[[PDF export renders through a pure-Rust crate]] for how that's built
+and why it's an extension of this command rather than a separate one.

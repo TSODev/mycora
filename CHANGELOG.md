@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **PDF export (v0.8)** — `:export`/`mycora export` now render a `.pdf`
+  output path to a real, paginated PDF (via the `markdown2pdf` crate)
+  instead of writing Markdown, purely based on the output path's
+  extension — everything else about the command (selection-based in the
+  TUI, title-matched in the CLI, refuses to overwrite an existing path)
+  is unchanged.
 - **`mycora import` — import an Obsidian-style vault (v0.8)** —
   `mycora import <source> <name> <path>` converts an existing Obsidian
   vault into a new, registered-and-mounted Mycora vault. Folder

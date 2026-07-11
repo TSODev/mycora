@@ -1,5 +1,6 @@
 use crate::note::NoteId;
 use crate::tree::Tree;
+use std::path::Path;
 
 /// Flattens `root`'s subtree (itself and every descendant, depth-first,
 /// respecting sibling order) into a single Markdown document. Each note's
@@ -16,6 +17,32 @@ pub fn flatten_subtree(tree: &Tree, root: NoteId) -> String {
     let mut out = String::new();
     push_flattened(tree, root, 0, &mut out);
     out
+}
+
+/// Writes flattened Markdown `content` to `path`, rendering it to a
+/// paginated PDF first if `path` ends in `.pdf` (case-insensitive) —
+/// otherwise it's written verbatim as Markdown. The two CLI/TUI export
+/// entry points share this so "same command, format inferred from the
+/// output extension" is the only place that decision lives, rather than
+/// picking a format explicitly.
+pub fn write_output(content: &str, path: &Path) -> Result<(), String> {
+    if is_pdf_path(path) {
+        markdown2pdf::parse_into_file(
+            content.to_string(),
+            path,
+            markdown2pdf::config::ConfigSource::Default,
+            None,
+        )
+        .map_err(|err| err.to_string())
+    } else {
+        std::fs::write(path, content).map_err(|err| err.to_string())
+    }
+}
+
+fn is_pdf_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("pdf"))
 }
 
 fn push_flattened(tree: &Tree, id: NoteId, depth: usize, out: &mut String) {
@@ -146,5 +173,38 @@ mod tests {
         assert!(out.contains("included"));
         assert!(!out.contains("Unrelated root"));
         assert!(!out.contains("should not appear"));
+    }
+
+    #[test]
+    fn recognizes_pdf_paths_case_insensitively() {
+        assert!(is_pdf_path(Path::new("notes.pdf")));
+        assert!(is_pdf_path(Path::new("notes.PDF")));
+        assert!(!is_pdf_path(Path::new("notes.md")));
+        assert!(!is_pdf_path(Path::new("notes")));
+    }
+
+    #[test]
+    fn write_output_writes_markdown_verbatim_for_non_pdf_paths() {
+        let dir = std::env::temp_dir().join(format!("mycora-export-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("out.md");
+
+        write_output("# Hello\n\nBody.\n\n", &path).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "# Hello\n\nBody.\n\n");
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn write_output_renders_a_real_pdf_for_pdf_paths() {
+        let dir = std::env::temp_dir().join(format!("mycora-export-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("out.pdf");
+
+        write_output("# Hello\n\nBody.\n\n", &path).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(bytes.starts_with(b"%PDF-"));
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

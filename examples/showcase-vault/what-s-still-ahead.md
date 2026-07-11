@@ -6,7 +6,7 @@ tags:
 - roadmap
 - planned
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-11T09:30:00Z
+updated: 2026-07-11T11:30:00Z
 ---
 
 # What's still ahead
@@ -14,10 +14,10 @@ updated: 2026-07-11T09:30:00Z
 - **Link autocompletion** while typing a wikilink in the
   body editor — unblocked now that [[Full-pane body editor, save on exit]]
   exists, but not yet implemented
-- **v0.8 — Import/export**: [[Exporting a subtree]] (flattened Markdown)
-  and [[Importing an Obsidian vault]] are both done; still ahead: PDF
-  export (most likely built on top of the Markdown export now that it
-  exists)
+- **v0.8 — Import/export**: [[Exporting a subtree]] (Markdown or PDF)
+  and [[Importing an Obsidian vault]] are both done; still ahead:
+  optional Postman/Terapi-style templating hooks (stretch goal, may not
+  belong in Mycora itself)
 - **v0.9 — Hardening**: broader test coverage on tree edge cases,
   crash-safety, large-vault performance, a full documentation pass
 - **v1.0 — Public release**: crates.io publish, release checklist,

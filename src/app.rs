@@ -1504,7 +1504,7 @@ impl App {
             }
         };
 
-        match std::fs::write(path, content) {
+        match crate::export::write_output(&content, path) {
             Ok(()) => {
                 self.last_error = None;
                 self.last_message = Some(format!("exported to {path_str}"));

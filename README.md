@@ -8,11 +8,14 @@ other across branches, the way a mycelial network links the root systems of
 otherwise separate trees.
 
 > Status: working, in active development. Hierarchical notes, Markdown
-> persistence, full tree editing with undo/redo, and SQLite-backed
-> full-text search are all shipped today (v0.1–v0.4). The "mycelial"
-> cross-link half of the name — `[[wikilink]]`-style references between
-> notes — hasn't landed yet; see [ROADMAP.md](./ROADMAP.md) for what's
-> built vs. still ahead, and [USAGE.md](./USAGE.md) to actually use it.
+> persistence, full tree editing with undo/redo, SQLite-backed full-text
+> search, the "mycelial" cross-link layer (`[[wikilink]]`-style
+> references with a backlinks panel), a resizable three-pane layout with
+> a `:` command palette, multi-vault mounting, and Obsidian import /
+> Markdown-or-PDF export are all shipped today (v0.1–v0.8). Two items are
+> deliberately deferred — link autocompletion and configurable
+> keybindings — see [ROADMAP.md](./ROADMAP.md) for what's built vs.
+> still ahead, and [USAGE.md](./USAGE.md) to actually use it.
 
 ---
 
@@ -74,49 +77,64 @@ names the part of the design that's actually differentiating: not the tree
   return relevant results fast, with ranking that reflects relevance
   (BM25-class scoring), not just substring matches.
 
-## Built (v0.1–v0.4)
+## Built (v0.1–v0.8)
 
 - **Tree operations**: create, rename, delete (the whole subtree moves to
   `.trash/`, never erased outright), move/reparent with cycle detection,
   reorder siblings, deep-copy a subtree (fresh ids, no shared identity).
 - **Undo/redo**: every structural operation is reversible for the rest of
-  the session.
+  the session, built on inverses computed against the live tree, not
+  frozen snapshots.
 - **Local-first storage**: Markdown + YAML frontmatter is the sole source
   of truth; malformed files, duplicate ids, and orphaned parents are
   self-healed with a warning rather than causing a crash or data loss.
-- **Full-text search**: SQLite FTS5 over titles + bodies, with a live `/`
-  search overlay in the TUI; `mycora reindex --watch` keeps the index in
-  sync as files change on disk.
-- **Tag filtering**: AND/OR set-filtering over tags — index/API level only
-  so far, no TUI command yet.
+- **Full-text search**: SQLite FTS5 over titles + bodies, BM25-ranked
+  with snippets, plus faceted filtering by tag/date/branch; a live `/`
+  search overlay in the TUI, `:tags`/`:tags list` for tag-only browsing;
+  `mycora reindex --watch` keeps the index in sync as files change on disk.
+- **Cross-links**: `[[wikilink]]`-style references between any two notes,
+  independent of tree position, resolved across mounted vaults; a
+  backlinks panel per note; ambiguous titles fan out to a link per match
+  rather than erroring, unresolved ones surface as broken-link warnings.
+- **Multi-vault mounting**: a registry of named vaults, exactly one
+  editable (`"default"`) at a time and every other mounted vault
+  read-only but fully navigable; a `mycora vault` CLI
+  (`add`/`init`/`rename`/`promote`/`mount`/`unmount`/`remove`/`list`)
+  manages the registry.
+- **A three-pane layout**: resizable tree + Markdown-rendered body
+  preview + backlinks panes, a full-pane body editor, a `:` command
+  palette, light/dark theming for free via named ANSI colors, and
+  session persistence (remembers where you were, per vault).
+- **Import/export**: `mycora import` converts an existing Obsidian vault
+  (folder structure becomes tree structure); `:export`/`mycora export`
+  flattens a note's subtree to a single Markdown *or* PDF document
+  (format inferred from the output path's extension).
 
 ## Still ahead
 
-- **Cross-links**: `[[wikilink]]`-style references between any two notes,
-  independent of tree position; backlinks panel per note.
-- **Copy-as-link**: today's `y` always deep-copies; a link-only copy is
-  really a cross-link with tree presence, so it waits on cross-links
-  landing (the index's `links` table already exists, just unused until
-  then).
-- **Relevance-ranked search**: upgrading from FTS5 to tantivy/BM25 scoring.
-- **A richer layout**: split-pane (tree + body + backlinks), theming, a
-  command palette.
-- **Import/export**: Obsidian-style vault import, flattened Markdown
-  export.
+- **Link autocompletion** while typing a `[[wikilink]]` in the body
+  editor — deliberately deferred until it's built.
+- **Configurable keybindings** — deliberately out of scope until real
+  friction shows up in practice, rather than built speculatively.
+- **v0.9 — Hardening**: broader test coverage on tree edge cases,
+  crash-safety, large-vault performance, a full documentation pass.
+- **v1.0 — Public release**: a versioned crates.io publish, a release
+  checklist, gathering feedback.
 
-See [ROADMAP.md](./ROADMAP.md) for the full staged plan.
+See [ROADMAP.md](./ROADMAP.md) for the full staged plan and the reasoning
+behind every non-obvious decision along the way.
 
-## Planned architecture
+## Architecture
 
 ```
 ┌─────────────────────────────┐
-│   ratatui + crossterm TUI   │   ← tree view, editor pane, search overlay
+│   ratatui + crossterm TUI   │   ← tree/body/backlinks panes, command palette
 ├─────────────────────────────┤
 │      Mycora core (Rust)     │   ← tree ops, link graph, undo/redo
 ├──────────────┬──────────────┤
-│  Markdown +   │   SQLite     │   ← source of truth │ derived index
-│  frontmatter  │   (+ FTS/    │
-│  files        │   tantivy)   │
+│  Markdown +   │   SQLite     │   ← source of truth │ derived, disposable
+│  frontmatter  │   (FTS5)     │     index
+│  files        │              │
 └──────────────┴──────────────┘
 ```
 
@@ -125,26 +143,32 @@ See [ROADMAP.md](./ROADMAP.md) for the full staged plan.
 In use today:
 
 - **ratatui** + **crossterm** — terminal UI rendering and input
+- **ratatui-textarea** — the full-pane body editor
+- **pulldown-cmark** — Markdown parsing, driving both wikilink extraction
+  and the rendered body preview pane
 - **serde** + **serde_yaml** + **toml** — frontmatter and config
   (de)serialization
 - **rusqlite** (`bundled`) — the disposable SQLite index behind full-text
-  search and tag filtering, no system libsqlite3 dependency
+  search, tag filtering, and cross-links, no system libsqlite3 dependency
 - **notify** — filesystem watching for `mycora reindex --watch`
+- **markdown2pdf** — renders a flattened subtree to a paginated PDF for
+  `:export`/`mycora export` when the output path ends in `.pdf`
 - **uuid**, **time**, **anyhow**, **clap** — note ids, timestamps, error
   handling, CLI parsing
 
-Not adopted yet, candidates for later stages:
+Considered and deliberately not adopted:
 
-- **tantivy** — upgrade path for full-text search once FTS5's ranking
-  proves insufficient (v0.6)
-- **pulldown-cmark** — Markdown parsing, for wikilink extraction (v0.5)
-  and rendering the note body pane (v0.7)
+- **tantivy** — the goal it would have served (relevance-ranked search)
+  is already met by FTS5's own BM25 `rank` and `snippet()` support, so a
+  second full-text engine was set aside rather than added on spec; it
+  stays an option if a concrete gap shows up (typo tolerance, ranking
+  quality at large vault sizes) rather than something adopted upfront.
 
 ## How Mycora compares
 
 | | Structure | Cross-links | Storage | Search | Interface |
 |---|---|---|---|---|---|
-| **Mycora** | strict tree | planned (v0.5) | Markdown + SQLite index | FTS5 (tantivy planned) | TUI |
+| **Mycora** | strict tree | yes | Markdown + SQLite index | FTS5, BM25-ranked | TUI |
 | Obsidian | free-form graph | yes | Markdown | plugin-dependent | GUI |
 | `zk` (Go) | flat, tag/link-based | yes | Markdown | fzf-based | CLI |
 | `zk-cli` (Rust) | flat, tag/link-based | yes | Markdown | fuzzy (skim) | CLI |
@@ -153,13 +177,17 @@ Not adopted yet, candidates for later stages:
 
 ## Status
 
-Working and daily-usable — v0.1 through v0.4 are done: in-memory tree,
-Markdown persistence, full structural operations (move, copy, reorder,
-delete with confirmation and a trash, undo/redo), and SQLite-backed search
-(FTS5 full-text, tag filtering, `mycora reindex --watch`). See
-[USAGE.md](./USAGE.md) for how to use it today, and
-[ROADMAP.md](./ROADMAP.md) for what's still ahead (cross-links, a richer
-layout, import/export) through to a stable v1.0.
+Working and daily-usable — v0.1 through v0.8 are functionally complete
+(except link autocompletion and configurable keybindings, both
+deliberately deferred): in-memory tree with full structural operations
+and undo/redo, Markdown + YAML frontmatter persistence, SQLite-backed
+search (FTS5 full-text, BM25 ranking, tag/date/branch facets), the
+`[[wikilink]]` cross-link layer with a backlinks panel, multi-vault
+mounting with a full `mycora vault` CLI, a resizable three-pane TUI
+layout with a `:` command palette, and Obsidian import / Markdown-or-PDF
+export. See [USAGE.md](./USAGE.md) for how to use it today, and
+[ROADMAP.md](./ROADMAP.md) for what's still ahead (hardening, then a
+stable v1.0).
 
 ## License
 

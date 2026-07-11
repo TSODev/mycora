@@ -442,9 +442,10 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
   to the default 40/40/20, the quickest way back after resizing since
   pane widths persist across restarts
 - `:export <path>` — flattens the *selected* note's subtree to a
-  Markdown file at `path` (see [Exporting a subtree](#exporting-a-subtree)).
-  Works on a read-only mounted vault's note too, not just the active
-  vault's — exporting only reads. Refuses if `path` already exists.
+  Markdown or PDF file at `path`, format inferred from the extension
+  (see [Exporting a subtree](#exporting-a-subtree)). Works on a
+  read-only mounted vault's note too, not just the active vault's —
+  exporting only reads. Refuses if `path` already exists.
 - `:q` / `:quit` — quits Mycora, same as `q` `q` in Normal mode
 
 An unrecognized command shows an error in the status bar rather than
@@ -452,15 +453,20 @@ doing nothing silently.
 
 ## Exporting a subtree
 
-Flattens a note and its whole subtree into a single Markdown document —
-titles become headings by depth (the root note is `#`, its children
-`##`, and so on), and any headings already inside a note's own body are
-shifted deeper by that same amount, so a note's own internal structure
-nests correctly under its title instead of competing with it. No YAML
+Flattens a note and its whole subtree into a single document — titles
+become headings by depth (the root note is `#`, its children `##`, and
+so on), and any headings already inside a note's own body are shifted
+deeper by that same amount, so a note's own internal structure nests
+correctly under its title instead of competing with it. No YAML
 frontmatter in the output, and `[[wikilinks]]` are left as literal text
 for now — rewriting ones that resolve to another note in the same
 export into working Markdown anchors is a possible later improvement,
 not implemented yet.
+
+The output **format is inferred from the path's extension**: `.pdf`
+renders a paginated PDF (headings, bold/italic, code blocks, and lists
+all styled); anything else is written as plain Markdown. Same command
+either way — nothing else about `:export`/`mycora export` changes.
 
 From the TUI:
 
