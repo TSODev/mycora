@@ -170,7 +170,13 @@ fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(PANE_BODY_COLOR))
-                .title(title),
+                .title(title)
+                // Continuous prose reads better with a little breathing
+                // room off the border than a list of short titles does —
+                // the tree/backlinks panes stay flush for now (see
+                // ROADMAP.md), this one gets it first since it's the one
+                // pane that's mostly running text rather than list rows.
+                .padding(ratatui::widgets::Padding::horizontal(1)),
         );
     frame.render_widget(paragraph, area);
 }

@@ -345,12 +345,13 @@ place.
   like the default one — dimmed rows to mark them read-only, but fully
   browsable, not roots-only. Their link-count badges work the same as
   the default vault's, just computed against that vault's own notes.
-- **Body preview** (middle, magenta border) — the selected note's body,
-  rendered as Markdown (headings, bold/italic, inline/block code, lists,
-  blockquotes, horizontal rules). Updates live as you move the selection.
-  Read-only and not interactive: links and `[[wikilinks]]` render as plain
-  text, not as something you can click or navigate from the preview
-  itself.
+- **Body preview** (middle, magenta border, with a little horizontal
+  padding off the border since it's mostly running prose) — the selected
+  note's body, rendered as Markdown (headings, bold/italic, inline/block
+  code, lists, blockquotes, horizontal rules). Updates live as you move
+  the selection. Read-only and not interactive: links and `[[wikilinks]]`
+  render as plain text, not as something you can click or navigate from
+  the preview itself.
 - **Backlinks** (right) — notes linking to the selected note, live. No
   border color while idle; press `b` to move keyboard focus into it (cyan
   border, highlighted entry) — see [Backlinks](#backlinks) below.

@@ -300,6 +300,18 @@ Goal: make daily use pleasant, not just functional.
       panes showed distinct blue/magenta borders simultaneously, and the
       backlinks pane's existing cyan-on-focus behavior still worked
       alongside them.
+      **Since extended** (2026-07-11, user-requested): the body preview
+      pane's `Block` now has 1-column horizontal padding
+      (`ratatui::widgets::Padding::horizontal(1)`) between its border and
+      the rendered Markdown, discussed first as an exploratory question —
+      continuous prose reads more cramped flush against a border than a
+      short list row does, so this pane (the one that's mostly running
+      text rather than list rows) got it first. Tree and backlinks
+      deliberately stay flush for now, on request — same idea, kept open
+      to apply there too rather than done everywhere at once. Manually
+      verified in tmux: rendered Markdown body text started with a clear
+      left margin instead of touching the border, while the tree and
+      backlinks panes' list rows were unaffected.
 - [x] Split-pane layout: tree + note body + backlinks (2026-07-10) — three
       columns in Normal/Insert/ConfirmDelete modes, fixed proportions
       (40/40/20) at the time. **Since made resizable**: interactive

@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Body preview pane padding** — 1-column horizontal padding between
+  the border and the rendered Markdown, since continuous prose read more
+  cramped flush against a border than a short list row does. Tree and
+  backlinks stay flush for now, kept open to apply there too later.
 - **`:tags list` command** — lists every distinct tag in the active
   vault, alphabetically, with each tag's note count. `Enter` on one
   filters by it (same as typing `:tags <that-tag>`), so you don't need

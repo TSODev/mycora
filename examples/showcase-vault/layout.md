@@ -6,7 +6,7 @@ tags:
 - interface
 - layout
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T22:00:00Z
+updated: 2026-07-11T00:00:00Z
 ---
 
 # Layout
@@ -17,10 +17,14 @@ Three columns, plus the [[Status bar]] at the bottom:
   other vaults are mounted (see [[Multi-vault mounting]]), their notes
   appear stacked below it, dimmed and read-only but just as navigable —
   not roots-only.
-- **Body preview** (middle, magenta border) — the selected note's body,
-  rendered as formatted Markdown (headings, bold/italic, code, lists,
-  blockquotes, rules). Read-only; links and wikilinks render as plain
-  text here, not as something clickable.
+- **Body preview** (middle, magenta border, with a little horizontal
+  padding off the border) — the selected note's body, rendered as
+  formatted Markdown (headings, bold/italic, code, lists, blockquotes,
+  rules). Read-only; links and wikilinks render as plain text here, not
+  as something clickable. The padding is deliberately only here for
+  now — continuous prose reads more cramped flush against a border than
+  a short list row does, so this pane got it first; tree and backlinks
+  stay flush, kept open to apply there too later.
 - **Backlinks** (right) — notes linking to the selected note, live. No
   border color while idle; `b` moves keyboard focus into it (cyan border)
   — see [[Cross-links and backlinks]].
