@@ -68,6 +68,13 @@ pub enum Mode {
     /// jumps, `Esc` cancels) but over a fixed result set rather than a
     /// live-as-you-type query.
     TagResults,
+    /// Browsing every distinct tag in the active vault (`:tags list`) —
+    /// same full-pane shape as `TagResults`, but `Enter` doesn't jump to a
+    /// note: it filters by the selected tag, transitioning into
+    /// `TagResults` for that tag (see `App::confirm_tag_list`). Exists so
+    /// you can pick a tag to filter by without having to already know and
+    /// type its exact spelling.
+    TagList,
 }
 
 /// An action that can be pushed onto `undo_stack`/`redo_stack`. Applying one
@@ -145,6 +152,9 @@ pub struct App {
     command_input: String,
     tag_results: Vec<IndexedNote>,
     tag_results_selected: usize,
+    /// `(tag, note count)` pairs while `mode == Mode::TagList`.
+    tag_list: Vec<(String, i64)>,
+    tag_list_selected: usize,
 }
 
 /// `(syntax, description)` pairs for every command `execute_command`
@@ -157,6 +167,7 @@ pub const COMMAND_REFERENCE: &[(&str, &str)] = &[
         ":tags <tag1,tag2,...>",
         "list notes matching any of the given tags",
     ),
+    (":tags list", "list every known tag, pick one to filter by"),
     (":panes reset", "reset pane widths to the default 40/40/20"),
     (":q, :quit", "quit Mycora"),
 ];
@@ -343,6 +354,8 @@ impl App {
             command_input: String::new(),
             tag_results: Vec::new(),
             tag_results_selected: 0,
+            tag_list: Vec::new(),
+            tag_list_selected: 0,
         };
 
         Ok((app, warnings))
@@ -1272,11 +1285,15 @@ impl App {
     ///   `mycora reindex` from the CLI but without leaving the TUI
     /// - `tags <tag1,tag2,...>` — notes matching *any* of the given tags
     ///   (`TagFilterOp::Any`); opens `Mode::TagResults` if there are hits
+    /// - `tags list` — every distinct tag in the active vault, in
+    ///   `Mode::TagList`; `Enter` on one filters by it (same as typing
+    ///   `:tags <that-tag>`), so you don't need to already know or type
+    ///   its exact spelling to use it
     /// - `panes reset` — resets the split layout to `DEFAULT_PANE_WIDTHS`;
     ///   the only way back to it now that widths persist across restarts,
     ///   short of hand-editing or deleting `session.toml`
     ///
-    /// Kept in sync with `COMMAND_REFERENCE` below by hand — only four
+    /// Kept in sync with `COMMAND_REFERENCE` below by hand — only five
     /// entries, not worth generating one from the other.
     pub fn execute_command(&mut self) {
         let input = std::mem::take(&mut self.command_input);
@@ -1322,7 +1339,17 @@ impl App {
     /// required) and a keybinding for either aren't exposed yet — this is
     /// the first, simplest entry point for `Index::filter_by_tags`, which
     /// has had no TUI surface at all since v0.4.
+    /// `:tags list` shows every known tag; `:tags <tag1,tag2,...>` filters
+    /// by them (OR). The literal argument `"list"` is checked first, so a
+    /// tag actually named "list" would need `:tags list,list` or similar
+    /// to reach via this command — the same minor, accepted trade-off as
+    /// `:panes reset`'s literal-argument dispatch.
     fn command_tags(&mut self, args: &str) {
+        if args.trim() == "list" {
+            self.command_tags_list();
+            return;
+        }
+
         let tags: Vec<String> = args
             .split(',')
             .map(str::trim)
@@ -1331,10 +1358,37 @@ impl App {
             .collect();
         if tags.is_empty() {
             self.last_message = None;
-            self.last_error = Some("usage: :tags <tag1,tag2,...>".to_string());
+            self.last_error = Some("usage: :tags <tag1,tag2,...> or :tags list".to_string());
             return;
         }
 
+        self.show_tag_results(tags);
+    }
+
+    fn command_tags_list(&mut self) {
+        match self.index.all_tags(&self.vault_id) {
+            Ok(tags) if tags.is_empty() => {
+                self.last_error = None;
+                self.last_message = Some("no tags in this vault".to_string());
+            }
+            Ok(tags) => {
+                self.last_error = None;
+                self.last_message = None;
+                self.tag_list = tags;
+                self.tag_list_selected = 0;
+                self.mode = Mode::TagList;
+            }
+            Err(err) => {
+                self.last_message = None;
+                self.last_error = Some(format!("tag list failed: {err}"));
+            }
+        }
+    }
+
+    /// Filters by `tags` (OR) and opens `Mode::TagResults` on a match —
+    /// shared by `:tags <tag1,tag2,...>` and `confirm_tag_list` (picking a
+    /// tag from `:tags list` runs this with just that one tag).
+    fn show_tag_results(&mut self, tags: Vec<String>) {
         match self.index.filter_by_tags(&self.vault_id, &tags, TagFilterOp::Any) {
             Ok(hits) if hits.is_empty() => {
                 self.last_error = None;
@@ -1395,5 +1449,37 @@ impl App {
 
     pub fn tag_results_selected(&self) -> usize {
         self.tag_results_selected
+    }
+
+    pub fn move_tag_list_selection(&mut self, delta: isize) {
+        if self.tag_list.is_empty() {
+            return;
+        }
+        let len = self.tag_list.len() as isize;
+        let new_pos = (self.tag_list_selected as isize + delta).rem_euclid(len) as usize;
+        self.tag_list_selected = new_pos;
+    }
+
+    /// Filters by the focused tag — same as typing `:tags <that-tag>`
+    /// yourself, transitioning straight into `Mode::TagResults`.
+    pub fn confirm_tag_list(&mut self) {
+        if let Some((tag, _)) = self.tag_list.get(self.tag_list_selected) {
+            let tag = tag.clone();
+            self.show_tag_results(vec![tag]);
+        } else {
+            self.mode = Mode::Normal;
+        }
+    }
+
+    pub fn cancel_tag_list(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    pub fn tag_list(&self) -> &[(String, i64)] {
+        &self.tag_list
+    }
+
+    pub fn tag_list_selected(&self) -> usize {
+        self.tag_list_selected
     }
 }

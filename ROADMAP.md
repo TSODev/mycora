@@ -455,6 +455,35 @@ Goal: make daily use pleasant, not just functional.
       showed `:panes reset` in the help popup, running it reported "pane
       widths reset to default" and the layout snapped back to 40/40/20,
       and `:panes` with no argument showed "ERROR usage: :panes reset".
+      **Since extended a third time** (2026-07-11, user-requested): added
+      `:tags list`, listing every distinct tag in the active vault
+      (alphabetical, with each tag's note count) in a new `Mode::TagList`
+      full-pane overlay — `Enter` on a tag filters by it, transitioning
+      straight into the existing `Mode::TagResults` (same as typing
+      `:tags <that-tag>` yourself), so you can pick a tag without already
+      knowing or typing its exact spelling. The user also asked about
+      live autocompletion while typing `:tags <partial>` — discussed via
+      `AskUserQuestion` and deferred: it's meaningfully more work (cursor-
+      position-aware word detection in `Command` mode's input, a live
+      filtering suggestion popup, `Tab`-to-complete key handling) for a
+      need `:tags list` already covers in practice, since it sidesteps
+      typing the tag at all rather than assisting with typing it. New
+      `Index::all_tags(vault_id) -> Vec<(String, i64)>`
+      (`SELECT tag, COUNT(*) ... GROUP BY tag ORDER BY tag`) backs it,
+      scoped to the active vault same as `filter_by_tags`. Extracted
+      `command_tags`'s filter-and-open-`TagResults` logic into a shared
+      `show_tag_results(tags)` so both `:tags <tag1,tag2,...>` and
+      picking a tag from the list go through the same path. The literal
+      argument `"list"` is checked before the comma-split filter logic —
+      same minor, accepted edge case as `:panes reset`'s literal-argument
+      dispatch (a tag actually named "list" needs `:tags list,list` or
+      similar to reach via filtering). Manually verified in tmux against
+      the showcase vault: `:tags list` showed every tag alphabetically
+      with correct singular/plural note counts; selecting one and
+      pressing `Enter` opened `Tag results` for just that tag, and
+      `Enter` again jumped to and selected the matching note; `:tags`
+      with no argument showed the updated usage message mentioning both
+      forms.
 - [x] Session state: remember last open note, expanded/collapsed branches
       (2026-07-10) — new `src/session.rs`: `Session::load`/`save` read and
       write `~/.local/share/mycora/session.toml` (XDG data dir alongside

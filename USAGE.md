@@ -429,6 +429,11 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
   note (expanding its ancestors, same as Search and Backlinks), `Esc`
   cancels back to Normal without changing your selection. If nothing
   matches, the status bar says so instead of opening an empty list.
+- `:tags list` — every distinct tag in the active vault, alphabetically,
+  with each tag's note count. `j`/`k` to move, `Enter` filters by the
+  selected tag (same as typing `:tags <that-tag>` yourself, landing in
+  the same result list as above) — a way to browse and pick a tag
+  without already knowing or typing its exact spelling, `Esc` cancels.
 - `:panes reset` — resets the split layout (see [Layout](#layout)) back
   to the default 40/40/20, the quickest way back after resizing since
   pane widths persist across restarts
@@ -583,6 +588,14 @@ session. Not persisted across restarts.
 | *(type)* | Edit the command (see [Command palette](#command-palette)) |
 | `Enter` | Run the command |
 | `Esc` | Cancel without running anything |
+
+### Tags (`:tags list`)
+
+| Key | Action |
+|---|---|
+| `j` / `k` / `↑` / `↓` | Move between tags |
+| `Enter` | Filter by the selected tag (opens Tag results below) |
+| `Esc` | Cancel back to Normal mode |
 
 ### Tag results
 

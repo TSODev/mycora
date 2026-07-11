@@ -61,6 +61,10 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
             draw_tag_results(frame, area, app);
             return;
         }
+        Mode::TagList => {
+            draw_tag_list(frame, area, app);
+            return;
+        }
         Mode::Normal | Mode::Insert | Mode::ConfirmDelete | Mode::Backlinks | Mode::Command => {}
     }
 
@@ -260,6 +264,30 @@ fn draw_tag_results(frame: &mut Frame, area: Rect, app: &App) {
 
     let list =
         List::new(items).block(Block::default().borders(Borders::ALL).title("Tag results"));
+    frame.render_widget(list, area);
+}
+
+/// Every distinct tag in the active vault (`:tags list`), each with its
+/// note count — `Enter` on one filters by it, transitioning into
+/// `draw_tag_results` for that tag (see `App::confirm_tag_list`).
+fn draw_tag_list(frame: &mut Frame, area: Rect, app: &App) {
+    let items: Vec<ListItem> = app
+        .tag_list()
+        .iter()
+        .enumerate()
+        .map(|(i, (tag, count))| {
+            let style = if i == app.tag_list_selected() {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            let plural = if *count == 1 { "" } else { "s" };
+            let label = format!("{tag} ({count} note{plural})");
+            ListItem::new(Line::from(Span::styled(label, style)))
+        })
+        .collect();
+
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Tags"));
     frame.render_widget(list, area);
 }
 
@@ -480,6 +508,7 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
         ),
         Mode::EditBody => ("EDIT BODY", "Esc: save & exit"),
         Mode::TagResults => ("TAG RESULTS", "j/k: move  Enter: open  Esc: cancel"),
+        Mode::TagList => ("TAGS", "j/k: move  Enter: filter  Esc: cancel"),
         Mode::ConfirmDelete | Mode::Command => unreachable!("handled above"),
     };
 

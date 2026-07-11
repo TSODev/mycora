@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`:tags list` command** — lists every distinct tag in the active
+  vault, alphabetically, with each tag's note count. `Enter` on one
+  filters by it (same as typing `:tags <that-tag>`), so you don't need
+  to already know or type its exact spelling. Live autocompletion while
+  typing `:tags <partial>` was considered and deferred — more work for
+  a need this already covers by sidestepping typing the tag at all.
 - **Mutating hints dim out in the status bar when a read-only note is
   selected** — `a/o: new`, `y: copy`, `Tab/S-Tab: move`, `K/J: reorder`,
   `i: rename`, `e: edit`, and `d: delete` render at the same dim style

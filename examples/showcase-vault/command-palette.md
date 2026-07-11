@@ -7,7 +7,7 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T19:00:00Z
+updated: 2026-07-11T00:00:00Z
 ---
 
 # Command palette
@@ -21,6 +21,12 @@ command also appears above the prompt for as long as it's open.
 - `:tags <tag1,tag2,...>` — matches notes with *any* of the listed tags
   (OR, not AND yet), opening a full-pane result list (`j`/`k` move,
   `Enter` jumps, `Esc` cancels)
+- `:tags list` — every distinct tag, alphabetically with note counts;
+  `Enter` on one filters by it, landing in the same result list as
+  above — pick a tag without already knowing or typing its exact
+  spelling. Live autocompletion while typing `:tags <partial>` was
+  considered too, then deferred — more implementation work for a need
+  this already covers in practice.
 - `:panes reset` — resets the [[Layout]] back to 40/40/20, the way back
   after resizing now that widths persist across restarts
 - `:q` / `:quit` — quits, same as `q` `q` in Normal mode

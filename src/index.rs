@@ -531,6 +531,25 @@ impl Index {
         Ok(hits)
     }
 
+    /// Every distinct tag used in `vault_id`, alphabetical, each with how
+    /// many notes carry it — backs the `:tags list` command. Scoped to a
+    /// single vault, same as `filter_by_tags`.
+    pub fn all_tags(&self, vault_id: &str) -> Result<Vec<(String, i64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tag, COUNT(*) FROM tags WHERE vault_id = ?1 GROUP BY tag ORDER BY tag",
+        )?;
+        let rows = stmt.query_map([vault_id], |row| {
+            let tag: String = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            Ok((tag, count))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
     /// Notes (in any mounted vault) that link to `target` in `vault_id` —
     /// i.e. `target`'s backlinks, ordered by title. Reads whatever `links`
     /// rows `reindex`/`reindex_mounted` last resolved; does not itself
@@ -1041,6 +1060,65 @@ mod tests {
             .filter_by_tags("default", &[], TagFilterOp::Any)
             .unwrap()
             .is_empty());
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn all_tags_lists_each_distinct_tag_alphabetically_with_its_note_count() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let (rust_note, note) = tagged_note("Rust ownership", &["rust", "lang"]);
+        tree.insert_loaded(rust_note, note);
+        let (go_note, note) = tagged_note("Go channels", &["go", "lang"]);
+        tree.insert_loaded(go_note, note);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let tags = index.all_tags("default").unwrap();
+        assert_eq!(
+            tags,
+            vec![
+                ("go".to_string(), 1),
+                ("lang".to_string(), 2),
+                ("rust".to_string(), 1),
+            ]
+        );
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn all_tags_is_scoped_to_its_vault_id() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree_a = Tree::new();
+        let (id, note) = tagged_note("A note", &["only-in-a"]);
+        tree_a.insert_loaded(id, note);
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+        index.reindex("a", &tree_a, &vault_a).unwrap();
+
+        assert!(index.all_tags("b").unwrap().is_empty());
+        assert_eq!(
+            index.all_tags("a").unwrap(),
+            vec![("only-in-a".to_string(), 1)]
+        );
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
+    }
+
+    #[test]
+    fn all_tags_is_empty_for_a_vault_with_no_tags() {
+        let db_path = scratch_db_path();
+        let index = Index::open(&db_path).unwrap();
+        assert!(index.all_tags("default").unwrap().is_empty());
         std::fs::remove_file(&db_path).ok();
     }
 

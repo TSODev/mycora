@@ -36,6 +36,7 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::EditBody => handle_edit_body(app, key),
             Mode::Command => handle_command(app, key.code),
             Mode::TagResults => handle_tag_results(app, key.code),
+            Mode::TagList => handle_tag_list(app, key.code),
         }
     }
 
@@ -147,6 +148,16 @@ fn handle_tag_results(app: &mut App, code: KeyCode) {
         KeyCode::Esc => app.cancel_tag_results(),
         KeyCode::Char('j') | KeyCode::Down => app.move_tag_results_selection(1),
         KeyCode::Char('k') | KeyCode::Up => app.move_tag_results_selection(-1),
+        _ => {}
+    }
+}
+
+fn handle_tag_list(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Enter => app.confirm_tag_list(),
+        KeyCode::Esc => app.cancel_tag_list(),
+        KeyCode::Char('j') | KeyCode::Down => app.move_tag_list_selection(1),
+        KeyCode::Char('k') | KeyCode::Up => app.move_tag_list_selection(-1),
         _ => {}
     }
 }
