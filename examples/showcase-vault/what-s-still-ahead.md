@@ -6,7 +6,7 @@ tags:
 - roadmap
 - planned
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-11T09:00:00Z
 ---
 
 # What's still ahead
@@ -14,8 +14,9 @@ updated: 2026-07-10T09:00:00Z
 - **Link autocompletion** while typing a wikilink in the
   body editor — unblocked now that [[Full-pane body editor, save on exit]]
   exists, but not yet implemented
-- **v0.8 — Import/export**: Obsidian-style vault import, flattened
-  Markdown export of a subtree
+- **v0.8 — Import/export**: [[Exporting a subtree]] (flattened Markdown)
+  is done; still ahead: Obsidian-style vault import, and PDF export
+  (most likely built on top of the Markdown export now that it exists)
 - **v0.9 — Hardening**: broader test coverage on tree edge cases,
   crash-safety, large-vault performance, a full documentation pass
 - **v1.0 — Public release**: crates.io publish, release checklist,

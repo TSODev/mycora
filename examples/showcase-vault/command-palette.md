@@ -7,7 +7,7 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-11T00:00:00Z
+updated: 2026-07-11T09:00:00Z
 ---
 
 # Command palette
@@ -29,6 +29,9 @@ command also appears above the prompt for as long as it's open.
   this already covers in practice.
 - `:panes reset` — resets the [[Layout]] back to 40/40/20, the way back
   after resizing now that widths persist across restarts
+- `:export <path>` — flattens the *selected* note's subtree to Markdown
+  at `path`, refusing if it already exists — see
+  [[Exporting a subtree]]
 - `:q` / `:quit` — quits, same as `q` `q` in Normal mode
 
 Every exposed command surfaces backend functionality or a real gap that

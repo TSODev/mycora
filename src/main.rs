@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use clap::{Parser, Subcommand};
 use crossterm::{
     execute,
@@ -15,6 +15,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use mycora::app::App;
 use mycora::config::Config;
 use mycora::index::Index;
+use mycora::note::NoteId;
 use mycora::tree::Tree;
 use mycora::vault::Vault;
 use mycora::{event, ui};
@@ -42,6 +43,18 @@ enum Command {
     Vault {
         #[command(subcommand)]
         action: VaultCommand,
+    },
+    /// Flatten a note's subtree to a single Markdown file.
+    ///
+    /// Matches by exact title within the active vault. Errors if zero or
+    /// multiple notes share that title — use the TUI's `:export` instead
+    /// to disambiguate by direct selection. Refuses if the output path
+    /// already exists rather than overwriting it.
+    Export {
+        /// Exact title of the note whose subtree to export.
+        title: String,
+        /// Path to write the flattened Markdown to.
+        output: PathBuf,
     },
 }
 
@@ -161,6 +174,7 @@ fn main() -> anyhow::Result<()> {
         Some(Command::Vault {
             action: VaultCommand::List,
         }) => return vault_list(),
+        Some(Command::Export { title, output }) => return export_note(&title, output),
         None => {}
     }
 
@@ -321,6 +335,52 @@ fn vault_list() -> anyhow::Result<()> {
             state.join(", ")
         );
     }
+    Ok(())
+}
+
+/// Finds every note titled exactly `title` in the active vault's whole
+/// tree (not just its roots), errors unless there's exactly one match —
+/// titles aren't required to be unique in Mycora, same as
+/// [[wikilink]] resolution's own fan-out behavior, but a CLI export needs
+/// one unambiguous target and has no selection context (unlike the TUI's
+/// `:export`) to disambiguate with — then writes its subtree
+/// (`mycora::export::flatten_subtree`) to `output`. Refuses if `output`
+/// already exists rather than overwriting it.
+fn export_note(title: &str, output: PathBuf) -> anyhow::Result<()> {
+    let config = Config::load()?;
+    let active = config.active_vault();
+    let mut vault = Vault::open(active.path.clone())?;
+    let (tree, report) = vault.load()?;
+    for warning in &report.warnings {
+        eprintln!("mycora: {warning}");
+    }
+
+    let matches: Vec<NoteId> = tree
+        .roots()
+        .iter()
+        .flat_map(|&root| tree.subtree_ids(root))
+        .filter(|&id| tree.get(id).is_some_and(|note| note.title == title))
+        .collect();
+
+    let id = match matches.as_slice() {
+        [] => bail!("no note titled \"{title}\" in vault \"{}\"", active.name),
+        [id] => *id,
+        _ => bail!(
+            "{} notes are titled \"{title}\" in vault \"{}\" — use the TUI's `:export` \
+             instead to disambiguate by direct selection",
+            matches.len(),
+            active.name
+        ),
+    };
+
+    if output.exists() {
+        bail!("{} already exists", output.display());
+    }
+
+    let content = mycora::export::flatten_subtree(&tree, id);
+    std::fs::write(&output, content)
+        .with_context(|| format!("writing {}", output.display()))?;
+    println!("mycora: exported \"{title}\" to {}", output.display());
     Ok(())
 }
 

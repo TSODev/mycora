@@ -174,6 +174,10 @@ pub const COMMAND_REFERENCE: &[(&str, &str)] = &[
     ),
     (":tags list", "list every known tag, pick one to filter by"),
     (":panes reset", "reset pane widths to the default 40/40/20"),
+    (
+        ":export <path>",
+        "flatten the selected note's subtree to a Markdown file",
+    ),
     (":q, :quit", "quit Mycora"),
 ];
 
@@ -1333,8 +1337,14 @@ impl App {
     /// - `panes reset` — resets the split layout to `DEFAULT_PANE_WIDTHS`;
     ///   the only way back to it now that widths persist across restarts,
     ///   short of hand-editing or deleting `session.toml`
+    /// - `export <path>` — flattens the selected note's subtree (see
+    ///   `export::flatten_subtree`) to a Markdown file at `path`. A read
+    ///   operation, not gated by `require_editable` — works on a
+    ///   read-only mounted vault's note just as well as the active
+    ///   vault's. Refuses if `path` already exists rather than
+    ///   overwriting it.
     ///
-    /// Kept in sync with `COMMAND_REFERENCE` below by hand — only five
+    /// Kept in sync with `COMMAND_REFERENCE` below by hand — only six
     /// entries, not worth generating one from the other.
     pub fn execute_command(&mut self) {
         let input = std::mem::take(&mut self.command_input);
@@ -1354,6 +1364,7 @@ impl App {
             "reindex" => self.command_reindex(),
             "tags" => self.command_tags(args),
             "panes" => self.command_panes(args),
+            "export" => self.command_export(args),
             _ => {
                 self.last_message = None;
                 self.last_error = Some(format!("unknown command: {name}"));
@@ -1458,6 +1469,51 @@ impl App {
         self.pane_widths = Self::DEFAULT_PANE_WIDTHS;
         self.last_error = None;
         self.last_message = Some("pane widths reset to default".to_string());
+    }
+
+    fn command_export(&mut self, args: &str) {
+        let path_str = args.trim();
+        if path_str.is_empty() {
+            self.last_message = None;
+            self.last_error = Some("usage: :export <path>".to_string());
+            return;
+        }
+        let Some(id) = self.selected else {
+            self.last_message = None;
+            self.last_error = Some("nothing selected to export".to_string());
+            return;
+        };
+
+        let path = std::path::Path::new(path_str);
+        if path.exists() {
+            self.last_message = None;
+            self.last_error = Some(format!("{path_str} already exists"));
+            return;
+        }
+
+        // `resolve`'s borrow only needs to live long enough to compute
+        // `content` (an owned String) — done before `path.exists()`'s
+        // check above so no borrow of `self` is still alive by the time
+        // `last_error`/`last_message` get written to below.
+        let content = match self.resolve(id) {
+            Some((tree, _)) => crate::export::flatten_subtree(tree, id),
+            None => {
+                self.last_message = None;
+                self.last_error = Some("nothing selected to export".to_string());
+                return;
+            }
+        };
+
+        match std::fs::write(path, content) {
+            Ok(()) => {
+                self.last_error = None;
+                self.last_message = Some(format!("exported to {path_str}"));
+            }
+            Err(err) => {
+                self.last_message = None;
+                self.last_error = Some(format!("export failed: {err}"));
+            }
+        }
     }
 
     pub fn move_tag_results_selection(&mut self, delta: isize) {

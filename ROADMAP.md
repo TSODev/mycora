@@ -592,12 +592,54 @@ Goal: make daily use pleasant, not just functional.
 Goal: notes are never trapped in Mycora.
 
 - [ ] Import from an existing Obsidian-style vault (wikilinks + frontmatter)
-- [ ] Export a subtree to a single flattened Markdown document
+- [x] Export a subtree to a single flattened Markdown document
+      (2026-07-11) — both surfaces landed together, confirmed with the
+      user before implementing: the TUI's `:export <path>` (exports the
+      *selected* note's subtree — a read operation, not gated by
+      `require_editable`, so it works on a read-only mounted vault's
+      note just as well as the active vault's) and a CLI
+      `mycora export <title> <output>` (title-matched within the active
+      vault only, since a headless invocation has no selection context
+      to disambiguate with — errors on zero or multiple matches rather
+      than guessing, same "don't silently guess" instinct as
+      [[Fan-out ambiguous wikilinks|wikilink resolution]] and
+      `vault promote`, pointing at the TUI's `:export` for the
+      disambiguation-by-direct-selection case). New `src/export.rs`,
+      pure and `Tree`-only (no I/O, no `App`/`Vault` dependency): `Note`
+      titles become headings at a level matching depth within the
+      exported subtree (the root note is `#`, its children `##`, ...),
+      and any ATX headings already inside a note's own body are shifted
+      deeper by that same amount via a line-by-line scan (checking for
+      the CommonMark-required trailing space/end-of-line after 1-6 `#`
+      characters, so e.g. `#nothashtag` isn't mistaken for a heading) —
+      same "small hand-rolled scanner, no full parse" spirit as
+      `link.rs`'s wikilink extraction — so a note's own internal
+      structure nests correctly under its title instead of competing
+      with it. Confirmed two more things with the user up front:
+      **refuses if the output path already exists** rather than
+      overwriting it (Mycora has zero visibility/safety-net — no trash,
+      no undo — for a path outside a vault, unlike notes), and no
+      frontmatter or `[[wikilink]]` rewriting in this first pass
+      (wikilinks stay literal text, same as the body preview already
+      renders them — converting ones that resolve to another note *in
+      the same export* into working Markdown anchors is a plausible v2,
+      deliberately not attempted now). 6 unit tests in `export.rs`
+      (single leaf, nested depth, heading-shift correctness, the
+      not-a-heading edge case, empty body, subtree isolation from
+      unrelated siblings). Manually verified: CLI export of a two-level
+      subtree produced correctly nested headings end to end; re-running
+      against the same output path refused with "already exists"; a
+      vault with two notes sharing a title correctly refused ambiguity
+      and named `:export` as the way to disambiguate; the TUI's
+      `:export <path>` on the same note produced byte-identical output
+      to the CLI path; `:export` with no argument showed the usage
+      error.
 - [ ] Export a subtree to a PDF file — user-requested (2026-07-10). Most
       likely built on top of the Markdown export just above (flatten the
       subtree first, then render *that* to PDF) rather than a separate
-      pipeline, so it should land after/alongside it, not before.
-      Rendering approach not decided yet: shelling out to an
+      pipeline, so it should land after/alongside it, not before — that
+      export now exists (see above), so this is unblocked whenever it's
+      picked up. Rendering approach not decided yet: shelling out to an
       already-installed tool (`pandoc`, `wkhtmltopdf`) needs no new Rust
       dependency but requires that tool to be present on the user's
       machine; a pure-Rust PDF crate (e.g. `printpdf`, `typst-as-lib`) is
@@ -606,8 +648,9 @@ Goal: notes are never trapped in Mycora.
       `ratatui::text::Line`, not a page-layout output) — pick the
       rendering approach before starting implementation, not while
       mid-way through it. Command surface not scoped yet either — a `:`
-      command (`:export pdf`?) vs. a `mycora export` CLI subcommand are
-      both plausible, same open question as the Markdown export above.
+      command (`:export pdf`?) vs. a `mycora export` CLI flag are both
+      plausible, same open question the Markdown export above resolved
+      by just doing both.
 - [ ] Optional Postman/Terapi-style templating hooks (stretch — evaluate
       whether this belongs here or in a separate tool)
 

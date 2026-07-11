@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Export a subtree to a flattened Markdown document (v0.8)** — the
+  TUI's `:export <path>` exports the selected note's subtree; the CLI's
+  `mycora export <title> <output>` does the same by exact title match
+  within the active vault (errors on zero or multiple matches, pointing
+  at `:export` to disambiguate). Note titles become headings by depth
+  (root `#`, children `##`, ...), with any headings already inside a
+  note's body shifted deeper to nest correctly. Refuses to overwrite an
+  existing output path. No frontmatter or `[[wikilink]]` rewriting yet.
+
 ### Fixed
 - **`mycora --help`/`mycora reindex --help` said "the active vault"** —
   `reindex` has covered every mounted vault, read-only ones included,

@@ -5,7 +5,7 @@ order: 2
 tags:
 - features
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-11T09:00:00Z
 ---
 
 # Features
@@ -19,5 +19,6 @@ What's actually built, grouped by area:
 - [[Session persistence]] — remembers where you were
 - [[Undo and redo]] — every structural op is reversible
 - [[Theming]] — light/dark, for free, via named colors
+- [[Exporting a subtree]] — flatten a note and its subtree to Markdown
 
 See [[Roadmap]] for what's still ahead.

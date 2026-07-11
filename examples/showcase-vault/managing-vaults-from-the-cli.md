@@ -7,7 +7,7 @@ tags:
 - multi-vault
 - cli
 created: 2026-07-10T20:00:00Z
-updated: 2026-07-10T20:00:00Z
+updated: 2026-07-11T09:00:00Z
 ---
 
 # Managing vaults from the CLI
@@ -43,3 +43,12 @@ See [[CLI vault management stays registry-only]] for why `init` and
 `promote` land on opposite answers to the same "what if `default`
 already exists" question, and why none of these commands ever touch a
 vault's Markdown files.
+
+`mycora vault ...` isn't the only thing the CLI does beyond the TUI —
+`mycora reindex` (see [[Search and indexing]]) and `mycora export`
+(see [[Exporting a subtree]]) are top-level commands of their own, not
+`vault` subcommands, each with the exact same shell-invocation split
+between "runs headlessly" and "has an in-TUI `:` equivalent" that
+`vault` doesn't have at all (there's no `:vault` command — registry
+changes are deliberately CLI-only, since they touch `config.toml`
+before a vault is even loaded).

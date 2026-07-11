@@ -23,6 +23,7 @@
 - [Searching](#searching)
 - [Backlinks](#backlinks)
 - [Command palette](#command-palette)
+- [Exporting a subtree](#exporting-a-subtree)
 - [Creating and renaming notes](#creating-and-renaming-notes)
 - [Editing a note's body](#editing-a-notes-body)
 - [Moving notes](#moving-notes)
@@ -439,10 +440,52 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
 - `:panes reset` — resets the split layout (see [Layout](#layout)) back
   to the default 40/40/20, the quickest way back after resizing since
   pane widths persist across restarts
+- `:export <path>` — flattens the *selected* note's subtree to a
+  Markdown file at `path` (see [Exporting a subtree](#exporting-a-subtree)).
+  Works on a read-only mounted vault's note too, not just the active
+  vault's — exporting only reads. Refuses if `path` already exists.
 - `:q` / `:quit` — quits Mycora, same as `q` `q` in Normal mode
 
 An unrecognized command shows an error in the status bar rather than
 doing nothing silently.
+
+## Exporting a subtree
+
+Flattens a note and its whole subtree into a single Markdown document —
+titles become headings by depth (the root note is `#`, its children
+`##`, and so on), and any headings already inside a note's own body are
+shifted deeper by that same amount, so a note's own internal structure
+nests correctly under its title instead of competing with it. No YAML
+frontmatter in the output, and `[[wikilinks]]` are left as literal text
+for now — rewriting ones that resolve to another note in the same
+export into working Markdown anchors is a possible later improvement,
+not implemented yet.
+
+From the TUI:
+
+```
+:export <path>
+```
+
+Exports the *selected* note's subtree — works on a read-only mounted
+vault's note just as well as the active vault's, since exporting only
+reads (see [Command palette](#command-palette)).
+
+From the shell:
+
+```sh
+mycora export <title> <output>
+```
+
+Matches by exact title within the active vault, since a headless
+invocation has no selection to work from. Errors if zero or more than
+one note shares that title, rather than guessing — if a title isn't
+unique, use the TUI's `:export` instead, which exports whatever's
+actually selected.
+
+Either way, **the output path must not already exist** — Mycora refuses
+rather than overwriting it, since a file outside a vault has none of
+Mycora's usual safety net (no trash, no undo).
 
 ## Creating and renaming notes
 
