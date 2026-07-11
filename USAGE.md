@@ -349,9 +349,10 @@ place.
   padding off the border since it's mostly running prose) — the selected
   note's body, rendered as Markdown (headings, bold/italic, inline/block
   code, lists, blockquotes, horizontal rules). Updates live as you move
-  the selection. Read-only and not interactive: links and `[[wikilinks]]`
-  render as plain text, not as something you can click or navigate from
-  the preview itself.
+  the selection, resetting scroll to the top each time. `Ctrl+d`/`Ctrl+u`
+  scroll it down/up for notes longer than the pane. Read-only and not
+  interactive: links and `[[wikilinks]]` render as plain text, not as
+  something you can click or navigate from the preview itself.
 - **Backlinks** (right) — notes linking to the selected note, live. No
   border color while idle; press `b` to move keyboard focus into it (cyan
   border, highlighted entry) — see [Backlinks](#backlinks) below.
@@ -537,6 +538,7 @@ session. Not persisted across restarts.
 | `Ctrl+R` | Redo |
 | `/` | Open search (see [Searching](#searching)) |
 | `b` | Focus the backlinks pane (see [Backlinks](#backlinks)) |
+| `Ctrl+d` / `Ctrl+u` | Scroll the body preview down / up |
 | `[` / `]` | Shrink / grow the tree pane (see [Layout](#layout)) |
 | `{` / `}` | Shrink / grow the backlinks pane |
 | `:` | Open the command palette (see [Command palette](#command-palette)) |

@@ -6,12 +6,15 @@ tags:
 - interface
 - layout
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-11T00:00:00Z
+updated: 2026-07-11T01:00:00Z
 ---
 
 # Layout
 
-Three columns, plus the [[Status bar]] at the bottom:
+Three columns, plus the [[Status bar]] at the bottom. Every pane —
+tree, body preview, backlinks, plus search/tag results elsewhere in the
+app — scrolls to keep whatever's selected on screen; see
+[[Every pane actually scrolls now]] for why that needed fixing at all.
 
 - **Tree** (left, blue border) — the indented, collapsible note tree. If
   other vaults are mounted (see [[Multi-vault mounting]]), their notes
@@ -21,10 +24,11 @@ Three columns, plus the [[Status bar]] at the bottom:
   padding off the border) — the selected note's body, rendered as
   formatted Markdown (headings, bold/italic, code, lists, blockquotes,
   rules). Read-only; links and wikilinks render as plain text here, not
-  as something clickable. The padding is deliberately only here for
-  now — continuous prose reads more cramped flush against a border than
-  a short list row does, so this pane got it first; tree and backlinks
-  stay flush, kept open to apply there too later.
+  as something clickable. `Ctrl+d`/`Ctrl+u` scroll it down/up, resetting
+  to the top on every new selection. The padding is deliberately only
+  here for now — continuous prose reads more cramped flush against a
+  border than a short list row does, so this pane got it first; tree
+  and backlinks stay flush, kept open to apply there too later.
 - **Backlinks** (right) — notes linking to the selected note, live. No
   border color while idle; `b` moves keyboard focus into it (cyan border)
   — see [[Cross-links and backlinks]].

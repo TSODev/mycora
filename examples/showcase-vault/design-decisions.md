@@ -5,7 +5,7 @@ order: 3
 tags:
 - design-decision
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T22:00:00Z
+updated: 2026-07-11T01:00:00Z
 ---
 
 # Design decisions
@@ -21,6 +21,7 @@ behind each — the "why," not just the "what."
 - [[Disposable SQLite index]]
 - [[CLI vault management stays registry-only]]
 - [[Guard every mutation against the wrong vault]]
+- [[Every pane actually scrolls now]]
 
 Most of these were resolved as open questions during development, not
 decided upfront — see [[Roadmap]] for the versioned history each one is

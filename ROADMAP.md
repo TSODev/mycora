@@ -336,6 +336,51 @@ Goal: make daily use pleasant, not just functional.
       and backlinks panes live, and all three full-pane overlays (search,
       the backlinks picker, the body editor) still take over the whole
       screen exactly as before rather than showing the split
+      **Since fixed** (2026-07-11, user-reported): none of the panes
+      actually scrolled — the user asked whether this had been verified,
+      and it hadn't. Confirmed live against a 40-leaf-note generated test
+      vault in a 15-row terminal: moving `j` past the tree pane's visible
+      rows changed the breadcrumb (selection genuinely moved) but the
+      pane kept showing the exact same rows, selected row fully
+      off-screen; a note with `### Tasks`/`### Related` sections beyond
+      the body preview's height was silently truncated with no way to
+      see the rest. Root cause: every list pane (`draw_tree`,
+      `draw_backlinks_pane`, `draw_search`, `draw_tag_results`,
+      `draw_tag_list`) built a plain `ratatui_widgets::List` and rendered
+      it with `render_widget` — never `render_stateful_widget` with a
+      `ListState`, so ratatui had no "keep the selected item visible"
+      behavior at all, just always rendered from the first item.
+      Verified directly against the vendored `ratatui-widgets-0.3.2`
+      source (`list/rendering.rs`'s `get_items_bounds`) before assuming
+      a fix: `List`'s stateful render recomputes the visible window from
+      `state.selected`/`state.offset` on *every* call, so a fresh
+      `ListState` built each frame (`offset` starting at 0) still
+      produces the correct scrolled window — no new persisted scroll
+      state needed in `App` for these 5 panes, just switching each to
+      `render_stateful_widget` with `ListState::default()
+      .with_selected(selected_index)` (the backlinks pane only when
+      `Mode::Backlinks`-focused, matching its existing focused-only
+      highlight logic). The body preview (`Paragraph`) has no such
+      built-in behavior — no "selected line" concept for prose — so it
+      got real new state: `App::body_scroll: u16`, `Ctrl+d`/`Ctrl+u`
+      (vim's half-page-scroll keys, Normal-mode-only, same scoping as
+      `[`/`]`/`{`/`}`) adjust it by a fixed step, and a new
+      `App::set_selected` became the *only* place `self.selected` is
+      ever written (replacing 15 scattered direct assignments across
+      `app.rs`) so `body_scroll` resets to 0 on every selection change
+      in exactly one place rather than needing to remember it at each
+      call site. Deliberately no upper clamp on scrolling down —
+      computing the true max would mean `App` duplicating
+      `markdown.rs`'s render+wrap logic just to count lines; overscroll
+      just shows blank space and recovers with `Ctrl+u`. Manually
+      verified in tmux re-running the exact scenario that surfaced the
+      bug: the tree pane now visibly scrolls to keep the selected row on
+      screen (confirmed via `tmux capture-pane -e`, the `[7m` reversed
+      code lands on the correct row); `Ctrl+d` revealed the rest of a
+      truncated note, `Ctrl+u` scrolled back, and selecting a different
+      note reset to the top; `/` search results scrolled correctly
+      moving `Down` past the fold; a normal-size terminal with short
+      content rendered identically to before (no regression).
 - [x] Resizable panes for the split layout above (2026-07-10) — `[`/`]`
       shrink/grow the tree pane, `{`/`}` shrink/grow the backlinks pane,
       always active in Normal mode (no dedicated resize mode — confirmed

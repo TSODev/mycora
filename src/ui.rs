@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
 
@@ -98,11 +98,13 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
 /// highlighted.
 fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
     let dim = Style::default().add_modifier(Modifier::DIM);
+    let mut selected_index = None;
 
     let items: Vec<ListItem> = app
         .visible_rows()
         .into_iter()
-        .map(|row| match row {
+        .enumerate()
+        .map(|(i, row)| match row {
             TreeRow::VaultSeparator(name) => {
                 ListItem::new(Line::from(Span::styled(format!("── {name} ──"), dim)))
             }
@@ -135,6 +137,7 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
 
                 let base = if editable { Style::default() } else { dim };
                 let style = if app.selected == Some(id) {
+                    selected_index = Some(i);
                     base.add_modifier(Modifier::REVERSED)
                 } else {
                     base
@@ -151,7 +154,14 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
             .border_style(Style::default().fg(PANE_TREE_COLOR))
             .title("Mycora"),
     );
-    frame.render_widget(list, area);
+    // Stateful purely so ratatui scrolls the pane to keep the selected
+    // row on screen (see `App::visible_rows`'s doc comment on why this
+    // needed fixing) — no `highlight_style` is set on the `List`, so this
+    // doesn't add any styling beyond what's already applied per-item
+    // above; a fresh `ListState` every frame is enough, ratatui
+    // recomputes the correct scroll offset from `selected_index` alone.
+    let mut state = ListState::default().with_selected(selected_index);
+    frame.render_stateful_widget(list, area, &mut state);
 }
 
 /// Read-only preview of the selected note's body, rendered as Markdown
@@ -177,17 +187,23 @@ fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
                 // ROADMAP.md), this one gets it first since it's the one
                 // pane that's mostly running text rather than list rows.
                 .padding(ratatui::widgets::Padding::horizontal(1)),
-        );
+        )
+        // Manual offset (not auto-follow — there's no "selected line"
+        // concept for prose): `Ctrl+d`/`Ctrl+u` adjust `App::body_scroll`,
+        // reset to 0 by `App::set_selected` whenever the selection
+        // changes so a freshly picked note always starts at the top.
+        .scroll((app.body_scroll(), 0));
     frame.render_widget(paragraph, area);
 }
 
 /// List of notes linking to the selected note — follows the current
-/// selection live. Doesn't reindex first, same as `App::link_count_for`'s
-/// badges: reflects whatever the last reindex resolved (on startup, or the
-/// next time `/` is used), not a live-as-you-type view of unreindexed
-/// edits. Interactive when `b` shifts focus here (`Mode::Backlinks`): the
-/// focused entry is highlighted and the border turns cyan, matching the
-/// tree's own selection styling; otherwise it's just a glance list.
+/// selection live. Doesn't reindex first, same as the tree pane's
+/// collapsed-branch link-count badges: reflects whatever the last
+/// reindex resolved (on startup, or the next time `/` is used), not a
+/// live-as-you-type view of unreindexed edits. Interactive when `b`
+/// shifts focus here (`Mode::Backlinks`): the focused entry is
+/// highlighted and the border turns cyan, matching the tree's own
+/// selection styling; otherwise it's just a glance list.
 fn draw_backlinks_pane(frame: &mut Frame, area: Rect, app: &App) {
     let focused = app.mode == Mode::Backlinks;
 
@@ -216,7 +232,14 @@ fn draw_backlinks_pane(frame: &mut Frame, area: Rect, app: &App) {
             .border_style(border_style)
             .title("Backlinks"),
     );
-    frame.render_widget(list, area);
+    // Scroll-to-selection only matters while focused — the passive view
+    // (nothing highlighted) has no selection concept to keep on screen.
+    if focused {
+        let mut state = ListState::default().with_selected(Some(app.backlinks_selected()));
+        frame.render_stateful_widget(list, area, &mut state);
+    } else {
+        frame.render_widget(list, area);
+    }
 }
 
 fn draw_search(frame: &mut Frame, area: Rect, app: &App) {
@@ -247,7 +270,8 @@ fn draw_search(frame: &mut Frame, area: Rect, app: &App) {
 
     let title = format!("Search: {}", app.search_query());
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
-    frame.render_widget(list, area);
+    let mut state = ListState::default().with_selected(Some(app.search_selected()));
+    frame.render_stateful_widget(list, area, &mut state);
 }
 
 /// Notes matched by a `:tags` command — full-pane overlay like `Search`,
@@ -270,7 +294,8 @@ fn draw_tag_results(frame: &mut Frame, area: Rect, app: &App) {
 
     let list =
         List::new(items).block(Block::default().borders(Borders::ALL).title("Tag results"));
-    frame.render_widget(list, area);
+    let mut state = ListState::default().with_selected(Some(app.tag_results_selected()));
+    frame.render_stateful_widget(list, area, &mut state);
 }
 
 /// Every distinct tag in the active vault (`:tags list`), each with its
@@ -294,7 +319,8 @@ fn draw_tag_list(frame: &mut Frame, area: Rect, app: &App) {
         .collect();
 
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Tags"));
-    frame.render_widget(list, area);
+    let mut state = ListState::default().with_selected(Some(app.tag_list_selected()));
+    frame.render_stateful_widget(list, area, &mut state);
 }
 
 /// Small reference popup listing every command `App::execute_command`

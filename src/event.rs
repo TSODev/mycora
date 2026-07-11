@@ -48,6 +48,18 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         app.redo();
         return;
     }
+    // Ctrl+d/Ctrl+u (vim's half-page scroll) need the same early check as
+    // Ctrl+r above: a plain `match key.code` can't tell Ctrl+d from bare
+    // `d` (delete) or Ctrl+u from bare `u` (undo), since KeyCode::Char
+    // doesn't carry modifiers.
+    if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.scroll_body_down();
+        return;
+    }
+    if key.code == KeyCode::Char('u') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.scroll_body_up();
+        return;
+    }
 
     match key.code {
         KeyCode::Char('q') => app.request_quit(),

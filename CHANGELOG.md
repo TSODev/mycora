@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **No pane actually scrolled** — the tree, backlinks, search results,
+  `:tags` results, and `:tags list` panes never followed the selection
+  once it moved past the visible rows (they always rendered from the
+  first item, since none used `ListState`/`render_stateful_widget`); the
+  body preview had no way to scroll at all, silently truncating any note
+  longer than the pane. Tree/backlinks/search/tag panes now use
+  ratatui's built-in scroll-to-selection; the body preview gained
+  `Ctrl+d`/`Ctrl+u` (vim half-page scroll), resetting to the top
+  whenever the selection changes.
+
 ### Added
 - **Body preview pane padding** — 1-column horizontal padding between
   the border and the rendered Markdown, since continuous prose read more

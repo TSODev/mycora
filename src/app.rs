@@ -155,6 +155,11 @@ pub struct App {
     /// `(tag, note count)` pairs while `mode == Mode::TagList`.
     tag_list: Vec<(String, i64)>,
     tag_list_selected: usize,
+    /// Vertical scroll offset (rendered lines) into the body preview pane
+    /// — see `App::scroll_body_down`/`scroll_body_up`. Reset to 0 by
+    /// `set_selected` every time the selection changes, so a freshly
+    /// selected note always starts at the top.
+    body_scroll: u16,
 }
 
 /// `(syntax, description)` pairs for every command `execute_command`
@@ -356,6 +361,7 @@ impl App {
             tag_results_selected: 0,
             tag_list: Vec::new(),
             tag_list_selected: 0,
+            body_scroll: 0,
         };
 
         Ok((app, warnings))
@@ -487,6 +493,16 @@ impl App {
         }
     }
 
+    /// The single place `self.selected` is ever written — also resets
+    /// `body_scroll` to 0, so a freshly selected note (or a fresh search/
+    /// backlinks/tag-list jump) always starts at the top of the body
+    /// preview rather than wherever a previous note happened to be
+    /// scrolled to.
+    fn set_selected(&mut self, id: Option<NoteId>) {
+        self.selected = id;
+        self.body_scroll = 0;
+    }
+
     pub fn move_selection(&mut self, delta: isize) {
         let ids: Vec<NoteId> = self
             .visible_rows()
@@ -497,7 +513,7 @@ impl App {
             })
             .collect();
         if ids.is_empty() {
-            self.selected = None;
+            self.set_selected(None);
             return;
         }
 
@@ -508,7 +524,7 @@ impl App {
 
         let len = ids.len() as isize;
         let new_pos = (current_pos as isize + delta).rem_euclid(len) as usize;
-        self.selected = Some(ids[new_pos]);
+        self.set_selected(Some(ids[new_pos]));
     }
 
     pub fn toggle_expand(&mut self) {
@@ -552,7 +568,7 @@ impl App {
         if let Some(parent) = parent {
             self.expanded.insert(parent);
         }
-        self.selected = Some(new_id);
+        self.set_selected(Some(new_id));
         self.persist(new_id);
         self.record(UndoAction::Remove { root_id: new_id });
         self.begin_naming();
@@ -565,7 +581,7 @@ impl App {
             }
             let new_id = self.tree.create_note("New note", Some(parent));
             self.expanded.insert(parent);
-            self.selected = Some(new_id);
+            self.set_selected(Some(new_id));
             self.persist(new_id);
             self.record(UndoAction::Remove { root_id: new_id });
             self.begin_naming();
@@ -590,7 +606,7 @@ impl App {
         for copied_id in self.tree.subtree_ids(new_root) {
             self.persist(copied_id);
         }
-        self.selected = Some(new_root);
+        self.set_selected(Some(new_root));
         self.record(UndoAction::Remove {
             root_id: new_root,
         });
@@ -759,7 +775,7 @@ impl App {
                 self.last_error = Some(format!("trash failed: {err}"));
             }
         }
-        self.selected = next;
+        self.set_selected(next);
         self.record(UndoAction::Restore { snapshot: removed });
     }
 
@@ -850,7 +866,7 @@ impl App {
                 let previous = self.tree.get(id)?.title.clone();
                 self.tree.rename(id, title);
                 self.persist(id);
-                self.selected = Some(id);
+                self.set_selected(Some(id));
                 Some(UndoAction::Rename {
                     id,
                     title: previous,
@@ -863,7 +879,7 @@ impl App {
                     self.expanded.insert(p);
                 }
                 self.persist(id);
-                self.selected = Some(id);
+                self.set_selected(Some(id));
                 Some(UndoAction::Move {
                     id,
                     parent: previous,
@@ -879,7 +895,7 @@ impl App {
                     return None;
                 }
                 self.persist_siblings(id);
-                self.selected = Some(id);
+                self.set_selected(Some(id));
                 Some(UndoAction::Reorder {
                     id,
                     move_down: !move_down,
@@ -894,7 +910,7 @@ impl App {
                         self.last_error = Some(format!("trash failed: {err}"));
                     }
                 }
-                self.selected = next;
+                self.set_selected(next);
                 Some(UndoAction::Restore { snapshot: removed })
             }
             UndoAction::Restore { snapshot } => {
@@ -907,14 +923,14 @@ impl App {
                 for id in ids {
                     self.persist(id);
                 }
-                self.selected = Some(root_id);
+                self.set_selected(Some(root_id));
                 Some(UndoAction::Remove { root_id })
             }
             UndoAction::EditBody { id, body } => {
                 let previous = self.tree.get(id)?.body.clone();
                 self.tree.set_body(id, body);
                 self.persist(id);
-                self.selected = Some(id);
+                self.set_selected(Some(id));
                 Some(UndoAction::EditBody {
                     id,
                     body: previous,
@@ -972,7 +988,7 @@ impl App {
         if let Some(hit) = self.search_results.get(self.search_selected) {
             let id = hit.note_id;
             self.reveal(id);
-            self.selected = Some(id);
+            self.set_selected(Some(id));
         }
         self.mode = Mode::Normal;
     }
@@ -1041,7 +1057,7 @@ impl App {
         if let Some(hit) = self.live_backlinks().get(self.backlinks_selected) {
             let id = hit.note_id;
             self.reveal(id);
-            self.selected = Some(id);
+            self.set_selected(Some(id));
         }
         self.mode = Mode::Normal;
     }
@@ -1166,6 +1182,31 @@ impl App {
     /// `}` — grows the backlinks pane, taking the width from the body pane.
     pub fn grow_backlinks_pane(&mut self) {
         self.resize_pane(2, true);
+    }
+
+    /// Rows a `Ctrl+d`/`Ctrl+u` half-page scroll moves the body preview
+    /// by. Fixed rather than computed from the pane's actual rendered
+    /// height, which isn't threaded into `App` — large enough to feel
+    /// like progress, small enough not to skip past short sections.
+    const BODY_SCROLL_STEP: u16 = 10;
+
+    /// `Ctrl+d` — scrolls the body preview down. Deliberately unclamped
+    /// at the top end: computing the true max would mean duplicating
+    /// `markdown.rs`'s render+wrap logic here just to count lines, so
+    /// scrolling past the end just shows blank space and recovers with
+    /// `Ctrl+u` — the same way plenty of simple pagers behave without
+    /// tracking exact content height.
+    pub fn scroll_body_down(&mut self) {
+        self.body_scroll = self.body_scroll.saturating_add(Self::BODY_SCROLL_STEP);
+    }
+
+    /// `Ctrl+u` — scrolls the body preview up, floored at the top.
+    pub fn scroll_body_up(&mut self) {
+        self.body_scroll = self.body_scroll.saturating_sub(Self::BODY_SCROLL_STEP);
+    }
+
+    pub fn body_scroll(&self) -> u16 {
+        self.body_scroll
     }
 
     /// Ancestor titles from the selected note's root down to itself
@@ -1434,7 +1475,7 @@ impl App {
         if let Some(hit) = self.tag_results.get(self.tag_results_selected) {
             let id = hit.note_id;
             self.reveal(id);
-            self.selected = Some(id);
+            self.set_selected(Some(id));
         }
         self.mode = Mode::Normal;
     }
