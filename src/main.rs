@@ -56,6 +56,24 @@ enum Command {
         /// Path to write the flattened Markdown to.
         output: PathBuf,
     },
+    /// Import an existing Obsidian-style vault as a new Mycora vault.
+    ///
+    /// Folder structure becomes tree structure: a subdirectory becomes a
+    /// parent note (reusing a same-named .md file as that note's content
+    /// if one exists, else an empty placeholder), everything inside it
+    /// becomes children. `[[Title|Alias]]`/`[[Title#Heading]]` links are
+    /// rewritten down to plain `[[Title]]` so Mycora's own wikilink
+    /// resolution can actually find them. Always creates a new vault and
+    /// mounts it, same as `vault init` — refuses if the destination
+    /// already exists and isn't empty.
+    Import {
+        /// Path to the existing Obsidian vault directory to read from.
+        source: PathBuf,
+        /// Name for the new vault in the registry.
+        name: String,
+        /// Path to create the new Mycora vault directory at.
+        path: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -175,6 +193,7 @@ fn main() -> anyhow::Result<()> {
             action: VaultCommand::List,
         }) => return vault_list(),
         Some(Command::Export { title, output }) => return export_note(&title, output),
+        Some(Command::Import { source, name, path }) => return import_vault(source, &name, path),
         None => {}
     }
 
@@ -381,6 +400,50 @@ fn export_note(title: &str, output: PathBuf) -> anyhow::Result<()> {
     std::fs::write(&output, content)
         .with_context(|| format!("writing {}", output.display()))?;
     println!("mycora: exported \"{title}\" to {}", output.display());
+    Ok(())
+}
+
+/// Converts an Obsidian-style vault at `source` into a brand new Mycora
+/// vault at `path`, registering and mounting it (same as `vault_init`).
+/// Refuses if `path` already exists and has any content — importing on
+/// top of something else isn't a case worth guessing about, same
+/// don't-silently-clobber instinct as `export`'s refuse-on-existing-file.
+fn import_vault(source: PathBuf, name: &str, path: PathBuf) -> anyhow::Result<()> {
+    if !source.is_dir() {
+        bail!("{} is not a directory", source.display());
+    }
+    if path.exists() && path.read_dir()?.next().is_some() {
+        bail!("{} already exists and is not empty", path.display());
+    }
+
+    let (tree, warnings) = mycora::import::import_obsidian_vault(&source)?;
+    for warning in &warnings {
+        eprintln!("mycora: {warning}");
+    }
+
+    let mut vault = Vault::open(path.clone())?;
+    let ids: Vec<NoteId> = tree
+        .roots()
+        .iter()
+        .flat_map(|&root| tree.subtree_ids(root))
+        .collect();
+    for id in &ids {
+        let note = tree
+            .get(*id)
+            .expect("every id from subtree_ids resolves in the same tree");
+        vault.save_note(*id, note)?;
+    }
+
+    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
+    let config_path = Config::default_path(&home);
+    Config::add_vault(&config_path, name, path.clone(), true)?;
+
+    println!(
+        "mycora: imported {} note(s) from {} into \"{name}\" ({}), mounted",
+        ids.len(),
+        source.display(),
+        path.display()
+    );
     Ok(())
 }
 

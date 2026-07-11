@@ -591,7 +591,69 @@ Goal: make daily use pleasant, not just functional.
 
 Goal: notes are never trapped in Mycora.
 
-- [ ] Import from an existing Obsidian-style vault (wikilinks + frontmatter)
+- [x] Import from an existing Obsidian-style vault (wikilinks +
+      frontmatter) (2026-07-11) — the core tension raised and resolved
+      with the user before designing further: Obsidian has no `parent`
+      field at all, its only organizational structure is the filesystem
+      (folders), and its notes form a free graph via `[[wikilinks]]`,
+      not a strict tree the way Mycora requires. **Confirmed: map the
+      folder structure onto the tree** — a subdirectory becomes a parent
+      note (reusing a same-named `.md` file as that note's own content
+      if one exists, synthesizing an empty placeholder if not), and
+      everything inside it becomes children — rather than a flat import
+      that would discard the user's actual organization entirely.
+      New `src/import.rs`, mirroring `Vault::load`'s own `(Tree,
+      warnings)` shape but reading a foreign directory format:
+      `import_obsidian_vault(source)` walks recursively (skipping
+      `.obsidian/` and anything that isn't `.md` — images, canvases,
+      plugin data), builds every note via `Tree::insert_loaded` (the
+      same bulk-load path `Vault::load()` itself uses for "construct
+      many notes then derive structure") with a fresh `NoteId::new()`
+      each, then one `Tree::rebuild_hierarchy()` call at the end. Per
+      file: **title** comes from the filename stem, not a leading `#
+      Heading` the way Mycora's own format expects — Obsidian doesn't
+      reliably have one. **Frontmatter** gets its own loose parse (a
+      small local `tags: Option<TagsField>` type, `#[serde(untagged)]`
+      over a single string or a list, since Obsidian accepts either
+      shape) rather than reusing `vault.rs`'s strict `Frontmatter`
+      struct, which would reject anything not matching Mycora's own
+      exact `id`/`parent`/`order`/`tags`/`created`/`updated` schema;
+      missing or malformed frontmatter is "no tags," not an error, same
+      self-heal-and-warn stance `vault.rs` already takes. **Body**: every
+      `[[Title|Alias]]` or `[[Title#Heading]]` is rewritten down to
+      plain `[[Title]]` — a small hand-rolled scanner in the same style
+      as `link.rs`'s own wikilink extraction — since Mycora's scanner
+      only understands bare `[[Title]]`; without this, every aliased or
+      heading-anchored link (extremely common in real Obsidian vaults)
+      would silently become a broken link the moment it's resolved,
+      undercutting a good chunk of the point of importing at all.
+      CLI-only: `mycora import <source> <name> <path>`, mirroring
+      `vault init`'s exact shape (always creates a *new* vault, always
+      mounts it, registers via the same `Config::add_vault`) — no
+      TUI-side `:import`, since unlike `:export` (which reads the
+      already-selected note) an import has no analogous "current
+      selection" to import *into*; it's inherently a create-a-new-vault
+      operation, the same reason `vault init` itself is CLI-only.
+      Refuses if the destination path already exists and is non-empty,
+      same don't-silently-clobber instinct as `export`'s
+      refuse-on-existing-file and `vault add`'s refuse-on-duplicate-name.
+      10 unit tests in `import.rs` (alias/heading-anchor stripping,
+      frontmatter splitting, a flat vault, folder-note reuse, synthesized
+      empty folder notes, skipping `.obsidian/`). Manually verified
+      end-to-end against a hand-built scratch Obsidian vault (a top-level
+      note, a `Projects/` folder with a matching `Projects.md` plus a
+      child note, an `Archive/` folder with *no* matching note, one
+      `[[Title#Heading]]` link and one `[[Title|Alias]]` link, one note
+      with list-form `tags: [work, active]`, one with single-string
+      `tags: urgent`, one with no frontmatter at all): the imported
+      tree's shape in the TUI matched the source folder layout exactly
+      (`Projects` kept its own content *and* got the child note nested
+      under it; `Archive` appeared empty but present with its child);
+      both link forms rendered down to plain `[[Title]]` and `mycora
+      reindex` resolved them with zero broken-link warnings; both tag
+      forms came through as real Mycora tags; re-running the same import
+      against the same now-populated destination refused rather than
+      duplicating or overwriting anything.
 - [x] Export a subtree to a single flattened Markdown document
       (2026-07-11) — both surfaces landed together, confirmed with the
       user before implementing: the TUI's `:export <path>` (exports the
@@ -601,8 +663,8 @@ Goal: notes are never trapped in Mycora.
       `mycora export <title> <output>` (title-matched within the active
       vault only, since a headless invocation has no selection context
       to disambiguate with — errors on zero or multiple matches rather
-      than guessing, same "don't silently guess" instinct as
-      [[Fan-out ambiguous wikilinks|wikilink resolution]] and
+      than guessing, same "don't silently guess" instinct as ambiguous
+      wikilink resolution (see v0.5's "fan-out" entry above) and
       `vault promote`, pointing at the TUI's `:export` for the
       disambiguation-by-direct-selection case). New `src/export.rs`,
       pure and `Tree`-only (no I/O, no `App`/`Vault` dependency): `Note`
@@ -878,7 +940,7 @@ Goal: stability before a public release.
   **Since extended a seventh time** (2026-07-10, user-requested): the
   "deliberately didn't add a badge" call above got revisited — a
   `READ-ONLY` label now sits right-aligned on the breadcrumb row (row 1
-  of the [[Status bar]]) whenever the selection is read-only, via a new
+  of the status bar) whenever the selection is read-only, via a new
   `App::selected_is_read_only()` and a fixed-width
   (`READ_ONLY_MARKER_WIDTH = 12`) right-hand column in `ui.rs`'s
   `draw_breadcrumb`, split off from the breadcrumb text with a `Layout`

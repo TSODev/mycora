@@ -24,6 +24,7 @@
 - [Backlinks](#backlinks)
 - [Command palette](#command-palette)
 - [Exporting a subtree](#exporting-a-subtree)
+- [Importing an Obsidian vault](#importing-an-obsidian-vault)
 - [Creating and renaming notes](#creating-and-renaming-notes)
 - [Editing a note's body](#editing-a-notes-body)
 - [Moving notes](#moving-notes)
@@ -486,6 +487,41 @@ actually selected.
 Either way, **the output path must not already exist** — Mycora refuses
 rather than overwriting it, since a file outside a vault has none of
 Mycora's usual safety net (no trash, no undo).
+
+## Importing an Obsidian vault
+
+```sh
+mycora import <source> <name> <path>
+```
+
+Converts an existing Obsidian vault at `<source>` into a brand new
+Mycora vault registered as `<name>` at `<path>` — mounted immediately,
+same as `mycora vault init`. CLI-only; there's no TUI `:import`, since
+unlike export there's no "currently open" vault to import *into* — it
+always creates a new one.
+
+Obsidian has no `parent` field; its only organizational structure is the
+filesystem. Folder structure becomes tree structure: a subdirectory
+becomes a parent note (reusing a same-named `.md` file as that note's
+own content if one exists, or an empty placeholder if not), and
+everything inside it becomes children.
+
+Per note:
+
+- **Title** comes from the filename, not a heading inside the file.
+- **Tags** carry over from frontmatter `tags:` (either `tags: single`
+  or `tags: [a, b]` — Obsidian allows both). Every other frontmatter
+  field is dropped; missing or unparseable frontmatter just means no
+  tags, not an error.
+- **Links**: `[[Title|Alias]]` and `[[Title#Heading]]` are rewritten
+  down to plain `[[Title]]`, since Mycora's own wikilink resolution
+  only understands that bare form — without this, aliased and
+  heading-anchored links (both common in real Obsidian vaults) would
+  come through broken.
+
+`.obsidian/` and anything that isn't a `.md` file (images, canvases,
+plugin data) are skipped. Refuses if `<path>` already exists and isn't
+empty, same as export's refuse-on-existing-file.
 
 ## Creating and renaming notes
 

@@ -5,7 +5,7 @@ order: 2
 tags:
 - features
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-11T09:00:00Z
+updated: 2026-07-11T09:30:00Z
 ---
 
 # Features
@@ -20,5 +20,6 @@ What's actually built, grouped by area:
 - [[Undo and redo]] — every structural op is reversible
 - [[Theming]] — light/dark, for free, via named colors
 - [[Exporting a subtree]] — flatten a note and its subtree to Markdown
+- [[Importing an Obsidian vault]] — folders become tree structure
 
 See [[Roadmap]] for what's still ahead.

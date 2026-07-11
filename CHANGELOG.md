@@ -8,6 +8,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`mycora import` — import an Obsidian-style vault (v0.8)** —
+  `mycora import <source> <name> <path>` converts an existing Obsidian
+  vault into a new, registered-and-mounted Mycora vault. Folder
+  structure becomes tree structure (a subdirectory becomes a parent
+  note, reusing a same-named `.md` file as its content if present, or
+  an empty placeholder if not); `[[Title|Alias]]`/`[[Title#Heading]]`
+  links are rewritten down to plain `[[Title]]` so Mycora's own
+  wikilink resolution can find them; frontmatter `tags:` (string or
+  list form) carry over, everything else is dropped. CLI-only, no
+  TUI-side `:import`. Refuses if the destination already exists and is
+  non-empty.
 - **Export a subtree to a flattened Markdown document (v0.8)** — the
   TUI's `:export <path>` exports the selected note's subtree; the CLI's
   `mycora export <title> <output>` does the same by exact title match

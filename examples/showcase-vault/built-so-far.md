@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T22:00:00Z
+updated: 2026-07-11T09:30:00Z
 ---
 
 # Built so far
@@ -35,3 +35,8 @@ updated: 2026-07-10T22:00:00Z
   became fully navigable (not just visible), with every mutation guarded
   against acting on the wrong vault (see
   [[Guard every mutation against the wrong vault]])
+- **v0.8 (in progress)** — notes are never trapped in Mycora:
+  [[Exporting a subtree]] flattens a note and its descendants to
+  Markdown; [[Importing an Obsidian vault]] converts an existing
+  Obsidian vault into a new one, mapping its folder structure onto
+  Mycora's tree (see [[Folder structure becomes tree structure]])
