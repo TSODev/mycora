@@ -874,3 +874,12 @@ Goal: stability before a public release.
   read-only note, those same seven rendered with no bold/color codes at
   all (fully dimmed), while `j/k`, `u`, `^R`, `/`, `b`, and the resize
   keys kept their normal styling throughout.
+  **Since extended a ninth time** (2026-07-11, user-reported): the CLI's
+  own `mycora --help`/`mycora reindex --help` text still said "the
+  active vault" — stale since `reindex` started covering every mounted
+  vault back in the "Since extended" note above. Fixed the doc comment
+  driving clap's generated help, split into a short summary (blank-line
+  paragraph break makes clap show it in `mycora --help`'s command list
+  and `reindex -h`) plus a longer explanation for `reindex --help`.
+  `mycora vault --help` and every subcommand's own `--help` were already
+  accurate and complete, checked at the same time — no changes needed.

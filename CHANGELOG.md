@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- **`mycora --help`/`mycora reindex --help` said "the active vault"** —
+  `reindex` has covered every mounted vault, read-only ones included,
+  since the v0.5 multi-vault work; only the CLI's own `--help` text
+  (the doc comments clap generates it from) never caught up. Fixed, and
+  split into a short summary (shown in `mycora --help`'s command list
+  and `reindex -h`) plus a longer explanation (`reindex --help`).
 - **No pane actually scrolled** — the tree, backlinks, search results,
   `:tags` results, and `:tags list` panes never followed the selection
   once it moved past the visible rows (they always rendered from the

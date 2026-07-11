@@ -29,10 +29,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Rebuild the SQLite index for the active vault from its Markdown files.
+    /// Rebuild the SQLite index for every mounted vault from its Markdown files.
+    ///
+    /// Not just the active one — read-only mounted vaults are indexed too.
     Reindex {
-        /// Keep running and reindex again whenever a file in the vault
-        /// directory changes, instead of exiting after one pass.
+        /// Keep running and reindex again whenever a file in any mounted
+        /// vault's directory changes, instead of exiting after one pass.
         #[arg(long)]
         watch: bool,
     },
