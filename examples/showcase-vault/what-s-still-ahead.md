@@ -6,7 +6,7 @@ tags:
 - roadmap
 - planned
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T13:00:00Z
+updated: 2026-07-12T14:00:00Z
 ---
 
 # What's still ahead
@@ -14,12 +14,6 @@ updated: 2026-07-12T13:00:00Z
 - **Link autocompletion** while typing a wikilink in the
   body editor — unblocked now that [[Full-pane body editor, save on exit]]
   exists, but not yet implemented
-- **A tree row for archived vaults, and a way to declutter it** — an
-  archived vault (see
-  [[Compressing a vault trades files for one archive, deliberately]])
-  has no placeholder row of its own yet; a `:config archive show/hide`
-  toggle to hide these rows once there are several was floated and its
-  intent confirmed, but not designed further
 - **v0.8 — Import/export**: [[Exporting a subtree]] (Markdown or PDF)
   and [[Importing an Obsidian vault]] are both done; still ahead:
   optional Postman/Terapi-style templating hooks (stretch goal, may not

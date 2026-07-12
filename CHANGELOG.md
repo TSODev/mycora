@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Archived vaults get a tree row, and `:config` can declutter both** —
+  an archived vault now shows as its own `▦ name` placeholder row
+  (distinct from unmounted vaults' `⊘ name`), pointing at `mycora vault
+  unarchive <name>` in the body preview instead of `vault mount`, with
+  an `ARCHIVED` breadcrumb marker. New `:config unmount <show|hide>` and
+  `:config archive <show|hide>` commands toggle whether either category
+  renders in the tree at all — persisted across restarts, same as pane
+  widths.
 - **`mycora vault archive`/`vault unarchive`** — compresses an unmounted
   vault's directory into a single `.tar.gz` (new `tar`/`flate2`
   dependencies, both pure-Rust) and removes the original after verifying

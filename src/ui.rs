@@ -89,15 +89,18 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Renders `app.visible_rows()` — the active vault's tree, then each
 /// read-only mounted vault behind its own dimmed `── name ──` separator,
-/// then a `⊘ name` row per unmounted registered vault — fully navigable
-/// (not roots-only) since `TreeRow::Note` already carries per-row
-/// expand/children/link-count state resolved against whichever tree the
-/// row actually belongs to (see `App::visible_rows`'s doc comment).
-/// Read-only rows are dimmed, and stay reversed-and-dimmed rather than
-/// plain-reversed when selected, so a read-only selection still reads as
-/// "read-only" even while highlighted. Unmounted rows go a step further
+/// then a `⊘ name` row per unmounted registered vault, then a `▦ name`
+/// row per archived one — fully navigable (not roots-only) since
+/// `TreeRow::Note` already carries per-row expand/children/link-count
+/// state resolved against whichever tree the row actually belongs to
+/// (see `App::visible_rows`'s doc comment). Read-only rows are dimmed,
+/// and stay reversed-and-dimmed rather than plain-reversed when
+/// selected, so a read-only selection still reads as "read-only" even
+/// while highlighted. Unmounted/archived rows go a step further
 /// (`Color::DarkGray` instead of just dim) and never carry a fold marker
-/// — there's nothing loaded to expand.
+/// — there's nothing loaded to expand, and the two get different icons
+/// (⊘ vs ▦) rather than sharing one, so they read as different states at
+/// a glance rather than requiring the body preview to disambiguate.
 fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
     let dim = Style::default().add_modifier(Modifier::DIM);
     let mut selected_index = None;
@@ -160,6 +163,19 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
                 };
                 ListItem::new(Line::from(Span::styled(label, style)))
             }
+            TreeRow::ArchivedVault { name, .. } => {
+                let base = Style::default().fg(Color::DarkGray);
+                let label = format!("▦ {name}");
+                let is_selected =
+                    app.selected_archived_vault_info().map(|(n, _)| n) == Some(name.as_str());
+                let style = if is_selected {
+                    selected_index = Some(i);
+                    base.add_modifier(Modifier::REVERSED)
+                } else {
+                    base
+                };
+                ListItem::new(Line::from(Span::styled(label, style)))
+            }
         })
         .collect();
 
@@ -183,13 +199,29 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
 /// (see `crate::markdown`) — resolved via `App::selected_note` so a note
 /// in a read-only mounted vault is just as readable here as one in the
 /// active vault. Empty when nothing's selected or the note has no body
-/// yet. When the selection is an unmounted vault's placeholder row
-/// instead of a note, shows how to mount it rather than an empty pane.
+/// yet. When the selection is an unmounted or archived vault's
+/// placeholder row instead of a note, shows how to mount/unarchive it
+/// rather than an empty pane.
 fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
     if let Some((name, path)) = app.selected_unmounted_vault_info() {
         let text = format!(
             "Vault \"{name}\" is unmounted.\n\nPath: {}\n\nTo activate it:\n  mycora vault mount {name}",
             path.display()
+        );
+        let paragraph = Paragraph::new(text).wrap(Wrap { trim: false }).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(PANE_BODY_COLOR))
+                .title(name)
+                .padding(ratatui::widgets::Padding::horizontal(1)),
+        );
+        frame.render_widget(paragraph, area);
+        return;
+    }
+    if let Some((name, archive_path)) = app.selected_archived_vault_info() {
+        let text = format!(
+            "Vault \"{name}\" is archived.\n\nArchive: {}\n\nTo restore it:\n  mycora vault unarchive {name}",
+            archive_path.display()
         );
         let paragraph = Paragraph::new(text).wrap(Wrap { trim: false }).block(
             Block::default()
@@ -464,10 +496,10 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
     draw_hint_row(frame, rows[1], app);
 }
 
-/// `READ-ONLY`/`UNMOUNTED` label reserved on the right of the breadcrumb
-/// row — a fixed-width column so the breadcrumb's own width doesn't
-/// shift as you move in and out of read-only or unmounted vaults. Blank
-/// (but still painted with `STATUS_BG`) when the selection is editable.
+/// `READ-ONLY`/`UNMOUNTED`/`ARCHIVED` label reserved on the right of the
+/// breadcrumb row — a fixed-width column so the breadcrumb's own width
+/// doesn't shift as you move in and out of these vaults. Blank (but
+/// still painted with `STATUS_BG`) when the selection is editable.
 const READ_ONLY_MARKER_WIDTH: u16 = 12;
 
 fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
@@ -491,6 +523,8 @@ fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
 
     let marker = if app.selected_is_unmounted_vault() {
         "UNMOUNTED"
+    } else if app.selected_is_archived_vault() {
+        "ARCHIVED"
     } else if app.selected_is_read_only() {
         "READ-ONLY"
     } else {
@@ -587,13 +621,15 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
     // dims out (same style as the separators) instead of its usual
     // bold-key/muted-label styling — it'll still just report "this vault
     // is read-only" if pressed (see `App::require_editable`), so the hint
-    // row says so before the user tries. An unmounted vault's placeholder
-    // row goes further still: `h/l/space` (fold) dims too, since there's
-    // nothing loaded to expand at all, not just nothing editable. Every
-    // other mode's hints are either non-mutating already (Search,
-    // Backlinks, TagResults, ...) or only ever reachable with an editable
-    // selection to begin with, so no dimming applies there.
-    let disabled_keys: &[&str] = if app.mode == Mode::Normal && app.selected_is_unmounted_vault() {
+    // row says so before the user tries. An unmounted or archived vault's
+    // placeholder row goes further still: `h/l/space` (fold) dims too,
+    // since there's nothing loaded to expand at all, not just nothing
+    // editable. Every other mode's hints are either non-mutating already
+    // (Search, Backlinks, TagResults, ...) or only ever reachable with an
+    // editable selection to begin with, so no dimming applies there.
+    let disabled_keys: &[&str] = if app.mode == Mode::Normal
+        && (app.selected_is_unmounted_vault() || app.selected_is_archived_vault())
+    {
         &["h/l/space", "a/o", "y", "Tab/S-Tab", "K/J", "i", "e", "d"]
     } else if app.mode == Mode::Normal && app.selected_is_read_only() {
         &["a/o", "y", "Tab/S-Tab", "K/J", "i", "e", "d"]

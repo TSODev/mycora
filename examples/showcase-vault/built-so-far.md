@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T13:00:00Z
+updated: 2026-07-12T14:00:00Z
 ---
 
 # Built so far
@@ -39,8 +39,10 @@ updated: 2026-07-12T13:00:00Z
   unexpandable placeholder row with a "how to mount it" message (see
   [[Unmounted vaults are visible too]]); an unmounted vault can now be
   compressed down to a single archive file to reclaim disk space, and
-  restored back (see
-  [[Compressing a vault trades files for one archive, deliberately]])
+  restored back, with its own distinct tree row too (see
+  [[Compressing a vault trades files for one archive, deliberately]]);
+  `:config unmount show/hide` and `:config archive show/hide` declutter
+  the tree once a registry has enough of either
 - **v0.8** — notes are never trapped in Mycora: [[Exporting a subtree]]
   flattens a note and its descendants to Markdown or PDF (see
   [[PDF export renders through a pure-Rust crate]]);

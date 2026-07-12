@@ -6,7 +6,7 @@ tags:
 - features
 - multi-vault
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T13:00:00Z
+updated: 2026-07-12T14:00:00Z
 ---
 
 # Multi-vault mounting
@@ -41,13 +41,14 @@ An unmounted vault can go one step further: `mycora vault archive`
 compresses its directory to a single file and deletes the original,
 reclaiming the disk space entirely rather than just sitting there
 unloaded — see
-[[Compressing a vault trades files for one archive, deliberately]].
-An archived vault doesn't have its own tree row yet, and is
-deliberately excluded from the generic unmounted placeholder rather
-than showing up there misleadingly (that row's "how to mount it"
-message would be wrong for something with nothing left at its path to
-mount) — for now it's just absent from the tree entirely until it gets
-proper row treatment of its own.
+[[Compressing a vault trades files for one archive, deliberately]]. An
+archived vault gets its own distinct `▦ name` row, not the generic
+unmounted placeholder (that row's "how to mount it" message would be
+wrong for something with nothing left at its path to mount) — see
+[[Unmounted vaults are visible too]] for both icons side by side. Either
+row category — unmounted or archived — can be hidden from the tree
+entirely with `:config unmount hide`/`:config archive hide` once a
+registry has enough of one to feel cluttered.
 
 See [[Read-only secondary vaults]] for why full editing wasn't built up
 front, and [[Managing vaults from the CLI]] for the `mycora vault ...`

@@ -7,7 +7,7 @@ tags:
 - multi-vault
 - cli
 created: 2026-07-12T13:00:00Z
-updated: 2026-07-12T13:00:00Z
+updated: 2026-07-12T14:00:00Z
 ---
 
 # Compressing a vault trades files for one archive, deliberately
@@ -56,9 +56,7 @@ Like [[Importing an Obsidian vault]] and [[Exporting a subtree]],
 [[Managing vaults from the CLI]] — since both act on the registry and a
 vault's files wholesale, not on anything currently open in the TUI.
 
-Still open: an archived vault has no placeholder row of its own yet
-(the generic unmounted-vault row would wrongly tell you to `vault
-mount` something that no longer has anything at its path to mount), and
-a `:config archive show/hide` display toggle to declutter the tree once
-there are several was floated but not designed further — see
-[[Roadmap]] v0.9's entry for the confirmed intent.
+An archived vault does now have its own placeholder row — see
+[[Unmounted vaults are visible too]] for the icon/color decision
+(a distinct `▦`, not `⊘` with a text suffix) and the `:config unmount
+show/hide` / `:config archive show/hide` commands built alongside it.

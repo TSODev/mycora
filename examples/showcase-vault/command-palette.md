@@ -7,7 +7,7 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-11T09:00:00Z
+updated: 2026-07-12T14:00:00Z
 ---
 
 # Command palette
@@ -30,8 +30,11 @@ command also appears above the prompt for as long as it's open.
 - `:panes reset` — resets the [[Layout]] back to 40/40/20, the way back
   after resizing now that widths persist across restarts
 - `:export <path>` — flattens the *selected* note's subtree to Markdown
-  at `path`, refusing if it already exists — see
-  [[Exporting a subtree]]
+  or PDF at `path` (format inferred from the extension), refusing if it
+  already exists — see [[Exporting a subtree]]
+- `:config unmount <show|hide>` / `:config archive <show|hide>` —
+  shows/hides the placeholder rows for unmounted/archived vaults in the
+  tree — see [[Unmounted vaults are visible too]]
 - `:q` / `:quit` — quits, same as `q` `q` in Normal mode
 
 Every exposed command surfaces backend functionality or a real gap that

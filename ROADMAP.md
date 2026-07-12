@@ -1242,16 +1242,62 @@ Goal: stability before a public release.
       the restored vault's 2 notes correctly, confirming the round trip
       didn't just look right on disk but was actually usable again.
 
-      **Still open, not built yet**: both archived and (any future)
-      differently-treated vault states would want the same tree
-      treatment unmounted vaults already got — their own placeholder
-      row, and a way to declutter the tree once there are enough of
-      them. `:config archive show/hide` (and, before lock was dropped,
-      a `:config lock show/hide` alongside it) as a TUI-side display
-      toggle was floated for that and confirmed with the user via
-      `AskUserQuestion` to mean exactly "show/hide the placeholder
-      rows," not something else — but no `:config` command namespace
-      exists at all yet, and an archived vault has no placeholder row of
-      its own to toggle yet either (see the `unmounted_vaults` exclusion
-      above), so this is sequenced as explicit next work, not designed
-      further than the confirmed intent.
+      **Since extended** (2026-07-12, user-requested): archived vaults
+      got their own tree row, and a new `:config` command namespace lets
+      either category be hidden. Confirmed the archived row's icon via
+      `AskUserQuestion` before implementing — `▦` (evokes "boxed/packed")
+      over reusing `⊘` with a text suffix, since a single distinct glyph
+      reads at a glance in a list without lengthening every row. New
+      `TreeRow::ArchivedVault { name, archive_path }`, populated from a
+      new `App::archived_vaults: Vec<VaultEntry>` (mirroring
+      `unmounted_vaults`, filtered on `archived.is_some()` instead) —
+      `unmounted_vaults` itself already excluded archived entries (see
+      above), so this was the other half of that split, not a new
+      exclusion to add. Its body preview points at `mycora vault
+      unarchive <name>` (not `vault mount`, which would be wrong — the
+      whole point of archiving is that nothing exists at `path` to mount
+      until unarchived first); the breadcrumb marker reads `ARCHIVED`;
+      hint-row dimming matches the unmounted-vault case exactly (full
+      mutation lockout, `h/l/space` included).
+
+      Selection needed a third mutually-exclusive field —
+      `selected_archived_vault: Option<String>`, alongside `selected`
+      and `selected_unmounted_vault` — following the same pattern
+      established for unmounted vaults rather than generalizing into a
+      `Selection` enum now that there are three cases instead of two;
+      still additive, still nothing forcing a rewrite of the existing
+      `Option<NoteId>` call sites. `move_selection`'s local `Stop` enum
+      grew a third variant the same way.
+
+      `:config unmount <show|hide>` / `:config archive <show|hide>` are
+      new `Mode::Command` entries (no new `Mode`, no new full-pane
+      overlay — same shape as `:panes reset`), toggling new `App::
+      show_unmounted`/`show_archived` booleans that `visible_rows` checks
+      before appending either category at all. Persisted in `Session`
+      (`show_unmounted`/`show_archived`, both `Option<bool>`, `None`
+      meaning "not yet saved, defaults to shown") the same way
+      `pane_widths` already is — vault-agnostic, since it's a display
+      preference, not per-vault state; `Session::save`'s signature grew
+      two more `bool` parameters (`#[allow(clippy::too_many_arguments)]`
+      rather than bundling them into a struct at seven total parameters,
+      matching how `pane_widths` alone didn't warrant one either).
+      Hiding a category the current selection was inside of falls the
+      selection back to the active vault's first root (always at least
+      one — see `App::new`'s "Welcome to Mycora" auto-creation) rather
+      than leaving `selected_unmounted_vault`/`selected_archived_vault`
+      pointing at a row that no longer renders.
+
+      1 new test in `session.rs` (round-trips both toggles independently).
+      Manually verified end to end in tmux against a registry with one
+      mounted, one unmounted, and one archived vault: `⊘ second-vault`
+      and `▦ old-notes` both rendered with distinct icons; selecting the
+      archived row showed the archive path and the exact `vault
+      unarchive` command, with `ARCHIVED` in the breadcrumb; `tmux
+      capture-pane -e` confirmed the same full hint-dimming as unmounted
+      rows; `:config archive hide` removed the `▦` row and safely moved
+      the selection off it (to "Welcome to Mycora"); `:config unmount
+      hide` removed the `⊘` row too, leaving a fully decluttered tree;
+      quitting and relaunching confirmed both stayed hidden
+      (`session.toml` showed `show_unmounted = false`/`show_archived =
+      false`); `:config unmount show`/`:config archive show` brought both
+      back; `:config bogus` showed the usage error.

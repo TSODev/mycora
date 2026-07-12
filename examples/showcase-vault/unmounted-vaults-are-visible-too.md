@@ -6,7 +6,7 @@ tags:
 - design-decision
 - multi-vault
 created: 2026-07-12T12:00:00Z
-updated: 2026-07-12T12:00:00Z
+updated: 2026-07-12T14:00:00Z
 ---
 
 # Unmounted vaults are visible too
@@ -44,3 +44,24 @@ used to silently create a new root-level note in the *active* vault
 instead of doing nothing, because `create_sibling`'s guard only checked
 "is the selected note read-only," never "is anything selected at all."
 Fixed to match every other mutating command's shape.
+
+**Since extended** (2026-07-12, user-requested): archived vaults (see
+[[Compressing a vault trades files for one archive, deliberately]]) got
+the same tree-row treatment, but with a *distinct* icon (`▦`, confirmed
+via `AskUserQuestion` over reusing `⊘` with a "(archived)" text suffix —
+one glyph reads at a glance without lengthening every row) since its
+body preview needs to say something different: `mycora vault unarchive
+<name>`, not `vault mount` — nothing exists at an archived vault's
+`path` to mount until it's unarchived first. Selection grew a third
+mutually-exclusive field, `selected_archived_vault`, mirroring
+`selected_unmounted_vault`'s exact shape rather than generalizing into
+a `Selection` enum now that there were three cases — still additive,
+still no reason to touch the existing `Option<NoteId>` call sites.
+
+New `:config unmount <show|hide>` / `:config archive <show|hide>`
+commands (same `Mode::Command` shape as `:panes reset`, no new overlay)
+let either row category be hidden from the tree entirely, persisted in
+`Session` the same vault-agnostic way `pane_widths` already is — a
+display preference, not per-vault state. Hiding a category the
+selection was currently on falls it back to the active vault's first
+root rather than leaving it pointing at a row that no longer renders.

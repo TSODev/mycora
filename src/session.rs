@@ -18,6 +18,14 @@ struct RawSession {
     /// no longer sum to 100 or dip below the resize floor.
     #[serde(default)]
     pane_widths: Option<[u16; 3]>,
+    /// Whether unmounted/archived vault placeholder rows show in the
+    /// tree (`:config unmount show/hide`, `:config archive show/hide`) —
+    /// vault-agnostic, same reasoning as `pane_widths`. `None` (not yet
+    /// saved) means "show", same as the in-app default.
+    #[serde(default)]
+    show_unmounted: Option<bool>,
+    #[serde(default)]
+    show_archived: Option<bool>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -85,18 +93,32 @@ impl Session {
         self.raw.pane_widths
     }
 
-    /// Records `vault_name`'s current selection/expand state and the
-    /// current pane widths, and writes the whole session file — other
-    /// vaults' entries are preserved unchanged (this re-reads the file
-    /// first rather than assuming in-memory state from `load` is still
-    /// current, since another mycora process could have written its own
-    /// vault's entry meanwhile).
+    /// Previously saved `:config unmount show/hide` state, if ever saved.
+    pub fn show_unmounted(&self) -> Option<bool> {
+        self.raw.show_unmounted
+    }
+
+    /// Previously saved `:config archive show/hide` state, if ever saved.
+    pub fn show_archived(&self) -> Option<bool> {
+        self.raw.show_archived
+    }
+
+    /// Records `vault_name`'s current selection/expand state, the current
+    /// pane widths, and the unmounted/archived visibility toggles, and
+    /// writes the whole session file — other vaults' entries are
+    /// preserved unchanged (this re-reads the file first rather than
+    /// assuming in-memory state from `load` is still current, since
+    /// another mycora process could have written its own vault's entry
+    /// meanwhile).
+    #[allow(clippy::too_many_arguments)]
     pub fn save(
         &mut self,
         vault_name: &str,
         selected: Option<NoteId>,
         expanded: &HashSet<NoteId>,
         pane_widths: [u16; 3],
+        show_unmounted: bool,
+        show_archived: bool,
     ) -> anyhow::Result<()> {
         let mut fresh = Self::load(&self.path);
         fresh.raw.vaults.insert(
@@ -107,6 +129,8 @@ impl Session {
             },
         );
         fresh.raw.pane_widths = Some(pane_widths);
+        fresh.raw.show_unmounted = Some(show_unmounted);
+        fresh.raw.show_archived = Some(show_archived);
         self.raw = fresh.raw;
 
         if let Some(parent) = self.path.parent() {
@@ -149,7 +173,7 @@ mod tests {
         let b = NoteId::new();
         let expanded: HashSet<NoteId> = [a, b].into_iter().collect();
         session
-            .save("default", Some(selected), &expanded, [40, 40, 20])
+            .save("default", Some(selected), &expanded, [40, 40, 20], true, true)
             .unwrap();
 
         let reloaded = Session::load(&path);
@@ -165,7 +189,7 @@ mod tests {
         let path = scratch_path();
         let mut session = Session::load(&path);
         session
-            .save("default", None, &HashSet::new(), [40, 40, 20])
+            .save("default", None, &HashSet::new(), [40, 40, 20], true, true)
             .unwrap();
 
         assert!(path.exists());
@@ -180,11 +204,29 @@ mod tests {
         let mut session = Session::load(&path);
 
         session
-            .save("default", None, &HashSet::new(), [30, 50, 20])
+            .save("default", None, &HashSet::new(), [30, 50, 20], true, true)
             .unwrap();
 
         let reloaded = Session::load(&path);
         assert_eq!(reloaded.pane_widths(), Some([30, 50, 20]));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn save_then_load_round_trips_show_toggles() {
+        let path = scratch_path();
+        let mut session = Session::load(&path);
+        assert_eq!(session.show_unmounted(), None);
+        assert_eq!(session.show_archived(), None);
+
+        session
+            .save("default", None, &HashSet::new(), [40, 40, 20], false, true)
+            .unwrap();
+
+        let reloaded = Session::load(&path);
+        assert_eq!(reloaded.show_unmounted(), Some(false));
+        assert_eq!(reloaded.show_archived(), Some(true));
 
         std::fs::remove_file(&path).ok();
     }
@@ -196,12 +238,12 @@ mod tests {
 
         let a_selected = NoteId::new();
         session
-            .save("a", Some(a_selected), &HashSet::new(), [40, 40, 20])
+            .save("a", Some(a_selected), &HashSet::new(), [40, 40, 20], true, true)
             .unwrap();
 
         let b_selected = NoteId::new();
         session
-            .save("b", Some(b_selected), &HashSet::new(), [40, 40, 20])
+            .save("b", Some(b_selected), &HashSet::new(), [40, 40, 20], true, true)
             .unwrap();
 
         let reloaded = Session::load(&path);

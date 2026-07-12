@@ -147,7 +147,13 @@ loaded for it, so there's nothing to expand). Selecting it shows the
 vault's path and the exact `mycora vault mount` command to bring it
 back, in place of a note body; every mutating key (including fold) is a
 no-op there, and the breadcrumb's corner marker reads `UNMOUNTED`
-instead of `READ-ONLY`.
+instead of `READ-ONLY`. An [archived](#registering-a-vault-from-the-cli)
+vault gets a `▦ name` row instead — same idea, but pointing at `mycora
+vault unarchive` and marked `ARCHIVED`, since there's nothing at its
+path to mount until it's unarchived first. Either category can be
+hidden from the tree entirely with `:config unmount hide`/`:config
+archive hide` (see [Command palette](#command-palette)) if a registry
+with several of either gets cluttered.
 
 The older single-vault form is still accepted as a fallback when
 `[[vaults]]` is absent:
@@ -249,7 +255,10 @@ directory from the archive and removes the archive file, but leaves the
 vault unmounted — `mycora vault mount <name>` afterward is a separate,
 explicit step. Both are CLI-only, same as every other `vault ...`
 subcommand — there's no `:` equivalent, since archiving acts on the
-registry rather than on anything currently open in the TUI.
+registry rather than on anything currently open in the TUI. An archived
+vault still shows up in the TUI, as its own `▦ name` row — see
+[Layout](#layout) and `:config archive show/hide` under
+[Command palette](#command-palette).
 
 To see everything currently registered:
 
@@ -359,16 +368,16 @@ only reachable through the Rust API (`Index::filter_by_tags`) for now. See
 Three columns, plus a 2-line status bar at the bottom: the top row is a
 breadcrumb (`vault › branch › note`) for the selected note, with a
 `READ-ONLY` marker on the right whenever that selection is in a
-read-only mounted vault (`UNMOUNTED` instead when it's an unmounted
-vault's placeholder row); the bottom row shows the current mode and the
+read-only mounted vault (`UNMOUNTED`/`ARCHIVED` instead for those
+vaults' placeholder rows); the bottom row shows the current mode and the
 relevant keybinding hints (`key: label`, key in bold) — while a
 read-only note is selected, the hints for actions that would refuse
 anyway (`a`/`o`, `y`, `Tab`/`Shift+Tab`, `K`/`J`, `i`, `e`, `d`) dim out
 rather than sitting at full brightness for keys that won't do anything;
-on an unmounted vault's row, `h`/`l`/`Space` (fold) dims too, since
-there's nothing loaded to expand. A prompt — the delete confirmation,
-the quit-confirm notice, or an error — replaces the bottom row only,
-leaving the breadcrumb above it in place.
+on an unmounted or archived vault's row, `h`/`l`/`Space` (fold) dims
+too, since there's nothing loaded to expand. A prompt — the delete
+confirmation, the quit-confirm notice, or an error — replaces the bottom
+row only, leaving the breadcrumb above it in place.
 
 - **Tree** (left, blue border) — the indented, collapsible note tree, same
   as before. If other vaults are mounted alongside the default one (see
@@ -379,9 +388,12 @@ leaving the breadcrumb above it in place.
   browsable, not roots-only. Their link-count badges work the same as
   the default vault's, just computed against that vault's own notes.
   Below all of that, every *unmounted* registered vault gets its own
-  single `⊘ name` row (`Color::DarkGray`, no fold marker — see
-  [Configuration](#configuration)); selecting one shows how to mount it
-  in the body preview instead of a note body.
+  single `⊘ name` row and every *archived* one a `▦ name` row
+  (`Color::DarkGray`, no fold marker — see [Configuration](#configuration));
+  selecting one shows how to mount/unarchive it in the body preview
+  instead of a note body. Either row category can be hidden entirely
+  with `:config unmount hide`/`:config archive hide` (see
+  [Command palette](#command-palette)).
 - **Body preview** (middle, magenta border, with a little horizontal
   padding off the border since it's mostly running prose) — the selected
   note's body, rendered as Markdown (headings, bold/italic, inline/block
@@ -481,6 +493,11 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
   (see [Exporting a subtree](#exporting-a-subtree)). Works on a
   read-only mounted vault's note too, not just the active vault's —
   exporting only reads. Refuses if `path` already exists.
+- `:config unmount <show|hide>` / `:config archive <show|hide>` — shows
+  or hides the `⊘`/`▦` placeholder rows for unmounted/archived vaults
+  in the tree entirely (see [Layout](#layout)), for a registry with
+  enough of either to feel cluttered. Persists across restarts, same as
+  pane widths.
 - `:q` / `:quit` — quits Mycora, same as `q` `q` in Normal mode
 
 An unrecognized command shows an error in the status bar rather than

@@ -130,18 +130,34 @@ pub struct App {
     backlinks_selected: usize,
     /// Every other mounted vault (see `Config::mounted_vaults`), read-only.
     other_vaults: Vec<ReadOnlyVault>,
-    /// Registered vaults that are *not* currently mounted — nothing is
-    /// loaded for them, but each still gets a single unexpandable
-    /// placeholder row in the tree (see `TreeRow::UnmountedVault`) so
-    /// their existence isn't invisible until a restart after `mycora
-    /// vault mount`.
+    /// Registered vaults that are *not* currently mounted and not
+    /// archived — nothing is loaded for them, but each still gets a
+    /// single unexpandable placeholder row in the tree (see
+    /// `TreeRow::UnmountedVault`) so their existence isn't invisible
+    /// until a restart after `mycora vault mount`.
     unmounted_vaults: Vec<VaultEntry>,
+    /// Registered vaults that are archived (`mycora vault archive`) —
+    /// like `unmounted_vaults` but with nothing at `path` to load or
+    /// mount at all, just a compressed file elsewhere (see
+    /// `TreeRow::ArchivedVault`).
+    archived_vaults: Vec<VaultEntry>,
     /// Set instead of `selected` when the current row is an unmounted
     /// vault's placeholder rather than a note — mutually exclusive with
-    /// `selected` (see `set_selected`/`set_selected_unmounted_vault`),
-    /// exactly one of the two is `Some` whenever anything is highlighted
-    /// in the tree pane at all.
+    /// `selected` and `selected_archived_vault` (see
+    /// `set_selected`/`set_selected_unmounted_vault`/
+    /// `set_selected_archived_vault`), exactly one of the three is
+    /// `Some` whenever anything is highlighted in the tree pane at all.
     selected_unmounted_vault: Option<String>,
+    /// The `selected_archived_vault` counterpart to
+    /// `selected_unmounted_vault` — see that field's doc comment.
+    selected_archived_vault: Option<String>,
+    /// Whether `TreeRow::UnmountedVault`/`TreeRow::ArchivedVault` rows
+    /// show in the tree at all (`:config unmount show/hide`, `:config
+    /// archive show/hide`) — persisted in `Session`, vault-agnostic like
+    /// `pane_widths`. `true` by default (nothing hidden until the user
+    /// asks).
+    show_unmounted: bool,
+    show_archived: bool,
     /// The active `ratatui-textarea` widget state while `mode ==
     /// Mode::EditBody`; `None` otherwise. Full-pane overlay rather than a
     /// split layout (tree + body pane) — the latter is its own separate
@@ -190,6 +206,14 @@ pub const COMMAND_REFERENCE: &[(&str, &str)] = &[
         ":export <path>",
         "flatten the selected note's subtree to a Markdown file",
     ),
+    (
+        ":config unmount <show|hide>",
+        "show/hide unmounted vault rows in the tree",
+    ),
+    (
+        ":config archive <show|hide>",
+        "show/hide archived vault rows in the tree",
+    ),
     (":q, :quit", "quit Mycora"),
 ];
 
@@ -215,8 +239,17 @@ pub enum TreeRow {
     /// never expand, and selecting it sets `App::selected_unmounted_vault`
     /// instead of `App::selected` (there's no `NoteId` to hold). The body
     /// preview shows how to mount it instead of a note body — see
-    /// `App::selected_unmounted_vault_info`.
+    /// `App::selected_unmounted_vault_info`. Hidden entirely when
+    /// `App::show_unmounted` is `false` (`:config unmount hide`).
     UnmountedVault { name: String, path: PathBuf },
+    /// A registered vault that's been compressed via `mycora vault
+    /// archive` — like `UnmountedVault` but nothing exists at `path` to
+    /// mount at all (it's compressed at `archive_path` instead), so the
+    /// body preview points at `mycora vault unarchive` rather than
+    /// `vault mount`. Selecting it sets `App::selected_archived_vault`.
+    /// Hidden entirely when `App::show_archived` is `false` (`:config
+    /// archive hide`).
+    ArchivedVault { name: String, archive_path: PathBuf },
 }
 
 impl App {
@@ -230,15 +263,21 @@ impl App {
         // `false` — that can happen via `Config::active_vault`'s
         // self-heal (see below), and it's actively loaded regardless, so
         // showing it *again* as an unmounted placeholder would be wrong.
-        // Also excludes archived vaults: `TreeRow::UnmountedVault`'s body
-        // preview tells you to `mycora vault mount <name>`, which would
-        // be actively wrong for one (nothing exists at `path` to mount —
-        // it's compressed elsewhere) until archived vaults get their own
-        // row treatment (see ROADMAP.md's "Archived and locked vaults").
+        // Archived vaults get their own separate list/row type
+        // (`TreeRow::ArchivedVault`) rather than showing up here too —
+        // `TreeRow::UnmountedVault`'s body preview tells you to `mycora
+        // vault mount <name>`, which would be wrong for one (nothing
+        // exists at `path` to mount — it's compressed elsewhere).
         let unmounted_vaults: Vec<VaultEntry> = config
             .vaults
             .iter()
             .filter(|v| !v.mounted && v.archived.is_none() && v.name != active.name)
+            .cloned()
+            .collect();
+        let archived_vaults: Vec<VaultEntry> = config
+            .vaults
+            .iter()
+            .filter(|v| v.archived.is_some() && v.name != active.name)
             .cloned()
             .collect();
 
@@ -326,6 +365,8 @@ impl App {
                     && widths.iter().all(|w| *w >= Self::PANE_MIN_PCT)
             })
             .unwrap_or(Self::DEFAULT_PANE_WIDTHS);
+        let show_unmounted = session.show_unmounted().unwrap_or(true);
+        let show_archived = session.show_archived().unwrap_or(true);
 
         let index_path = Index::default_path(&config.home);
         let mut index = Index::open(&index_path)?;
@@ -393,7 +434,11 @@ impl App {
             backlinks_selected: 0,
             other_vaults,
             unmounted_vaults,
+            archived_vaults,
             selected_unmounted_vault: None,
+            selected_archived_vault: None,
+            show_unmounted,
+            show_archived,
             body_editor: None,
             session_path,
             pane_widths,
@@ -418,6 +463,8 @@ impl App {
             self.selected,
             &self.expanded,
             self.pane_widths,
+            self.show_unmounted,
+            self.show_archived,
         )
     }
 
@@ -494,11 +541,26 @@ impl App {
                 self.push_visible_row(&v.tree, &v.id, root, 0, false, &mut out);
             }
         }
-        for entry in &self.unmounted_vaults {
-            out.push(TreeRow::UnmountedVault {
-                name: entry.name.clone(),
-                path: entry.path.clone(),
-            });
+        if self.show_unmounted {
+            for entry in &self.unmounted_vaults {
+                out.push(TreeRow::UnmountedVault {
+                    name: entry.name.clone(),
+                    path: entry.path.clone(),
+                });
+            }
+        }
+        if self.show_archived {
+            for entry in &self.archived_vaults {
+                // `archived` is always `Some` for anything in
+                // `archived_vaults` — that's exactly how it was filtered
+                // into this list in `App::new`.
+                if let Some(archive_path) = &entry.archived {
+                    out.push(TreeRow::ArchivedVault {
+                        name: entry.name.clone(),
+                        archive_path: archive_path.clone(),
+                    });
+                }
+            }
         }
         out
     }
@@ -542,23 +604,34 @@ impl App {
     }
 
     /// The single place `self.selected` is ever written — also clears
-    /// `selected_unmounted_vault` (the two are mutually exclusive) and
-    /// resets `body_scroll` to 0, so a freshly selected note (or a fresh
-    /// search/backlinks/tag-list jump) always starts at the top of the
-    /// body preview rather than wherever a previous note happened to be
-    /// scrolled to.
+    /// `selected_unmounted_vault`/`selected_archived_vault` (all three
+    /// are mutually exclusive) and resets `body_scroll` to 0, so a
+    /// freshly selected note (or a fresh search/backlinks/tag-list jump)
+    /// always starts at the top of the body preview rather than wherever
+    /// a previous note happened to be scrolled to.
     fn set_selected(&mut self, id: Option<NoteId>) {
         self.selected = id;
         self.selected_unmounted_vault = None;
+        self.selected_archived_vault = None;
         self.body_scroll = 0;
     }
 
     /// The `selected_unmounted_vault` counterpart to `set_selected` —
-    /// clears `selected` (mutually exclusive) and resets `body_scroll`
-    /// the same way.
+    /// clears `selected`/`selected_archived_vault` (mutually exclusive)
+    /// and resets `body_scroll` the same way.
     fn set_selected_unmounted_vault(&mut self, name: Option<String>) {
         self.selected = None;
         self.selected_unmounted_vault = name;
+        self.selected_archived_vault = None;
+        self.body_scroll = 0;
+    }
+
+    /// The `selected_archived_vault` counterpart to `set_selected` — see
+    /// `set_selected_unmounted_vault`.
+    fn set_selected_archived_vault(&mut self, name: Option<String>) {
+        self.selected = None;
+        self.selected_unmounted_vault = None;
+        self.selected_archived_vault = name;
         self.body_scroll = 0;
     }
 
@@ -566,6 +639,7 @@ impl App {
         enum Stop {
             Note(NoteId),
             Unmounted(String),
+            Archived(String),
         }
 
         let stops: Vec<Stop> = self
@@ -575,6 +649,7 @@ impl App {
                 TreeRow::Note { id, .. } => Some(Stop::Note(id)),
                 TreeRow::VaultSeparator(_) => None,
                 TreeRow::UnmountedVault { name, .. } => Some(Stop::Unmounted(name)),
+                TreeRow::ArchivedVault { name, .. } => Some(Stop::Archived(name)),
             })
             .collect();
         if stops.is_empty() {
@@ -589,6 +664,9 @@ impl App {
                 Stop::Unmounted(name) => {
                     self.selected_unmounted_vault.as_deref() == Some(name.as_str())
                 }
+                Stop::Archived(name) => {
+                    self.selected_archived_vault.as_deref() == Some(name.as_str())
+                }
             })
             .unwrap_or(0);
 
@@ -597,6 +675,7 @@ impl App {
         match &stops[new_pos] {
             Stop::Note(id) => self.set_selected(Some(*id)),
             Stop::Unmounted(name) => self.set_selected_unmounted_vault(Some(name.clone())),
+            Stop::Archived(name) => self.set_selected_archived_vault(Some(name.clone())),
         }
     }
 
@@ -1214,6 +1293,9 @@ impl App {
         if let Some(name) = &self.selected_unmounted_vault {
             return name;
         }
+        if let Some(name) = &self.selected_archived_vault {
+            return name;
+        }
         self.selected
             .and_then(|id| self.resolve(id))
             .map(|(_, vault_id)| vault_id)
@@ -1244,6 +1326,26 @@ impl App {
             .iter()
             .find(|entry| entry.name == name)
             .map(|entry| (entry.name.as_str(), entry.path.as_path()))
+    }
+
+    /// `true` if the current row is an archived vault's placeholder
+    /// rather than a note — drives the breadcrumb row's "ARCHIVED"
+    /// marker, the hint row's full mutation lockout, and
+    /// `draw_body_preview`'s "how to unarchive" message.
+    pub fn selected_is_archived_vault(&self) -> bool {
+        self.selected_archived_vault.is_some()
+    }
+
+    /// `(name, archive_path)` of the currently selected row's archived
+    /// vault, if that's what's selected — the body preview's "how to
+    /// unarchive" message needs both.
+    pub fn selected_archived_vault_info(&self) -> Option<(&str, &Path)> {
+        let name = self.selected_archived_vault.as_deref()?;
+        self.archived_vaults
+            .iter()
+            .find(|entry| entry.name == name)
+            .and_then(|entry| entry.archived.as_deref())
+            .map(|archive_path| (name, archive_path))
     }
 
     /// Current percent widths of the split layout's tree/body/backlinks
@@ -1450,9 +1552,15 @@ impl App {
     ///   read-only mounted vault's note just as well as the active
     ///   vault's. Refuses if `path` already exists rather than
     ///   overwriting it.
+    /// - `config unmount <show|hide>` / `config archive <show|hide>` —
+    ///   toggles whether `TreeRow::UnmountedVault`/`TreeRow::ArchivedVault`
+    ///   placeholder rows render in the tree at all, for decluttering a
+    ///   registry with several of either. Persisted in `Session`
+    ///   (`show_unmounted`/`show_archived`), not per-vault — a display
+    ///   preference, same as `pane_widths`.
     ///
-    /// Kept in sync with `COMMAND_REFERENCE` below by hand — only six
-    /// entries, not worth generating one from the other.
+    /// Kept in sync with `COMMAND_REFERENCE` above by hand — not worth
+    /// generating one from the other at this size.
     pub fn execute_command(&mut self) {
         let input = std::mem::take(&mut self.command_input);
         self.mode = Mode::Normal;
@@ -1472,6 +1580,7 @@ impl App {
             "tags" => self.command_tags(args),
             "panes" => self.command_panes(args),
             "export" => self.command_export(args),
+            "config" => self.command_config(args),
             _ => {
                 self.last_message = None;
                 self.last_error = Some(format!("unknown command: {name}"));
@@ -1576,6 +1685,66 @@ impl App {
         self.pane_widths = Self::DEFAULT_PANE_WIDTHS;
         self.last_error = None;
         self.last_message = Some("pane widths reset to default".to_string());
+    }
+
+    /// `:config unmount <show|hide>` / `:config archive <show|hide>` —
+    /// see `execute_command`'s doc comment.
+    fn command_config(&mut self, args: &str) {
+        const USAGE: &str = "usage: :config <unmount|archive> <show|hide>";
+
+        let (category, state) = match args.split_whitespace().collect::<Vec<_>>().as_slice() {
+            [category, state] => (*category, *state),
+            _ => {
+                self.last_message = None;
+                self.last_error = Some(USAGE.to_string());
+                return;
+            }
+        };
+        let show = match state {
+            "show" => true,
+            "hide" => false,
+            _ => {
+                self.last_message = None;
+                self.last_error = Some(USAGE.to_string());
+                return;
+            }
+        };
+        let noun = match category {
+            "unmount" => {
+                self.show_unmounted = show;
+                "unmounted"
+            }
+            "archive" => {
+                self.show_archived = show;
+                "archived"
+            }
+            _ => {
+                self.last_message = None;
+                self.last_error = Some(USAGE.to_string());
+                return;
+            }
+        };
+
+        // Hiding a category the current selection was in leaves it
+        // pointing at a row that no longer renders — fall back to the
+        // active vault's first root (always at least one, see `App::new`'s
+        // "Welcome to Mycora" auto-creation) rather than a selection
+        // nothing on screen corresponds to.
+        let selection_still_visible = match (
+            self.selected_unmounted_vault.is_some(),
+            self.selected_archived_vault.is_some(),
+        ) {
+            (true, _) => self.show_unmounted,
+            (_, true) => self.show_archived,
+            (false, false) => true,
+        };
+        if !selection_still_visible {
+            self.set_selected(self.tree.roots().first().copied());
+        }
+
+        self.last_error = None;
+        let verb = if show { "shown" } else { "hidden" };
+        self.last_message = Some(format!("{noun} vaults now {verb} in the tree"));
     }
 
     fn command_export(&mut self, args: &str) {
