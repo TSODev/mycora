@@ -27,6 +27,13 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
         if key.code != KeyCode::Char('q') {
             app.reset_quit_confirmation();
         }
+        // A status message (e.g. `:export`'s "exported to ...") is
+        // feedback about the *previous* action, not something that
+        // should linger forever — clear it before dispatch so any other
+        // keypress moves on from it. Whatever the key itself does can
+        // still set a fresh one right after, overwriting this in the
+        // same call.
+        app.clear_transient_status();
         match app.mode {
             Mode::Normal => handle_normal(app, key),
             Mode::Insert => handle_insert(app, key.code),

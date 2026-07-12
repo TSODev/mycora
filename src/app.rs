@@ -816,6 +816,17 @@ impl App {
         self.confirm_quit = false;
     }
 
+    /// Clears `last_error`/`last_message` — called once per keypress,
+    /// before dispatch, so a status message from a previous action (e.g.
+    /// `:export`'s "exported to ...") doesn't linger in the hint row
+    /// forever once you've moved on to something else. Whatever the
+    /// keypress itself does can still set a fresh one right afterward in
+    /// the same call, overwriting this.
+    pub fn clear_transient_status(&mut self) {
+        self.last_error = None;
+        self.last_message = None;
+    }
+
     /// Number of descendants under the pending note, for the confirmation
     /// prompt ("delete this and its N descendants?").
     pub fn pending_delete_descendant_count(&self) -> Option<usize> {

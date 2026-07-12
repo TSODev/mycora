@@ -43,6 +43,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   existing output path. No frontmatter or `[[wikilink]]` rewriting yet.
 
 ### Fixed
+- **A command's status message never went away** — running `:export`,
+  `:reindex`, or any other command left its result ("exported to ...",
+  "reindexed N note(s)") stuck in the hint row forever, hiding the
+  normal keybinding hints, since nothing ever cleared it except another
+  command overwriting it. Now cleared on every keypress right before
+  dispatch, so it shows correctly the instant a command runs but doesn't
+  outlive the next thing you do.
 - **`o` (new sibling) with nothing selected silently created a root note**
   — `create_sibling`'s guard only returned early when something selected
   turned out not to be editable; with nothing selected at all it fell
