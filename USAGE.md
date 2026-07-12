@@ -346,19 +346,18 @@ authoritative: safe to delete, safe to rebuild, never a second copy of
 your data.
 
 You generally don't need to manage this yourself — the TUI reindexes
-every mounted vault automatically on startup, and reindexes the default
-vault again every time you open search with `/`, so results always
-reflect it as loaded (including edits made earlier in the same session).
-"Every mounted vault" means exactly that: read-only mounted vaults (see
-[Configuration](#configuration)) get indexed right alongside the active
-one, not just the one you can edit — that's what backlinks,
-[Layout](#layout)'s link-count badges, and read-only tree navigation are
-actually reading. `/` full-text search is the one exception that stays
-scoped to the active vault's notes only, for now. The backlinks pane and
-its link-count badges don't trigger a reindex — they read whatever the
-last one resolved. The CLI commands below are for headless use:
-rebuilding the index without opening the TUI, or keeping it warm in the
-background for some other tool to query directly.
+every mounted vault automatically on startup, and reindexes every
+mounted vault again every time you open search with `/`, so results
+always reflect them as loaded (including edits made earlier in the same
+session). "Every mounted vault" means exactly that: read-only mounted
+vaults (see [Configuration](#configuration)) get indexed right alongside
+the active one, not just the one you can edit — that's what backlinks,
+[Layout](#layout)'s link-count badges, read-only tree navigation, and
+`/` search are all reading. The backlinks pane and its link-count badges
+don't trigger a reindex — they read whatever the last one resolved. The
+CLI commands below are for headless use: rebuilding the index without
+opening the TUI, or keeping it warm in the background for some other
+tool to query directly.
 
 ```sh
 mycora reindex          # rebuild every mounted vault once, then exit
@@ -383,10 +382,23 @@ tags, or *any* of them. `:tags <tag1,tag2,...>` and `:tags list` (see
 [Command palette](#command-palette)) expose the *any*-of-them (OR) case
 in the TUI; *all*-of-them (AND) filtering
 (`Index::filter_by_tags(..., TagFilterOp::All)`) has no user-facing
-command yet, only reachable through the Rust API directly. `:tag
-add <tag>`/`:tag del <tag>` add/remove a tag on the selected note
-itself, shown as `#tag` badges in the body preview (see
-[Layout](#layout)) — a different operation from filtering *by* tags.
+command yet, only reachable through the Rust API directly.
+
+Unlike `/` search — scoped to whichever vault the current selection is
+in (see [Searching](#searching)) — both `:tags` commands deliberately
+span *every mounted vault at once*, active or read-only. A tag is a
+tag regardless of where you happen to be looking: `:tags list` sums a
+tag's note count across every mounted vault rather than showing it once
+per vault, and `:tags <tag1,...>`'s results each name their own vault
+(`[vault-name] Title`) since they can come from more than one at a
+time — `Enter` jumps to whichever one, the same cross-vault jump
+`/` search and backlinks already do.
+
+`:tag add <tag>`/`:tag del <tag>` are a different operation entirely —
+they add/remove a tag on the *selected* note itself, shown as `#tag`
+badges in the body preview (see [Layout](#layout)), rather than
+filtering *by* tags. Like every mutating command, they're scoped to
+(and refuse outside of) the active vault.
 
 ## Layout
 
@@ -452,7 +464,13 @@ pane doesn't — `b` shifts focus onto it in place.
 
 ## Searching
 
-- `/` — opens a search prompt over the active vault's title + body text
+- `/` — opens a search prompt over title + body text, scoped to whichever
+  vault the current selection is actually in (the title bar shows which
+  one, e.g. `Search [vault-name]: query`) — not always the active vault,
+  so searching while browsing a read-only mounted vault searches *that*
+  one instead of silently falling back. Falls back to the active vault
+  if nothing's selected, or the selection is an unmounted/archived
+  vault's placeholder row (see [Configuration](#configuration))
 - Results update as you type: each word becomes a prefix match (`arch`
   matches "Architecture"), and every word you've typed must match
   somewhere in the title or body — not a raw substring search, and not
@@ -465,15 +483,13 @@ pane doesn't — `b` shifts focus onto it in place.
 - `Esc` — cancels, returning to Normal mode without changing your current
   selection
 
-Opening search always reindexes first (see [The search index](#the-search-index)),
-so results reflect the tree exactly as it stands, including edits you
-haven't run `mycora reindex` for yet. `/` itself only searches the
-default (editable) vault's notes — other mounted vaults are indexed too
-(their link-count badges work, see [Layout](#layout)) but aren't
-included in full-text results yet. The backlinks pane isn't scoped this
-way: it follows the current selection in *any* mounted vault, read-only
-included, and jumping to a backlink can land anywhere (see
-[Backlinks](#backlinks)).
+Opening search always reindexes every mounted vault first (see
+[The search index](#the-search-index)), so results reflect the tree
+exactly as it stands, including edits you haven't run `mycora reindex`
+for yet — even though a single search only ever queries the one vault
+it's scoped to. The backlinks pane isn't scoped this way: it follows the
+current selection in *any* mounted vault, read-only included, and
+jumping to a backlink can land anywhere (see [Backlinks](#backlinks)).
 
 ## Backlinks
 
@@ -504,16 +520,19 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
   search already triggers automatically), reporting how many notes were
   indexed
 - `:tags <tag1,tag2,...>` — comma-separated, matches notes with *any* of
-  the listed tags (not all — there's no AND syntax yet). Opens a
-  full-pane result list: `j`/`k` to move, `Enter` jumps to the selected
-  note (expanding its ancestors, same as Search and Backlinks), `Esc`
-  cancels back to Normal without changing your selection. If nothing
-  matches, the status bar says so instead of opening an empty list.
-- `:tags list` — every distinct tag in the active vault, alphabetically,
-  with each tag's note count. `j`/`k` to move, `Enter` filters by the
-  selected tag (same as typing `:tags <that-tag>` yourself, landing in
-  the same result list as above) — a way to browse and pick a tag
-  without already knowing or typing its exact spelling, `Esc` cancels.
+  the listed tags (not all — there's no AND syntax yet), across *every
+  mounted vault at once* (see [Tags](#tags)), each result labeled with
+  its own vault. Opens a full-pane result list: `j`/`k` to move, `Enter`
+  jumps to the selected note (expanding its ancestors, same as Search
+  and Backlinks, and working across vaults the same way), `Esc` cancels
+  back to Normal without changing your selection. If nothing matches,
+  the status bar says so instead of opening an empty list.
+- `:tags list` — every distinct tag across every mounted vault,
+  alphabetically, with each tag's note count summed across all of them.
+  `j`/`k` to move, `Enter` filters by the selected tag (same as typing
+  `:tags <that-tag>` yourself, landing in the same result list as above)
+  — a way to browse and pick a tag without already knowing or typing its
+  exact spelling, `Esc` cancels.
 - `:panes reset` — resets the split layout (see [Layout](#layout)) back
   to the default 40/40/20, the quickest way back after resizing since
   pane widths persist across restarts

@@ -85,6 +85,32 @@ Goal: fast lookups without scanning the filesystem every time.
       Results update on every keystroke; Up/Down cycles them; Enter expands
       the hit's ancestors and selects it in the tree; Esc cancels without
       touching the current selection
+      **Since extended** (2026-07-13, user-requested): `/` always queried
+      `Index::search` with the active vault's own id — searching while
+      browsing a read-only mounted vault silently searched the *active*
+      vault instead of the one actually on screen, easy to miss since
+      nothing in the UI said which vault a result list came from. The
+      user first asked whether search could span every mounted vault at
+      once; floated back scoping it to "wherever you currently are"
+      instead, and confirmed that reading (backlinks and link-count
+      badges already work this way, resolved against whichever vault the
+      current selection is actually in — full-text search was the one
+      exception).
+      New `App::search_scope()` resolves the vault from the current
+      selection (`resolve`, same backbone `vault_name`/`live_backlinks`
+      already use) rather than always `self.vault_id`, falling back to
+      the active vault when nothing's selected or the selection is an
+      unmounted/archived vault's placeholder row (nothing loaded there
+      to search). Stable for as long as a search session lasts, since
+      nothing in `Mode::Search` changes `self.selected`. The search
+      overlay's title now reads `Search [vault-name]: query` instead of
+      just `Search: query`, so which vault a result list came from is
+      never a guess. Manually verified in tmux with two mounted vaults,
+      each with one note containing a distinct word: searching that word
+      while the *other* vault's note was selected correctly found
+      nothing (title showed the right vault name); moving into the vault
+      that actually had the word and re-searching found it, title
+      updated to match.
 - [x] Tag filtering: filter notes by one or more tags with AND/OR boolean
       logic (baseline set-filtering over the `notes`/tags index, no
       relevance ranking yet — that's v0.6's job) — new `tags` table
@@ -94,6 +120,43 @@ Goal: fast lookups without scanning the filesystem every time.
       full-text search, this item never called for its own TUI overlay);
       a tag-browsing UI is left for whenever v0.7's UX polish or a later
       pass picks it up
+      **Since extended** (2026-07-13, user-requested): once `/` search
+      got scoped to the current selection's vault (see the "Search
+      overlay" entry above), the user asked whether `:tags`/`:tags list`
+      should follow the same pattern, or whether a global search across
+      every mounted vault would serve tags better. Landed on global,
+      deliberately the opposite answer from search: a tag is a
+      low-noise, deliberate signal a user tends to apply the same way
+      across every vault they keep (`#urgent`, `#review`, ...), so
+      "everything tagged X, anywhere" is more useful than "only in the
+      vault I happen to be looking at" — whereas a free-text search term
+      is noisier (a common word matches everywhere) and more naturally
+      tied to whatever's currently on screen. `filter_by_tags` and
+      `all_tags` both changed from a single `vault_id: &str` to
+      `vault_ids: &[&str]`, called with every mounted vault's id (new
+      `App::mounted_vault_ids()`) instead of just the active one;
+      `all_tags` sums a shared tag's count across every vault passed in
+      rather than reporting it once per vault, same "tags are
+      transversal" reasoning. `IndexedNote` (the shared result type for
+      both tag filtering and backlinks) gained a `vault_id` field —
+      populated in `backlinks` too, even though that command's own
+      scoping didn't change, since results already *could* span vaults
+      there (a link's source and target can live in different mounted
+      vaults) and nothing surfaced which one before. `Mode::TagResults`
+      shows each hit's vault as a dimmed `[vault-name]` prefix ahead of
+      its title now that a result list can span more than one; `Enter`
+      jumping to a cross-vault hit needed no changes at all — it already
+      went through `reveal`/`set_selected`, the same id-agnostic path
+      search and backlinks jumps already used. 4 new/rewritten tests in
+      `index.rs` (`filter_by_tags`/`all_tags` each get a "spans exactly
+      the given vault_ids, not more" case and an empty-`vault_ids` case;
+      `all_tags`'s multi-vault test explicitly asserts a shared tag's
+      count sums rather than double-reports). Manually verified in tmux
+      with two mounted vaults, both with a note tagged `urgent`: `:tags
+      urgent` listed both notes labeled `[default]`/`[other]`; `Enter`
+      on the second correctly jumped into the read-only vault and
+      selected it; `:tags list` showed `urgent (2 notes)`, the summed
+      total, not two separate entries.
 
 v0.4 is now feature-complete against this list.
 

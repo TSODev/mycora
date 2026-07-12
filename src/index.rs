@@ -17,6 +17,13 @@ use crate::vault::Vault;
 pub struct IndexedNote {
     pub note_id: NoteId,
     pub title: String,
+    /// Which vault this note actually lives in — `filter_by_tags` can
+    /// span every mounted vault at once (see its own doc comment), and
+    /// `backlinks`' sources can live in a different vault than the
+    /// target they're pointing at, so a caller can't assume "the vault I
+    /// asked about" the way it safely could when both were always
+    /// single-vault-scoped.
+    pub vault_id: String,
 }
 
 /// One full-text search hit: a resolved note plus an FTS5-generated
@@ -474,42 +481,53 @@ impl Index {
             .join(" ")
     }
 
-    /// Baseline set-filtering over the `tags` index: notes in `vault_id`
-    /// that have all (`TagFilterOp::All`) or any (`TagFilterOp::Any`) of
-    /// `tags`, ordered by title. No relevance ranking — that's v0.6's job,
-    /// once tantivy's faceted filters land alongside this.
+    /// Baseline set-filtering over the `tags` index: notes in any of
+    /// `vault_ids` that have all (`TagFilterOp::All`) or any
+    /// (`TagFilterOp::Any`) of `tags`, ordered by title. Deliberately
+    /// spans every mounted vault at once rather than being scoped to one
+    /// — unlike full-text search (`search`/`search_faceted`, scoped to
+    /// wherever the current selection is), a tag is a deliberate,
+    /// low-noise signal a user applies the same way across every vault
+    /// they keep, so "everything tagged X, anywhere" is more useful here
+    /// than "only in the one vault I happen to be looking at." No
+    /// relevance ranking — that's v0.6's job, once tantivy's faceted
+    /// filters land alongside this.
     pub fn filter_by_tags(
         &self,
-        vault_id: &str,
+        vault_ids: &[&str],
         tags: &[String],
         op: TagFilterOp,
     ) -> Result<Vec<IndexedNote>> {
-        if tags.is_empty() {
+        if tags.is_empty() || vault_ids.is_empty() {
             return Ok(Vec::new());
         }
 
-        let placeholders = tags.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let vault_placeholders = vault_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let tag_placeholders = tags.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
         let sql = match op {
             TagFilterOp::Any => format!(
-                "SELECT DISTINCT n.id, n.title
+                "SELECT DISTINCT n.id, n.title, n.vault_id
                  FROM notes n
                  JOIN tags t ON t.vault_id = n.vault_id AND t.note_id = n.id
-                 WHERE n.vault_id = ? AND t.tag IN ({placeholders})
+                 WHERE n.vault_id IN ({vault_placeholders}) AND t.tag IN ({tag_placeholders})
                  ORDER BY n.title"
             ),
             TagFilterOp::All => format!(
-                "SELECT n.id, n.title
+                "SELECT n.id, n.title, n.vault_id
                  FROM notes n
                  JOIN tags t ON t.vault_id = n.vault_id AND t.note_id = n.id
-                 WHERE n.vault_id = ? AND t.tag IN ({placeholders})
-                 GROUP BY n.id, n.title
+                 WHERE n.vault_id IN ({vault_placeholders}) AND t.tag IN ({tag_placeholders})
+                 GROUP BY n.id, n.title, n.vault_id
                  HAVING COUNT(DISTINCT t.tag) = ?
                  ORDER BY n.title"
             ),
         };
 
         let mut stmt = self.conn.prepare(&sql)?;
-        let mut query_params: Vec<&dyn rusqlite::ToSql> = vec![&vault_id];
+        let mut query_params: Vec<&dyn rusqlite::ToSql> = Vec::new();
+        for vault_id in vault_ids {
+            query_params.push(vault_id);
+        }
         for tag in tags {
             query_params.push(tag);
         }
@@ -521,30 +539,39 @@ impl Index {
         let rows = stmt.query_map(query_params.as_slice(), |row| {
             let note_id: String = row.get(0)?;
             let title: String = row.get(1)?;
-            Ok((note_id, title))
+            let vault_id: String = row.get(2)?;
+            Ok((note_id, title, vault_id))
         })?;
 
         let mut hits = Vec::new();
         for row in rows {
-            let (note_id, title) = row?;
+            let (note_id, title, vault_id) = row?;
             let uuid = Uuid::parse_str(&note_id)
                 .with_context(|| format!("indexed note id {note_id} is not a valid UUID"))?;
             hits.push(IndexedNote {
                 note_id: NoteId(uuid),
                 title,
+                vault_id,
             });
         }
         Ok(hits)
     }
 
-    /// Every distinct tag used in `vault_id`, alphabetical, each with how
-    /// many notes carry it — backs the `:tags list` command. Scoped to a
-    /// single vault, same as `filter_by_tags`.
-    pub fn all_tags(&self, vault_id: &str) -> Result<Vec<(String, i64)>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT tag, COUNT(*) FROM tags WHERE vault_id = ?1 GROUP BY tag ORDER BY tag",
-        )?;
-        let rows = stmt.query_map([vault_id], |row| {
+    /// Every distinct tag used across any of `vault_ids`, alphabetical,
+    /// each with how many notes carry it *in total* across all of them
+    /// (not broken down per vault — same "tags are transversal" instinct
+    /// as `filter_by_tags`) — backs the `:tags list` command.
+    pub fn all_tags(&self, vault_ids: &[&str]) -> Result<Vec<(String, i64)>> {
+        if vault_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = vault_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            "SELECT tag, COUNT(*) FROM tags WHERE vault_id IN ({placeholders}) \
+             GROUP BY tag ORDER BY tag"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(vault_ids), |row| {
             let tag: String = row.get(0)?;
             let count: i64 = row.get(1)?;
             Ok((tag, count))
@@ -562,7 +589,7 @@ impl Index {
     /// trigger a reindex.
     pub fn backlinks(&self, vault_id: &str, target: NoteId) -> Result<Vec<IndexedNote>> {
         let mut stmt = self.conn.prepare(
-            "SELECT n.id, n.title
+            "SELECT n.id, n.title, n.vault_id
              FROM links l
              JOIN notes n ON n.vault_id = l.source_vault AND n.id = l.source
              WHERE l.target_vault = ?1 AND l.target = ?2
@@ -571,17 +598,19 @@ impl Index {
         let rows = stmt.query_map(params![vault_id, target.0.to_string()], |row| {
             let note_id: String = row.get(0)?;
             let title: String = row.get(1)?;
-            Ok((note_id, title))
+            let vault_id: String = row.get(2)?;
+            Ok((note_id, title, vault_id))
         })?;
 
         let mut hits = Vec::new();
         for row in rows {
-            let (note_id, title) = row?;
+            let (note_id, title, vault_id) = row?;
             let uuid = Uuid::parse_str(&note_id)
                 .with_context(|| format!("indexed note id {note_id} is not a valid UUID"))?;
             hits.push(IndexedNote {
                 note_id: NoteId(uuid),
                 title,
+                vault_id,
             });
         }
         Ok(hits)
@@ -986,7 +1015,7 @@ mod tests {
 
         let tags = vec!["rust".to_string(), "go".to_string()];
         let mut hits = index
-            .filter_by_tags("default", &tags, TagFilterOp::Any)
+            .filter_by_tags(&["default"], &tags, TagFilterOp::Any)
             .unwrap();
         hits.sort_by(|a, b| a.title.cmp(&b.title));
         assert_eq!(hits.len(), 2);
@@ -1014,14 +1043,14 @@ mod tests {
 
         let tags = vec!["rust".to_string(), "lang".to_string()];
         let hits = index
-            .filter_by_tags("default", &tags, TagFilterOp::All)
+            .filter_by_tags(&["default"], &tags, TagFilterOp::All)
             .unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].note_id, rust_note);
 
         let no_match = vec!["rust".to_string(), "go".to_string()];
         assert!(index
-            .filter_by_tags("default", &no_match, TagFilterOp::All)
+            .filter_by_tags(&["default"], &no_match, TagFilterOp::All)
             .unwrap()
             .is_empty());
 
@@ -1030,7 +1059,7 @@ mod tests {
     }
 
     #[test]
-    fn filter_by_tags_is_scoped_to_its_vault_id() {
+    fn filter_by_tags_spans_exactly_the_given_vault_ids() {
         let db_path = scratch_db_path();
         let mut index = Index::open(&db_path).unwrap();
 
@@ -1041,21 +1070,44 @@ mod tests {
         let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
         index.reindex("a", &tree_a, &vault_a).unwrap();
 
+        let mut tree_b = Tree::new();
+        let (note_b, note) = tagged_note("B", &["shared"]);
+        tree_b.insert_loaded(note_b, note);
+        let vault_b_dir = temp_vault_dir();
+        let vault_b = Vault::open(vault_b_dir.clone()).unwrap();
+        index.reindex("b", &tree_b, &vault_b).unwrap();
+
         let tags = vec!["shared".to_string()];
+        // A vault_ids list of just "a" doesn't reach into "b" — tags
+        // spanning every mounted vault is the caller's choice (passing
+        // every mounted vault's id), not something filter_by_tags
+        // assumes on its own.
         assert_eq!(
             index
-                .filter_by_tags("a", &tags, TagFilterOp::Any)
+                .filter_by_tags(&["a"], &tags, TagFilterOp::Any)
                 .unwrap()
                 .len(),
             1
         );
         assert!(index
-            .filter_by_tags("b", &tags, TagFilterOp::Any)
+            .filter_by_tags(&["c"], &tags, TagFilterOp::Any)
             .unwrap()
             .is_empty());
 
+        // Passing both ids is what "tags span every mounted vault" (see
+        // App::mounted_vault_ids) actually looks like: both notes come
+        // back, each correctly labeled with its own vault_id.
+        let mut both = index
+            .filter_by_tags(&["a", "b"], &tags, TagFilterOp::Any)
+            .unwrap();
+        both.sort_by(|x, y| x.title.cmp(&y.title));
+        assert_eq!(both.len(), 2);
+        assert_eq!(both[0].vault_id, "a");
+        assert_eq!(both[1].vault_id, "b");
+
         std::fs::remove_file(&db_path).ok();
         std::fs::remove_dir_all(&vault_a_dir).ok();
+        std::fs::remove_dir_all(&vault_b_dir).ok();
     }
 
     #[test]
@@ -1063,7 +1115,19 @@ mod tests {
         let db_path = scratch_db_path();
         let index = Index::open(&db_path).unwrap();
         assert!(index
-            .filter_by_tags("default", &[], TagFilterOp::Any)
+            .filter_by_tags(&["default"], &[], TagFilterOp::Any)
+            .unwrap()
+            .is_empty());
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn filter_by_tags_with_no_vault_ids_returns_nothing() {
+        let db_path = scratch_db_path();
+        let index = Index::open(&db_path).unwrap();
+        let tags = vec!["shared".to_string()];
+        assert!(index
+            .filter_by_tags(&[], &tags, TagFilterOp::Any)
             .unwrap()
             .is_empty());
         std::fs::remove_file(&db_path).ok();
@@ -1084,7 +1148,7 @@ mod tests {
         let vault = Vault::open(vault_dir.clone()).unwrap();
         index.reindex("default", &tree, &vault).unwrap();
 
-        let tags = index.all_tags("default").unwrap();
+        let tags = index.all_tags(&["default"]).unwrap();
         assert_eq!(
             tags,
             vec![
@@ -1099,32 +1163,61 @@ mod tests {
     }
 
     #[test]
-    fn all_tags_is_scoped_to_its_vault_id() {
+    fn all_tags_spans_exactly_the_given_vault_ids_and_sums_shared_tag_counts() {
         let db_path = scratch_db_path();
         let mut index = Index::open(&db_path).unwrap();
 
         let mut tree_a = Tree::new();
-        let (id, note) = tagged_note("A note", &["only-in-a"]);
+        let (id, note) = tagged_note("A note", &["only-in-a", "shared"]);
         tree_a.insert_loaded(id, note);
         let vault_a_dir = temp_vault_dir();
         let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
         index.reindex("a", &tree_a, &vault_a).unwrap();
 
-        assert!(index.all_tags("b").unwrap().is_empty());
+        let mut tree_b = Tree::new();
+        let (id, note) = tagged_note("B note", &["shared"]);
+        tree_b.insert_loaded(id, note);
+        let vault_b_dir = temp_vault_dir();
+        let vault_b = Vault::open(vault_b_dir.clone()).unwrap();
+        index.reindex("b", &tree_b, &vault_b).unwrap();
+
+        assert!(index.all_tags(&["c"]).unwrap().is_empty());
         assert_eq!(
-            index.all_tags("a").unwrap(),
-            vec![("only-in-a".to_string(), 1)]
+            index.all_tags(&["a"]).unwrap(),
+            vec![
+                ("only-in-a".to_string(), 1),
+                ("shared".to_string(), 1),
+            ]
+        );
+        // "shared" appears in both vaults — spanning both sums the count
+        // rather than reporting it once per vault, same "tags are
+        // transversal" instinct the whole feature is built on.
+        assert_eq!(
+            index.all_tags(&["a", "b"]).unwrap(),
+            vec![
+                ("only-in-a".to_string(), 1),
+                ("shared".to_string(), 2),
+            ]
         );
 
         std::fs::remove_file(&db_path).ok();
         std::fs::remove_dir_all(&vault_a_dir).ok();
+        std::fs::remove_dir_all(&vault_b_dir).ok();
     }
 
     #[test]
     fn all_tags_is_empty_for_a_vault_with_no_tags() {
         let db_path = scratch_db_path();
         let index = Index::open(&db_path).unwrap();
-        assert!(index.all_tags("default").unwrap().is_empty());
+        assert!(index.all_tags(&["default"]).unwrap().is_empty());
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn all_tags_with_no_vault_ids_returns_nothing() {
+        let db_path = scratch_db_path();
+        let index = Index::open(&db_path).unwrap();
+        assert!(index.all_tags(&[]).unwrap().is_empty());
         std::fs::remove_file(&db_path).ok();
     }
 

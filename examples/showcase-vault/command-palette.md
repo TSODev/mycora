@@ -7,7 +7,7 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T15:00:00Z
+updated: 2026-07-13T10:00:00Z
 ---
 
 # Command palette
@@ -19,14 +19,18 @@ command also appears above the prompt for as long as it's open.
 - `:reindex` — manually rebuilds the [[Search and indexing]] index,
   reporting how many notes were indexed
 - `:tags <tag1,tag2,...>` — matches notes with *any* of the listed tags
-  (OR, not AND yet), opening a full-pane result list (`j`/`k` move,
-  `Enter` jumps, `Esc` cancels)
-- `:tags list` — every distinct tag, alphabetically with note counts;
+  (OR, not AND yet) across *every mounted vault at once*, each result
+  labeled with its own vault. Opens a full-pane result list (`j`/`k`
+  move, `Enter` jumps — including across vaults, `Esc` cancels)
+- `:tags list` — every distinct tag across every mounted vault,
+  alphabetically, with each tag's note count summed across all of them;
   `Enter` on one filters by it, landing in the same result list as
   above — pick a tag without already knowing or typing its exact
   spelling. Live autocompletion while typing `:tags <partial>` was
   considered too, then deferred — more implementation work for a need
-  this already covers in practice.
+  this already covers in practice. Deliberately spans every vault,
+  unlike `/` search's per-selection scoping — see
+  [[Search and indexing]] for why the two went opposite ways.
 - `:panes reset` — resets the [[Layout]] back to 40/40/20, the way back
   after resizing now that widths persist across restarts
 - `:export <path>` — flattens the *selected* note's subtree to Markdown

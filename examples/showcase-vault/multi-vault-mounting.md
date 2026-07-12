@@ -6,7 +6,7 @@ tags:
 - features
 - multi-vault
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T14:00:00Z
+updated: 2026-07-13T09:00:00Z
 ---
 
 # Multi-vault mounting
@@ -29,7 +29,10 @@ link-count badges and cross-vault link resolution (see
 [[Cross-links and backlinks]]); the one thing that never works on them is
 editing — every mutating key refuses with "this vault is read-only" (see
 [[Guard every mutation against the wrong vault]]). `/` full-text search
-stays scoped to the active vault's notes only, for now.
+is scoped to whichever vault the current selection is in — not always
+the active one — so searching while browsing a read-only mounted vault
+searches *that* vault; the search overlay's title names it so it's
+never a guess.
 
 A registered vault that *isn't* mounted still shows up — as a single,
 unexpandable `⊘ name` row after every mounted vault's section, since

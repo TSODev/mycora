@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`:tags`/`:tags list` now span every mounted vault** — the opposite
+  choice from `/` search's per-selection scoping just above: a tag is a
+  deliberate signal applied the same way across vaults, so filtering by
+  one now searches everywhere mounted rather than only the active vault.
+  `:tags list`'s counts sum across vaults; `:tags <tag,...>`'s results
+  each show which vault they're from (`[vault-name] Title`).
 - **`:tag add`/`:tag del` and a tag badge row in the body preview** — the
   selected note's tags now show as `#tag` badges along the bottom of the
   body preview pane (always reserved, even with none); `:tag add <tag>`
@@ -64,6 +70,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   existing output path. No frontmatter or `[[wikilink]]` rewriting yet.
 
 ### Fixed
+- **`/` search silently searched the wrong vault** — it always queried
+  the active vault, even while browsing a read-only mounted one, with
+  nothing in the UI to say so. Now scoped to wherever the current
+  selection actually is (falling back to the active vault when nothing's
+  selected, or on an unmounted/archived vault's placeholder row), and
+  the search title shows which vault (`Search [name]: query`).
 - **USAGE.md had drifted in several places (v0.9)** — audited it against
   the actual code (keybindings, `:` commands, CLI, vault/config file
   formats) rather than assuming it was current. The keybinding tables,

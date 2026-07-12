@@ -9,7 +9,7 @@ tags:
 - v0.4
 - v0.6
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-11T00:00:00Z
+updated: 2026-07-13T10:00:00Z
 ---
 
 # Search and indexing
@@ -19,12 +19,20 @@ Markdown files on demand (see [[Markdown as source of truth]]) — backs
 full-text search and tag filtering.
 
 - **Full-text search** — `/` opens a live-as-you-type overlay over
-  titles + bodies, reindexing first so results reflect the tree exactly
-  as it stands. FTS5 provides BM25-ranked results plus a snippet around
-  each match, matched terms highlighted. Scoped to the active vault's
-  notes only, for now — unlike everything else below.
+  titles + bodies, reindexing every mounted vault first so results
+  reflect the tree exactly as it stands. FTS5 provides BM25-ranked
+  results plus a snippet around each match, matched terms highlighted.
+  Scoped to whichever vault the current selection is actually in (title
+  bar names it), not always the active one — searching while browsing a
+  read-only mounted vault searches *that* vault.
 - **Tag filtering** — AND/OR set-filtering over tags; reachable today via
   the [[Command palette]]'s `:tags` command (OR/any-match only so far).
+  Deliberately the *opposite* scoping choice from full-text search:
+  `:tags`/`:tags list` span every mounted vault at once rather than just
+  the current selection's — a tag is applied the same way across
+  vaults, so "everything tagged X, anywhere" beats "only where I'm
+  looking." `:tags list`'s counts sum across vaults; `:tags` results
+  each show which vault they came from.
 - **Faceted search** — tag, date-range, and tree-branch facets can be
   ANDed onto a ranked query at the API level (backend only, no dedicated
   keybinding for picking facets yet).

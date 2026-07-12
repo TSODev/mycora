@@ -512,6 +512,17 @@ impl App {
             .map(|v| (&v.tree, v.id.as_str()))
     }
 
+    /// Every currently-loaded vault's id — the active one plus every
+    /// read-only mounted one — for read operations that deliberately
+    /// span all of them at once (`:tags`/`:tags list`, see
+    /// `Index::filter_by_tags`'s doc comment for why tags work this way
+    /// while `/` search doesn't).
+    fn mounted_vault_ids(&self) -> Vec<&str> {
+        let mut ids = vec![self.vault_id.as_str()];
+        ids.extend(self.other_vaults.iter().map(|v| v.id.as_str()));
+        ids
+    }
+
     /// `true` iff `id` belongs to the active (editable) vault. Every
     /// mutating command checks this first and reports a clear error
     /// rather than silently no-oping or, worse, acting on the wrong
@@ -1125,7 +1136,12 @@ impl App {
 
     /// Enters search mode. Reindexes first so results reflect the live
     /// in-memory tree (including edits made this session that a prior
-    /// `mycora reindex` run on disk wouldn't know about), not a stale copy.
+    /// `mycora reindex` run on disk wouldn't know about), not a stale
+    /// copy. Every mounted vault gets reindexed (`reindex_mounted`), even
+    /// though a single search only ever queries one of them (see
+    /// `search_scope`) — cheap to keep them all fresh together, and
+    /// avoids a second reindex if the vault being searched changes
+    /// before the next search session.
     pub fn begin_search(&mut self) {
         if let Err(err) = self.reindex_mounted() {
             self.last_error = Some(format!("reindex failed: {err}"));
@@ -1147,7 +1163,8 @@ impl App {
     }
 
     fn update_search_results(&mut self) {
-        self.search_results = match self.index.search(&self.vault_id, &self.search_query) {
+        let vault_id = self.search_scope().to_string();
+        self.search_results = match self.index.search(&vault_id, &self.search_query) {
             Ok(hits) => hits,
             Err(err) => {
                 self.last_error = Some(format!("search failed: {err}"));
@@ -1196,6 +1213,22 @@ impl App {
         if let Some(v) = self.other_vaults.iter().find(|v| v.tree.get(id).is_some()) {
             reveal_ancestors(&v.tree, &mut self.expanded, id);
         }
+    }
+
+    /// The vault `/` search actually queries: wherever the current
+    /// selection lives (via `resolve`), so searching while browsing a
+    /// read-only mounted vault searches *that* vault rather than
+    /// silently falling back to the active one. Falls back to the active
+    /// vault when nothing's selected, or the selection is an unmounted/
+    /// archived vault's placeholder row (nothing loaded there to
+    /// search). Selection can't change while `Mode::Search` is open (no
+    /// tree navigation happens in that mode), so this stays stable for
+    /// as long as a search session lasts.
+    pub fn search_scope(&self) -> &str {
+        self.selected
+            .and_then(|id| self.resolve(id))
+            .map(|(_, vault_id)| vault_id)
+            .unwrap_or(self.vault_id.as_str())
     }
 
     pub fn search_query(&self) -> &str {
@@ -1656,10 +1689,10 @@ impl App {
     }
 
     fn command_tags_list(&mut self) {
-        match self.index.all_tags(&self.vault_id) {
+        match self.index.all_tags(&self.mounted_vault_ids()) {
             Ok(tags) if tags.is_empty() => {
                 self.last_error = None;
-                self.last_message = Some("no tags in this vault".to_string());
+                self.last_message = Some("no tags in any mounted vault".to_string());
             }
             Ok(tags) => {
                 self.last_error = None;
@@ -1679,10 +1712,16 @@ impl App {
     /// shared by `:tags <tag1,tag2,...>` and `confirm_tag_list` (picking a
     /// tag from `:tags list` runs this with just that one tag).
     fn show_tag_results(&mut self, tags: Vec<String>) {
-        match self.index.filter_by_tags(&self.vault_id, &tags, TagFilterOp::Any) {
+        match self
+            .index
+            .filter_by_tags(&self.mounted_vault_ids(), &tags, TagFilterOp::Any)
+        {
             Ok(hits) if hits.is_empty() => {
                 self.last_error = None;
-                self.last_message = Some(format!("no notes tagged {}", tags.join(", ")));
+                self.last_message = Some(format!(
+                    "no notes tagged {} in any mounted vault",
+                    tags.join(", ")
+                ));
             }
             Ok(hits) => {
                 self.last_error = None;

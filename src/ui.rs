@@ -326,6 +326,11 @@ fn draw_backlinks_pane(frame: &mut Frame, area: Rect, app: &App) {
     }
 }
 
+/// Full-pane search results overlay. The title names which vault is
+/// being searched (`App::search_scope` — the current selection's vault,
+/// not always the active one) alongside the live query, so switching
+/// which vault you're browsing before pressing `/` doesn't leave you
+/// guessing which one a result list actually came from.
 fn draw_search(frame: &mut Frame, area: Rect, app: &App) {
     let items: Vec<ListItem> = app
         .search_results()
@@ -352,7 +357,7 @@ fn draw_search(frame: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
-    let title = format!("Search: {}", app.search_query());
+    let title = format!("Search [{}]: {}", app.search_scope(), app.search_query());
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     let mut state = ListState::default().with_selected(Some(app.search_selected()));
     frame.render_stateful_widget(list, area, &mut state);
@@ -367,12 +372,20 @@ fn draw_tag_results(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, hit)| {
-            let style = if i == app.tag_results_selected() {
+            let base = if i == app.tag_results_selected() {
                 Style::default().add_modifier(Modifier::REVERSED)
             } else {
                 Style::default()
             };
-            ListItem::new(Line::from(Span::styled(hit.title.clone(), style)))
+            // Tag matches span every mounted vault (see
+            // `Index::filter_by_tags`'s doc comment), so each result
+            // names its own vault — unlike a single-vault-scoped list,
+            // there's no one implied vault a title alone would tell you.
+            let line = Line::from(vec![
+                Span::styled(format!("[{}] ", hit.vault_id), base.add_modifier(Modifier::DIM)),
+                Span::styled(hit.title.clone(), base),
+            ]);
+            ListItem::new(line)
         })
         .collect();
 
@@ -382,9 +395,10 @@ fn draw_tag_results(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-/// Every distinct tag in the active vault (`:tags list`), each with its
-/// note count — `Enter` on one filters by it, transitioning into
-/// `draw_tag_results` for that tag (see `App::confirm_tag_list`).
+/// Every distinct tag across every mounted vault (`:tags list`), each
+/// with its total note count summed across all of them — `Enter` on one
+/// filters by it, transitioning into `draw_tag_results` for that tag
+/// (see `App::confirm_tag_list`).
 fn draw_tag_list(frame: &mut Frame, area: Rect, app: &App) {
     let items: Vec<ListItem> = app
         .tag_list()
