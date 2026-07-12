@@ -5,7 +5,7 @@ order: 3
 tags:
 - design-decision
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T12:00:00Z
+updated: 2026-07-12T13:00:00Z
 ---
 
 # Design decisions
@@ -27,6 +27,7 @@ behind each — the "why," not just the "what."
 - [[Every write to disk is atomic]]
 - [[Reindex was quadratic, one missing index fixed it]]
 - [[Unmounted vaults are visible too]]
+- [[Compressing a vault trades files for one archive, deliberately]]
 
 Most of these were resolved as open questions during development, not
 decided upfront — see [[Roadmap]] for the versioned history each one is

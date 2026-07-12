@@ -6,7 +6,7 @@ tags:
 - features
 - multi-vault
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T12:00:00Z
+updated: 2026-07-12T13:00:00Z
 ---
 
 # Multi-vault mounting
@@ -36,6 +36,18 @@ unexpandable `⊘ name` row after every mounted vault's section, since
 nothing is loaded for it. Selecting it shows the vault's path and the
 exact command to bring it back instead of a note body (see
 [[Unmounted vaults are visible too]]).
+
+An unmounted vault can go one step further: `mycora vault archive`
+compresses its directory to a single file and deletes the original,
+reclaiming the disk space entirely rather than just sitting there
+unloaded — see
+[[Compressing a vault trades files for one archive, deliberately]].
+An archived vault doesn't have its own tree row yet, and is
+deliberately excluded from the generic unmounted placeholder rather
+than showing up there misleadingly (that row's "how to mount it"
+message would be wrong for something with nothing left at its path to
+mount) — for now it's just absent from the tree entirely until it gets
+proper row treatment of its own.
 
 See [[Read-only secondary vaults]] for why full editing wasn't built up
 front, and [[Managing vaults from the CLI]] for the `mycora vault ...`

@@ -7,7 +7,7 @@ tags:
 - multi-vault
 - cli
 created: 2026-07-10T20:00:00Z
-updated: 2026-07-10T20:00:00Z
+updated: 2026-07-12T13:00:00Z
 ---
 
 # CLI vault management stays registry-only
@@ -45,6 +45,14 @@ any code, rather than guessing:
   entry to `mounted = false`, but trivial once a command existed to do
   that directly. Fixed rather than shipped as a companion bug: see
   [[Multi-vault mounting]] for what the self-heal itself is for.
+- **`vault archive`/`vault unarchive` are the one deliberate exception
+  to this whole note's own title.** Every other subcommand only ever
+  edits `config.toml`; archiving actually compresses (and then deletes)
+  the vault's real directory, because that's the entire point of it —
+  a registry-only "archive" that left the uncompressed original sitting
+  right there wouldn't have reclaimed anything. See
+  [[Compressing a vault trades files for one archive, deliberately]]
+  for that decision and the two forks it took to get there.
 
 Every command that writes to `config.toml` shares one implementation:
 parse the whole file fresh, mutate in memory, rewrite it — the same

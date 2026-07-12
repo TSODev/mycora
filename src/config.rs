@@ -15,6 +15,12 @@ pub struct VaultEntry {
     /// startup. `true` by default — a registry entry only stays *known but
     /// inactive* if the user explicitly opts it out with `mounted = false`.
     pub mounted: bool,
+    /// Where this vault's compressed archive lives, if it's currently
+    /// archived (`mycora vault archive`) — `path` stays what the live
+    /// directory would be if restored, this is `None` for every normal,
+    /// non-archived vault. Always implies `mounted = false`: there's
+    /// nothing loadable at `path` while this is `Some`.
+    pub archived: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -34,6 +40,8 @@ struct RawVaultEntry {
     path: PathBuf,
     #[serde(default = "default_mounted")]
     mounted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    archived: Option<PathBuf>,
 }
 
 fn default_mounted() -> bool {
@@ -84,6 +92,7 @@ impl Config {
                 name: "default".to_string(),
                 path,
                 mounted: true,
+                archived: None,
             }]
         } else {
             raw.vaults
@@ -92,6 +101,7 @@ impl Config {
                     name: v.name,
                     path: v.path,
                     mounted: v.mounted,
+                    archived: v.archived,
                 })
                 .collect()
         };
@@ -175,6 +185,7 @@ impl Config {
             name: name.to_string(),
             path,
             mounted,
+            archived: None,
         });
 
         write_raw(config_path, &raw)
@@ -288,6 +299,46 @@ impl Config {
         Self::set_mounted(config_path, name, false)
     }
 
+    /// Sets or clears `name`'s archived state — `mycora vault archive`/
+    /// `vault unarchive`. Errors if `name` isn't registered, if archiving
+    /// something already archived, or unarchiving something that isn't.
+    /// Deliberately doesn't check whether `name` is currently mounted:
+    /// that's a precondition `main.rs`'s orchestration checks itself,
+    /// *before* the actual (potentially slow) compression work runs, not
+    /// something to duplicate here after the fact.
+    fn set_archived(config_path: &Path, name: &str, archive_path: Option<PathBuf>) -> Result<()> {
+        let mut raw = read_raw(config_path)?;
+        migrate_legacy_vault_path(&mut raw);
+
+        let entry = raw
+            .vaults
+            .iter_mut()
+            .find(|v| v.name == name)
+            .with_context(|| format!("no vault named \"{name}\" in {}", config_path.display()))?;
+
+        match (entry.archived.is_some(), archive_path.is_some()) {
+            (true, true) => bail!("vault \"{name}\" is already archived"),
+            (false, false) => bail!("vault \"{name}\" is not archived"),
+            _ => {}
+        }
+        if archive_path.is_some() {
+            entry.mounted = false;
+        }
+        entry.archived = archive_path;
+
+        write_raw(config_path, &raw)
+    }
+
+    /// `mycora vault archive <name>`. See `set_archived`.
+    pub fn archive_vault(config_path: &Path, name: &str, archive_path: PathBuf) -> Result<()> {
+        Self::set_archived(config_path, name, Some(archive_path))
+    }
+
+    /// `mycora vault unarchive <name>`. See `set_archived`.
+    pub fn unarchive_vault(config_path: &Path, name: &str) -> Result<()> {
+        Self::set_archived(config_path, name, None)
+    }
+
     /// Unregisters `name` from `config_path` — `mycora vault remove`.
     /// **Only ever touches the registry entry, never the vault's files on
     /// disk** (confirmed with the user before implementing: notes are the
@@ -363,6 +414,7 @@ fn migrate_legacy_vault_path(raw: &mut RawConfig) {
             name: "default".to_string(),
             path: legacy_path,
             mounted: true,
+            archived: None,
         });
     }
 }
@@ -376,6 +428,7 @@ mod tests {
             name: name.to_string(),
             path: PathBuf::from(path),
             mounted: true,
+            archived: None,
         }
     }
 
@@ -388,6 +441,7 @@ mod tests {
                 name: "default".to_string(),
                 path: PathBuf::from("/home/alice/mycora"),
                 mounted: true,
+                archived: None,
             }]
         );
     }
@@ -724,6 +778,86 @@ mod tests {
         Config::add_vault(&path, "archive", PathBuf::from("/vaults/archive"), true).unwrap();
 
         let err = Config::unmount_vault(&path, "nope").unwrap_err();
+        assert!(err.to_string().contains("no vault named"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn archive_vault_sets_the_archived_path_and_unmounts() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "old-notes", PathBuf::from("/vaults/old-notes"), false).unwrap();
+
+        Config::archive_vault(&path, "old-notes", PathBuf::from("/backups/old-notes.tar.gz"))
+            .unwrap();
+
+        let config = config_at(&path);
+        assert_eq!(
+            config.vaults[0].archived,
+            Some(PathBuf::from("/backups/old-notes.tar.gz"))
+        );
+        assert!(!config.vaults[0].mounted);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn archive_vault_forces_unmounted_even_if_it_was_mounted() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "old-notes", PathBuf::from("/vaults/old-notes"), true).unwrap();
+
+        Config::archive_vault(&path, "old-notes", PathBuf::from("/backups/old-notes.tar.gz"))
+            .unwrap();
+
+        assert!(!config_at(&path).vaults[0].mounted);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn archive_vault_errors_if_already_archived() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "old-notes", PathBuf::from("/vaults/old-notes"), false).unwrap();
+        Config::archive_vault(&path, "old-notes", PathBuf::from("/backups/a.tar.gz")).unwrap();
+
+        let err =
+            Config::archive_vault(&path, "old-notes", PathBuf::from("/backups/b.tar.gz"))
+                .unwrap_err();
+        assert!(err.to_string().contains("already archived"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn unarchive_vault_clears_the_archived_path() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "old-notes", PathBuf::from("/vaults/old-notes"), false).unwrap();
+        Config::archive_vault(&path, "old-notes", PathBuf::from("/backups/old-notes.tar.gz"))
+            .unwrap();
+
+        Config::unarchive_vault(&path, "old-notes").unwrap();
+
+        assert_eq!(config_at(&path).vaults[0].archived, None);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn unarchive_vault_errors_if_not_archived() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "old-notes", PathBuf::from("/vaults/old-notes"), false).unwrap();
+
+        let err = Config::unarchive_vault(&path, "old-notes").unwrap_err();
+        assert!(err.to_string().contains("not archived"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn set_archived_errors_if_name_not_found() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "old-notes", PathBuf::from("/vaults/old-notes"), false).unwrap();
+
+        let err = Config::archive_vault(&path, "nope", PathBuf::from("/backups/nope.tar.gz"))
+            .unwrap_err();
         assert!(err.to_string().contains("no vault named"));
 
         std::fs::remove_file(&path).ok();

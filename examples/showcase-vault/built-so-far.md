@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T12:00:00Z
+updated: 2026-07-12T13:00:00Z
 ---
 
 # Built so far
@@ -31,13 +31,16 @@ updated: 2026-07-12T12:00:00Z
   [[Deferred: configurable keybindings]])
 - **Since v0.7** — a full `mycora vault ...` CLI for the registry:
   [[Managing vaults from the CLI]] (`add`, `init`, `rename`, `promote`,
-  `mount`, `unmount`, `remove`, `list`); [[Read-only secondary vaults]]
-  became fully navigable (not just visible), with every mutation guarded
-  against acting on the wrong vault (see
-  [[Guard every mutation against the wrong vault]]); an *unmounted*
-  vault stopped being invisible too, showing up as its own unexpandable
-  placeholder row with a "how to mount it" message (see
-  [[Unmounted vaults are visible too]])
+  `mount`, `unmount`, `remove`, `archive`, `unarchive`, `list`);
+  [[Read-only secondary vaults]] became fully navigable (not just
+  visible), with every mutation guarded against acting on the wrong
+  vault (see [[Guard every mutation against the wrong vault]]); an
+  *unmounted* vault stopped being invisible too, showing up as its own
+  unexpandable placeholder row with a "how to mount it" message (see
+  [[Unmounted vaults are visible too]]); an unmounted vault can now be
+  compressed down to a single archive file to reclaim disk space, and
+  restored back (see
+  [[Compressing a vault trades files for one archive, deliberately]])
 - **v0.8** — notes are never trapped in Mycora: [[Exporting a subtree]]
   flattens a note and its descendants to Markdown or PDF (see
   [[PDF export renders through a pure-Rust crate]]);

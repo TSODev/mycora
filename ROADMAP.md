@@ -1169,33 +1169,89 @@ Goal: stability before a public release.
   no delete prompt, no navigation change) — confirming the
   `create_sibling` fix; `j`/`k` correctly wrapped through the row in
   both directions.
-- **Archived and locked vaults** (raised 2026-07-12, not yet designed in
-  detail or scheduled to a version) — following on from unmounted vaults
-  becoming visible (see "Multiple vaults" above), two more vault states
-  were floated:
-  - `mycora vault archive <name>` / `mycora vault unarchive <name>` —
-    compresses an unmounted vault's directory down to a single archive
-    file (and the reverse). CLI-only, same reasoning as every other
-    `vault ...` subcommand: it acts on the registry, not on "whatever's
-    currently open," so it doesn't belong in the `:` command palette
-    (see "Command palette" above) any more than `vault add`/`vault
-    remove` do.
-  - `mycora vault lock <name>` / `mycora vault unlock <name>` —
-    encrypting a vault at rest. Deliberately **not recommended** as a
-    bespoke Mycora feature: passphrase handling, key derivation, and the
-    consequences of getting authenticated encryption subtly wrong are a
-    lot of security surface for a note-taking tool to own, especially
-    with no recovery path if a passphrase is lost. A vault is just a
-    directory of Markdown files, so it already encrypts cleanly with
-    existing, audited tools outside Mycora entirely (LUKS, VeraCrypt, or
-    `age` wrapped around a `vault archive` output) — that's the
-    suggested answer unless a concrete gap in that story shows up.
-  - Both states, if built, would want the same tree treatment unmounted
-    vaults just got: their own placeholder row, and a way to declutter
-    the tree once there are enough of them — `:config archive show/hide`
-    and `:config lock show/hide` as TUI-side display toggles (not
-    registry mutations) were floated for that, confirmed with the user
-    via `AskUserQuestion` to mean exactly that (show/hide the
-    placeholder rows), not something else. Not designed further than
-    that yet — no `:config` command namespace exists at all today, and
-    both toggles depend on `vault archive`/`vault lock` existing first.
+- [x] **Archived vaults**: `mycora vault archive <name>` / `mycora vault
+      unarchive <name>` (2026-07-12) — following on from unmounted vaults
+      becoming visible (see "Multiple vaults" above), two more vault
+      states were floated: archiving (compress to a single file) and
+      locking (encrypt at rest). Locking was **abandoned outright** on
+      the user's own call, for the reason already raised when discussing
+      it: passphrase handling, key derivation, and the consequences of
+      getting authenticated encryption subtly wrong are a lot of security
+      surface for a note-taking tool to own, with no recovery path if a
+      passphrase is lost — a vault is just a directory of Markdown files,
+      so it already encrypts cleanly with existing, audited tools outside
+      Mycora entirely (LUKS, VeraCrypt, `age`).
+
+      Archiving *was* built. CLI-only, same reasoning as every other
+      `vault ...` subcommand: it acts on the registry, not on "whatever's
+      currently open," so it doesn't belong in the `:` command palette
+      (see "Command palette" above) any more than `vault add`/`vault
+      remove` do. Two forks confirmed via `AskUserQuestion` before
+      writing any code: **tar.gz** (new `tar`/`flate2` dependencies, both
+      pure-Rust — `flate2` defaults to its `miniz_oxide` backend, no
+      system zlib needed) over `zip`, since a vault is many small,
+      textually similar Markdown files — a solid, streaming-compressed
+      format like tar.gz genuinely compresses that shape of data better
+      than zip's per-file-independent compression, and tar+gzip is what
+      Cargo itself uses for exactly this "package up a directory" case;
+      and **delete the original after verifying the archive**, not
+      "keep both" — `vault archive` re-opens and reads back every entry
+      of the freshly written archive (new `archive::verify_archive`,
+      counting real files, not the directory-entry `append_dir_all`
+      always adds even for an empty source) before removing anything, so
+      a corrupt or truncated archive is caught while the original still
+      exists rather than only discovered once it's already gone.
+
+      New `src/archive.rs` (`archive_vault_dir`, `verify_archive`,
+      `unarchive_vault_dir`) does the pure filesystem work; `VaultEntry`
+      gained `archived: Option<PathBuf>` (the archive file's location
+      when archived — `path` stays what the *live* directory would be,
+      so unarchiving knows where to restore to) and `Config` gained
+      `archive_vault`/`unarchive_vault` for the registry bookkeeping
+      alone — the "is this vault currently mounted" precondition is
+      deliberately checked by `main.rs`'s orchestration *before* the
+      (potentially slow) compression work runs, not inside `Config`
+      after the fact. `vault archive` refuses on a mounted vault
+      (archiving something meant to still be live would pull the rug out
+      from under it — unmount first) or an already-archived one; `vault
+      unarchive` refuses if the destination directory already exists and
+      is non-empty, same don't-silently-clobber instinct as `import`.
+      Neither auto-mounts/unmounts beyond what archiving/unarchiving
+      itself requires — `vault mount` after `unarchive` is a separate,
+      explicit step, matching every other `vault ...` subcommand's
+      "one command, one effect" shape. `App::new()`'s `unmounted_vaults`
+      populator (which drives `TreeRow::UnmountedVault`, see "Multiple
+      vaults" above) now excludes archived entries — their placeholder
+      row would tell you to `mycora vault mount <name>`, which is wrong
+      for something with nothing left at `path` to mount, until archived
+      vaults get their own row treatment (still open, see below).
+
+      3 new tests in `archive.rs` (round trip preserves file content
+      including a nested subdirectory; an archive with zero files is
+      rejected; a non-gzip file is rejected) and 7 in `config.rs`
+      (archived path + forced-unmounted set correctly, refuses double-
+      archiving, `unarchive` clears the field and refuses on a
+      not-archived vault, not-found errors for both). Manually verified
+      end to end against a hand-built two-vault registry: `vault archive`
+      refused on the mounted vault and (after) on the already-archived
+      one; the archived vault's directory was gone and a valid
+      `old-notes.tar.gz` existed after a successful archive; `vault list`
+      showed `[archived]`; `vault unarchive` restored both notes'
+      content byte-for-byte, removed the archive file, and left the
+      entry unmounted; `vault mount` + `mycora reindex` afterward loaded
+      the restored vault's 2 notes correctly, confirming the round trip
+      didn't just look right on disk but was actually usable again.
+
+      **Still open, not built yet**: both archived and (any future)
+      differently-treated vault states would want the same tree
+      treatment unmounted vaults already got — their own placeholder
+      row, and a way to declutter the tree once there are enough of
+      them. `:config archive show/hide` (and, before lock was dropped,
+      a `:config lock show/hide` alongside it) as a TUI-side display
+      toggle was floated for that and confirmed with the user via
+      `AskUserQuestion` to mean exactly "show/hide the placeholder
+      rows," not something else — but no `:config` command namespace
+      exists at all yet, and an archived vault has no placeholder row of
+      its own to toggle yet either (see the `unmounted_vaults` exclusion
+      above), so this is sequenced as explicit next work, not designed
+      further than the confirmed intent.

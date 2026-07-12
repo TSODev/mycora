@@ -125,7 +125,7 @@ name = "work"
 path = "/path/to/work/notes"
 
 [[vaults]]
-name = "archive"
+name = "old-notes"
 path = "/path/to/old/notes"
 mounted = false   # known to the registry, but not loaded
 ```
@@ -230,14 +230,35 @@ every vault in the registry (including the active one) doesn't break
 anything — `active_vault` still self-heals to some vault, and Mycora
 loads it regardless of its `mounted` flag, so the app always starts.
 
+To reclaim disk space for a vault you don't need mounted right now:
+
+```sh
+mycora vault archive <name>
+mycora vault unarchive <name>
+```
+
+`archive` compresses the vault's directory into a single `<name>.tar.gz`
+next to it (or wherever you pass as a second argument) and **removes the
+original directory** — the archive is read back and verified before
+anything is deleted, so a corrupt archive is caught while the original
+still exists rather than only discovered after. Refuses on a vault
+that's still mounted (`mycora vault unmount <name>` first — archiving
+something meant to still be live would pull the rug out from under it)
+or one that's already archived. `unarchive` reverses it: restores the
+directory from the archive and removes the archive file, but leaves the
+vault unmounted — `mycora vault mount <name>` afterward is a separate,
+explicit step. Both are CLI-only, same as every other `vault ...`
+subcommand — there's no `:` equivalent, since archiving acts on the
+registry rather than on anything currently open in the TUI.
+
 To see everything currently registered:
 
 ```sh
 mycora vault list
 ```
 
-Prints each vault's name, path, and status (`active`, `mounted`, or
-`not mounted`). To unregister one:
+Prints each vault's name, path, and status (`active`, `mounted`,
+`not mounted`, or `archived`). To unregister one:
 
 ```sh
 mycora vault remove <name>

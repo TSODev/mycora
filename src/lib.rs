@@ -1,4 +1,5 @@
 pub mod app;
+pub mod archive;
 pub mod config;
 pub mod event;
 pub mod export;

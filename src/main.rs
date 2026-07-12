@@ -13,6 +13,7 @@ use notify::{RecursiveMode, Watcher};
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use mycora::app::App;
+use mycora::archive;
 use mycora::config::Config;
 use mycora::index::Index;
 use mycora::note::NoteId;
@@ -140,6 +141,23 @@ enum VaultCommand {
     },
     /// List every registered vault, its path, and its mount/active state.
     List,
+    /// Compress an unmounted vault's directory into a single archive
+    /// file, then remove the original directory. Refuses if the vault is
+    /// still mounted (unmount it first) or already archived.
+    Archive {
+        /// Name of the vault to archive.
+        name: String,
+        /// Where to write the compressed archive. Defaults to
+        /// `<name>.tar.gz` next to the vault's own directory if omitted.
+        output: Option<PathBuf>,
+    },
+    /// Reverse of `archive`: extracts the vault's archive back to its
+    /// original directory and removes the archive file. Leaves it
+    /// unmounted — `vault mount` separately to activate it again.
+    Unarchive {
+        /// Name of the vault to unarchive.
+        name: String,
+    },
 }
 
 /// Restores the terminal (raw mode + alternate screen) before a panic's
@@ -194,6 +212,12 @@ fn main() -> anyhow::Result<()> {
         Some(Command::Vault {
             action: VaultCommand::List,
         }) => return vault_list(),
+        Some(Command::Vault {
+            action: VaultCommand::Archive { name, output },
+        }) => return vault_archive(&name, output),
+        Some(Command::Vault {
+            action: VaultCommand::Unarchive { name },
+        }) => return vault_unarchive(&name),
         Some(Command::Export { title, output }) => return export_note(&title, output),
         Some(Command::Import { source, name, path }) => return import_vault(source, &name, path),
         None => {}
@@ -344,11 +368,13 @@ fn vault_list() -> anyhow::Result<()> {
         if entry.name == active_name {
             state.push("active");
         }
-        state.push(if entry.mounted {
-            "mounted"
+        if entry.archived.is_some() {
+            state.push("archived");
+        } else if entry.mounted {
+            state.push("mounted");
         } else {
-            "not mounted"
-        });
+            state.push("not mounted");
+        }
         println!(
             "  {:<16} {}  [{}]",
             entry.name,
@@ -356,6 +382,103 @@ fn vault_list() -> anyhow::Result<()> {
             state.join(", ")
         );
     }
+    Ok(())
+}
+
+/// Compresses `name`'s directory into a single gzip-compressed tar and
+/// removes the original — `mycora vault archive`. Refuses if `name` is
+/// still mounted (unmount it first — archiving a directory that's still
+/// meant to be live would silently pull the rug out from under it) or
+/// already archived. Verifies the archive is readable before deleting
+/// anything, so a failure partway through never leaves the vault's notes
+/// existing nowhere at all.
+fn vault_archive(name: &str, output: Option<PathBuf>) -> anyhow::Result<()> {
+    let config = Config::load()?;
+    let entry = config
+        .vaults
+        .iter()
+        .find(|v| v.name == name)
+        .with_context(|| format!("no vault named \"{name}\""))?;
+
+    if entry.mounted {
+        bail!(
+            "vault \"{name}\" is mounted — unmount it first with `mycora vault unmount {name}`, \
+             then retry `mycora vault archive {name}`"
+        );
+    }
+    if entry.archived.is_some() {
+        bail!("vault \"{name}\" is already archived");
+    }
+    if !entry.path.exists() {
+        bail!(
+            "{} does not exist — nothing to archive",
+            entry.path.display()
+        );
+    }
+
+    let output = output.unwrap_or_else(|| entry.path.with_file_name(format!("{name}.tar.gz")));
+    if output.exists() {
+        bail!("{} already exists", output.display());
+    }
+
+    archive::archive_vault_dir(&entry.path, &output)
+        .with_context(|| format!("archiving {}", entry.path.display()))?;
+    archive::verify_archive(&output).with_context(|| format!("verifying {}", output.display()))?;
+
+    std::fs::remove_dir_all(&entry.path)
+        .with_context(|| format!("removing {}", entry.path.display()))?;
+
+    let config_path = Config::default_path(&config.home);
+    Config::archive_vault(&config_path, name, output.clone())?;
+
+    println!(
+        "mycora: archived \"{name}\" to {} (original directory removed)",
+        output.display()
+    );
+    Ok(())
+}
+
+/// Reverse of `vault_archive`: extracts the archive back to `name`'s
+/// registered directory and removes the archive file. Leaves the vault
+/// unmounted afterward — `vault mount` is a separate, explicit step,
+/// same "one command, one effect" reasoning as every other `vault ...`
+/// subcommand.
+fn vault_unarchive(name: &str) -> anyhow::Result<()> {
+    let config = Config::load()?;
+    let entry = config
+        .vaults
+        .iter()
+        .find(|v| v.name == name)
+        .with_context(|| format!("no vault named \"{name}\""))?;
+
+    let Some(archive_path) = &entry.archived else {
+        bail!("vault \"{name}\" is not archived");
+    };
+
+    let destination_occupied = std::fs::read_dir(&entry.path)
+        .map(|mut entries| entries.next().is_some())
+        .unwrap_or(false);
+    if destination_occupied {
+        bail!(
+            "{} already exists and is not empty — nothing to unarchive into",
+            entry.path.display()
+        );
+    }
+
+    archive::unarchive_vault_dir(archive_path, &entry.path)
+        .with_context(|| format!("unarchiving into {}", entry.path.display()))?;
+
+    std::fs::remove_file(archive_path)
+        .with_context(|| format!("removing {}", archive_path.display()))?;
+
+    let config_path = Config::default_path(&config.home);
+    Config::unarchive_vault(&config_path, name)?;
+
+    println!(
+        "mycora: unarchived \"{name}\" to {} (archive file removed) — still unmounted, \
+         `mycora vault mount {name}` to activate it",
+        entry.path.display()
+    );
     Ok(())
 }
 

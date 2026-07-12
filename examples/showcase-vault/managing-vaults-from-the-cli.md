@@ -7,7 +7,7 @@ tags:
 - multi-vault
 - cli
 created: 2026-07-10T20:00:00Z
-updated: 2026-07-11T09:30:00Z
+updated: 2026-07-12T13:00:00Z
 ---
 
 # Managing vaults from the CLI
@@ -34,15 +34,21 @@ which run *inside* an already-open Mycora against the active vault.
   anything and reporting the conflict afterward.
 - `vault mount <name>` / `vault unmount <name>` — toggle the `mounted`
   flag directly, without removing the entry.
+- `vault archive <name> [output]` / `vault unarchive <name>` —
+  compresses an unmounted vault's directory to a single `.tar.gz` and
+  removes the original (and the reverse). The one subcommand here that
+  *does* touch a vault's actual files, deliberately — see
+  [[Compressing a vault trades files for one archive, deliberately]].
 - `vault remove <name>` — unregisters an entry. Never touches the
   vault's files on disk, and refuses outright on `"default"`.
 - `vault list` — prints every registered vault, its path, and
-  `[active, mounted]`-style status tags.
+  `[active, mounted]`-style status tags (`archived` too, for one that
+  is).
 
 See [[CLI vault management stays registry-only]] for why `init` and
 `promote` land on opposite answers to the same "what if `default`
-already exists" question, and why none of these commands ever touch a
-vault's Markdown files.
+already exists" question, and why every one of these commands except
+`archive`/`unarchive` never touches a vault's Markdown files.
 
 `mycora vault ...` isn't the only thing the CLI does beyond the TUI —
 `mycora reindex` (see [[Search and indexing]]) and `mycora export`

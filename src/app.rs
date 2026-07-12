@@ -230,10 +230,15 @@ impl App {
         // `false` — that can happen via `Config::active_vault`'s
         // self-heal (see below), and it's actively loaded regardless, so
         // showing it *again* as an unmounted placeholder would be wrong.
+        // Also excludes archived vaults: `TreeRow::UnmountedVault`'s body
+        // preview tells you to `mycora vault mount <name>`, which would
+        // be actively wrong for one (nothing exists at `path` to mount —
+        // it's compressed elsewhere) until archived vaults get their own
+        // row treatment (see ROADMAP.md's "Archived and locked vaults").
         let unmounted_vaults: Vec<VaultEntry> = config
             .vaults
             .iter()
-            .filter(|v| !v.mounted && v.name != active.name)
+            .filter(|v| !v.mounted && v.archived.is_none() && v.name != active.name)
             .cloned()
             .collect();
 

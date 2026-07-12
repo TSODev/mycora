@@ -5,7 +5,7 @@ order: 2
 tags:
 - features
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-11T11:30:00Z
+updated: 2026-07-12T13:00:00Z
 ---
 
 # Features
@@ -15,7 +15,7 @@ What's actually built, grouped by area:
 - [[Tree operations]] — create, move, reorder, copy, delete
 - [[Search and indexing]] — SQLite FTS5, tags, facets
 - [[Cross-links and backlinks]] — wikilinks, backlinks, broken links
-- [[Multi-vault mounting]] — a registry of vaults, mount/unmount
+- [[Multi-vault mounting]] — a registry of vaults, mount/unmount/archive
 - [[Session persistence]] — remembers where you were
 - [[Undo and redo]] — every structural op is reversible
 - [[Theming]] — light/dark, for free, via named colors

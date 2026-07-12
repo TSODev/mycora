@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`mycora vault archive`/`vault unarchive`** — compresses an unmounted
+  vault's directory into a single `.tar.gz` (new `tar`/`flate2`
+  dependencies, both pure-Rust) and removes the original after verifying
+  the archive is readable; `unarchive` reverses it, restoring the
+  directory and removing the archive file. CLI-only, like every other
+  `vault ...` subcommand. Refuses on a mounted vault (unmount first) or
+  an already-archived one; `vault list` shows `[archived]`.
 - **Unmounted vaults are now visible in the tree** — a registered but
   unmounted vault used to be invisible in the TUI entirely; it now gets
   its own single, unexpandable `⊘ name` row (dark gray, no fold marker)
