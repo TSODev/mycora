@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T14:00:00Z
+updated: 2026-07-12T21:00:00Z
 ---
 
 # Built so far
@@ -50,7 +50,10 @@ updated: 2026-07-12T14:00:00Z
   into a new one, mapping its folder structure onto Mycora's tree (see
   [[Folder structure becomes tree structure]]); only the optional
   stretch-goal templating hooks are left unstarted
-- **v0.9 (in progress)** — stability before a public release:
+- **Since v0.8** — `:tag add <tag>` / `:tag del <tag>` manage the
+  selected note's tags directly, shown as `#tag` badges along the
+  bottom of the body preview (see [[Command palette]] and [[Layout]])
+- **v0.9** — done, stability before a public release:
   [[Every write to disk is atomic]] closes the crash-safety gap in
   `config.toml`/`session.toml`; an audit of `tree.rs`/`link.rs`'s test
   coverage added 19 tests for untested move/copy/delete edge cases and
@@ -58,4 +61,7 @@ updated: 2026-07-12T14:00:00Z
   used to vanish from navigation instead of being healed like any other
   malformed parent (see [[Markdown as source of truth]]); a large-vault
   benchmark pass found and fixed a quadratic `mycora reindex` (see
-  [[Reindex was quadratic, one missing index fixed it]])
+  [[Reindex was quadratic, one missing index fixed it]]); a documentation
+  audit checked USAGE.md against the actual code rather than assuming it
+  was current (see [[Roadmap]]), and found (and fixed) several places it
+  had quietly gone stale

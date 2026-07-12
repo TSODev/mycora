@@ -1,14 +1,17 @@
 # Mycora — Usage Guide
 
-> Reflects what's actually implemented today (v0.1–v0.6, plus most of
-> v0.7): an in-memory tree with Markdown persistence, full structural
-> operations, SQLite-backed search (with snippets and faceted filters) and
-> tag filtering, read-only multi-vault mounting, `[[wikilink]]` cross-links
-> (including cross-vault ones) with a backlinks panel and link-count
-> badges, a full-pane note-body editor, a resizable three-pane layout
-> (tree, rendered-Markdown body preview, backlinks) with light/dark-aware
-> colors, and a `:` command palette (`:reindex`, `:tags`, `:q`). No link
-> autocompletion or configurable keybindings yet — see
+> Reflects what's actually implemented today (v0.1–v0.9): an in-memory
+> tree with Markdown persistence and atomic writes throughout, full
+> structural operations with undo/redo, tag management, SQLite-backed
+> search (with snippets and faceted filters) that scales linearly to
+> thousands of notes, multi-vault mounting (read-only secondary vaults,
+> unmounted and archived vaults both visible as their own tree rows),
+> `[[wikilink]]` cross-links (including cross-vault ones) with a
+> backlinks panel and link-count badges, a full-pane note-body editor, a
+> resizable three-pane layout (tree, rendered-Markdown body preview,
+> backlinks) with light/dark-aware colors, and a `:` command palette
+> (`:reindex`, `:tags`, `:tag`, `:panes`, `:export`, `:config`, `:q`).
+> No link autocompletion or configurable keybindings yet — see
 > [ROADMAP.md](./ROADMAP.md) for what's still ahead.
 
 ## Table of Contents
@@ -50,11 +53,11 @@ version:
   a note can reference any other note via `[[wikilink]]`-style links —
   even one in a different mounted vault — the way a mycelial fungal
   network connects the root systems of separate trees underground. The
-  tree gives you orientation; links give you associative reach. Writing
-  the links themselves needs a note-body editor, which doesn't exist in
-  the TUI yet (planned for v0.7) — for now, add `[[links]]` by editing a
-  note's Markdown file directly, then `mycora reindex` (or just reopen the
-  TUI, which reindexes on startup) to resolve them.
+  tree gives you orientation; links give you associative reach. Write
+  `[[links]]` right in the TUI with the full-pane body editor (`e`, see
+  [Editing a note's body](#editing-a-notes-body)), or by editing a note's
+  Markdown file directly outside Mycora — either way, `mycora reindex`
+  (or just reopening the TUI, which reindexes on startup) resolves them.
 - **Plain Markdown is the source of truth.** Every note is one `.md` file
   with YAML frontmatter (see [The vault format](#the-vault-format)) —
   nothing Mycora keeps in its own state is authoritative.
@@ -128,6 +131,11 @@ path = "/path/to/work/notes"
 name = "old-notes"
 path = "/path/to/old/notes"
 mounted = false   # known to the registry, but not loaded
+
+[[vaults]]
+name = "backup-2024"
+path = "/path/to/backup-2024"
+archived = "/path/to/backup-2024.tar.gz"   # compressed; path above doesn't exist right now
 ```
 
 The entry named `default` is the one you actually work in — it's the only
@@ -137,8 +145,12 @@ stacked below it with a `── name ──` separator (see [Layout](#layout));
 if none is named `default`, the first mounted entry becomes the editable
 one instead. `mounted` defaults to `true` when omitted, so a vault only
 becomes registry-only-but-inactive if you explicitly set
-`mounted = false`. Editing a non-`default` mounted vault directly
-(reparenting into it, switching which one you're "in") isn't implemented
+`mounted = false`. `archived`, present only on a vault `mycora vault
+archive` has compressed (see [below](#registering-a-vault-from-the-cli)),
+holds the archive file's path — always implies `mounted = false`, since
+there's nothing left at `path` to load until it's unarchived. Editing a
+non-`default` mounted vault directly (reparenting into it, switching
+which one you're "in") isn't implemented
 yet.
 
 A `mounted = false` entry isn't invisible, either: it shows up in the
@@ -266,8 +278,9 @@ To see everything currently registered:
 mycora vault list
 ```
 
-Prints each vault's name, path, and status (`active`, `mounted`,
-`not mounted`, or `archived`). To unregister one:
+Prints each vault's name, path, and status tags: `active` if it's the
+one you edit in, plus exactly one of `mounted`/`not mounted`/`archived`
+(e.g. `[active, mounted]`). To unregister one:
 
 ```sh
 mycora vault remove <name>
@@ -307,8 +320,15 @@ The note body, in Markdown.
 - `id` — a UUID v4, generated once at creation. Stable across renames.
 - `parent` — the id of the parent note, or `null` for a root note.
 - `order` — position among siblings.
-- `tags` — indexed for AND/OR filtering (`Index::filter_by_tags`), but not
-  yet exposed as a TUI command; only editable by hand in the file for now.
+- `tags` — a YAML list of strings, `[]` if none; indexed for AND/OR
+  filtering (`Index::filter_by_tags`, see [Tags](#tags)) and shown as
+  `#tag` badges in the body preview (see [Layout](#layout)). Manage them
+  in the TUI with `:tag add <tag>`/`:tag del <tag>`, or by hand in the
+  file directly — either way, `mycora reindex` picks up the change.
+- `created` / `updated` — RFC 3339 timestamps (UTC). `created` is set
+  once, at creation. `updated` refreshes on a rename, body edit, or tag
+  change — not on a move or reorder, which change *where* the note sits
+  but not the note's own content.
 - The title lives in the body as the first `# Heading`, not in frontmatter.
 
 Malformed files, duplicate ids, or a note whose `parent` can't be found are
@@ -358,10 +378,15 @@ it wholesale is simpler and safer than trying to patch it incrementally.
 ### Tags
 
 Every note's `tags` (see [The vault format](#the-vault-format)) are
-indexed for AND/OR set-filtering — a note matching *all* of a set of tags,
-or *any* of them. There's no TUI command or CLI flag for this yet; it's
-only reachable through the Rust API (`Index::filter_by_tags`) for now. See
-[ROADMAP.md](./ROADMAP.md) for when a user-facing surface for it lands.
+indexed for AND/OR set-filtering — a note matching *all* of a set of
+tags, or *any* of them. `:tags <tag1,tag2,...>` and `:tags list` (see
+[Command palette](#command-palette)) expose the *any*-of-them (OR) case
+in the TUI; *all*-of-them (AND) filtering
+(`Index::filter_by_tags(..., TagFilterOp::All)`) has no user-facing
+command yet, only reachable through the Rust API directly. `:tag
+add <tag>`/`:tag del <tag>` add/remove a tag on the selected note
+itself, shown as `#tag` badges in the body preview (see
+[Layout](#layout)) — a different operation from filtering *by* tags.
 
 ## Layout
 

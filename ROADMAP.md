@@ -888,7 +888,54 @@ Goal: stability before a public release.
       existing `examples/generate-test-vault`, not the new benchmark's
       own generator) completed in 0.305s wall-clock, and `/` search in
       the TUI against that vault showed no perceptible delay.
-- [ ] Documentation: user guide, keybinding reference, file format spec
+- [x] Documentation: user guide, keybinding reference, file format spec
+      (2026-07-12) — USAGE.md had been kept mostly current incrementally
+      as each feature landed, but nobody had done a systematic
+      cross-check against the actual code; used an Explore agent to
+      audit it line-by-line against the authoritative sources
+      (`event.rs`'s real keybinding dispatch, `app.rs`'s
+      `COMMAND_REFERENCE` and `execute_command`'s doc comment, `main.rs`'s
+      clap `Command`/`VaultCommand` enums, `vault.rs`'s `Frontmatter`,
+      `config.rs`'s `VaultEntry`, and the file's own Table of Contents)
+      before fixing anything, same "measure/audit before acting" instinct
+      as the v0.9 test-coverage and performance items above. The
+      keybinding tables, the `:` command palette section, the CLI
+      sections, and the Table of Contents all came back clean — zero
+      discrepancies, a real payoff of having kept USAGE.md updated
+      alongside each feature all along rather than deferring it to a
+      single pass at the end. The gaps that did turn up were all
+      staleness in prose written early and never revisited:
+      - The intro banner still claimed "v0.1–v0.6, plus most of v0.7"
+        and listed only 3 of the 7 actual `:` command names.
+      - The philosophy section still said the note-body editor "doesn't
+        exist in the TUI yet" — directly contradicted by that same
+        editor's own fully-documented section 500+ lines later in the
+        same file.
+      - The Tags section still said tag filtering had "no TUI command or
+        CLI flag... yet" — contradicted by `:tags`/`:tags list` (and,
+        after this session's own work, `:tag add`/`:tag del`) documented
+        elsewhere in the same file. Corrected precisely rather than just
+        deleting the caveat: `:tags` only ever exposes *any*-of-them (OR)
+        filtering; *all*-of-them (AND, `TagFilterOp::All`) genuinely has
+        no user-facing command yet, so that narrower true gap is now
+        what the section says instead of the broader, now-false one.
+      - `config.toml`'s `archived` field (added this session) was
+        missing from both the example block and the field-by-field
+        explanation.
+      - The vault file format's own field list was missing `created`/
+        `updated` entirely, despite them appearing in the very example
+        two paragraphs above it — and, once added, needed a real check
+        rather than a guess: confirmed in `tree.rs` that `rename`/
+        `set_body`/`set_tags` bump `updated`, but `move_note`/
+        `swap_with_sibling` (reorder) don't, so the field description
+        says exactly that instead of a plausible-sounding overclaim.
+      - `mycora vault list`'s status-tag description read as if a vault
+        shows exactly one of `active`/`mounted`/`not mounted`/`archived`,
+        when `active` can combine with any of the other three
+        (`[active, mounted]`) — reworded to say so precisely.
+      No code changes — this was a documentation-only pass, verified by
+      reading the corrected sections back against the same authoritative
+      sources rather than just trusting the rewrite.
 
 ## v1.0 — Public release
 

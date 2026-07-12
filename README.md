@@ -134,9 +134,6 @@ names the part of the design that's actually differentiating: not the tree
   editor — deliberately deferred until it's built.
 - **Configurable keybindings** — deliberately out of scope until real
   friction shows up in practice, rather than built speculatively.
-- **v0.9 — Hardening**: crash-safety, tree/link test coverage, and
-  large-vault performance are all done; a full documentation pass is the
-  one thing left.
 - **v1.0 — Public release**: a versioned crates.io publish, a release
   checklist, gathering feedback.
 
@@ -201,18 +198,18 @@ Considered and deliberately not adopted:
 
 Working and daily-usable — v0.1 through v0.9 are functionally complete
 (except link autocompletion and configurable keybindings, both
-deliberately deferred, and v0.9's documentation pass): in-memory tree
-with full structural operations, undo/redo, and tag management,
-Markdown + YAML frontmatter persistence with atomic writes throughout,
-SQLite-backed search (FTS5 full-text, BM25 ranking, tag/date/branch
-facets) that scales linearly to thousands of notes, the `[[wikilink]]`
-cross-link layer with a backlinks panel, multi-vault mounting (including
-archiving a vault to a single compressed file) with a full `mycora
-vault` CLI, a resizable three-pane TUI layout with a `:` command
-palette, and Obsidian import / Markdown-or-PDF export. See
-[USAGE.md](./USAGE.md) for how to use it today, [ROADMAP.md](./ROADMAP.md)
-for what's still ahead (the rest of v0.9, then a stable v1.0), and
-[BENCHMARK.md](./BENCHMARK.md) for how it performs at thousands of notes.
+deliberately deferred): in-memory tree with full structural operations,
+undo/redo, and tag management, Markdown + YAML frontmatter persistence
+with atomic writes throughout, SQLite-backed search (FTS5 full-text,
+BM25 ranking, tag/date/branch facets) that scales linearly to thousands
+of notes, the `[[wikilink]]` cross-link layer with a backlinks panel,
+multi-vault mounting (including archiving a vault to a single
+compressed file) with a full `mycora vault` CLI, a resizable three-pane
+TUI layout with a `:` command palette, and Obsidian import /
+Markdown-or-PDF export. See [USAGE.md](./USAGE.md) for how to use it
+today, [ROADMAP.md](./ROADMAP.md) for what's still ahead (a stable
+v1.0), and [BENCHMARK.md](./BENCHMARK.md) for how it performs at
+thousands of notes.
 
 ## License
 

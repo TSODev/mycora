@@ -64,6 +64,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   existing output path. No frontmatter or `[[wikilink]]` rewriting yet.
 
 ### Fixed
+- **USAGE.md had drifted in several places (v0.9)** — audited it against
+  the actual code (keybindings, `:` commands, CLI, vault/config file
+  formats) rather than assuming it was current. The keybinding tables,
+  command palette section, CLI sections, and table of contents were all
+  already accurate; the intro banner, the "no body editor yet" and "no
+  tag TUI yet" claims (both long since built), the vault file format's
+  missing `created`/`updated` fields and `config.toml`'s missing
+  `archived` field, and an imprecise `vault list` status description
+  were all fixed.
 - **A command's status message never went away** — running `:export`,
   `:reindex`, or any other command left its result ("exported to ...",
   "reindexed N note(s)") stuck in the hint row forever, hiding the
