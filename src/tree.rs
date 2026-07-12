@@ -85,7 +85,13 @@ impl Tree {
         for id in ids {
             let parent = self.notes[&id].parent;
             match parent {
-                Some(parent_id) if self.notes.contains_key(&parent_id) => {
+                // `parent_id != id` also catches a note whose `parent`
+                // field (malformed on-disk frontmatter, not reachable
+                // through any in-app mutation) names itself — without
+                // this guard it would become its own sole child, never
+                // appear in `roots`, and be silently unreachable from any
+                // real traversal despite still existing in `self.notes`.
+                Some(parent_id) if parent_id != id && self.notes.contains_key(&parent_id) => {
                     children_of.entry(parent_id).or_default().push(id);
                 }
                 Some(_) => {
@@ -415,6 +421,49 @@ mod tests {
     }
 
     #[test]
+    fn delete_subtree_of_a_root_removes_it_from_roots() {
+        let mut tree = Tree::new();
+        let a = tree.create_note("A", None);
+        let b = tree.create_note("B", None);
+
+        tree.delete_subtree(a).unwrap();
+
+        assert_eq!(tree.roots(), &[b]);
+        assert!(tree.get(a).is_none());
+    }
+
+    #[test]
+    fn delete_subtree_preserves_siblings() {
+        let mut tree = Tree::new();
+        let parent = tree.create_note("Parent", None);
+        let a = tree.create_note("A", Some(parent));
+        let b = tree.create_note("B", Some(parent));
+
+        tree.delete_subtree(a).unwrap();
+
+        assert_eq!(tree.children(parent), &[b]);
+        assert!(tree.get(b).is_some());
+    }
+
+    #[test]
+    fn delete_subtree_returns_the_removed_notes_own_data() {
+        let mut tree = Tree::new();
+        let parent = tree.create_note("Parent", None);
+        tree.set_body(parent, "parent body");
+        let child = tree.create_note("Child", Some(parent));
+        tree.set_body(child, "child body");
+
+        let removed = tree.delete_subtree(parent).unwrap();
+
+        assert_eq!(removed[0].0, parent);
+        assert_eq!(removed[0].1.title, "Parent");
+        assert_eq!(removed[0].1.body, "parent body");
+        assert_eq!(removed[1].0, child);
+        assert_eq!(removed[1].1.title, "Child");
+        assert_eq!(removed[1].1.body, "child body");
+    }
+
+    #[test]
     fn move_note_reparents() {
         let mut tree = Tree::new();
         let a = tree.create_note("A", None);
@@ -440,6 +489,55 @@ mod tests {
             Err(MoveError::Cycle)
         );
         assert_eq!(tree.move_note(child, Some(child)), Err(MoveError::Cycle));
+    }
+
+    #[test]
+    fn move_note_rejects_cycle_into_direct_child() {
+        let mut tree = Tree::new();
+        let parent = tree.create_note("Parent", None);
+        let child = tree.create_note("Child", Some(parent));
+
+        assert_eq!(tree.move_note(parent, Some(child)), Err(MoveError::Cycle));
+        // Nothing should have moved.
+        assert_eq!(tree.children(parent), &[child]);
+    }
+
+    #[test]
+    fn move_note_to_root_detaches_from_old_parent() {
+        let mut tree = Tree::new();
+        let parent = tree.create_note("Parent", None);
+        let child = tree.create_note("Child", Some(parent));
+
+        assert!(tree.move_note(child, None).is_ok());
+
+        assert!(tree.children(parent).is_empty());
+        assert!(tree.roots().contains(&child));
+        assert_eq!(tree.get(child).unwrap().parent, None);
+    }
+
+    #[test]
+    fn move_note_to_same_parent_is_a_noop() {
+        let mut tree = Tree::new();
+        let parent = tree.create_note("Parent", None);
+        let a = tree.create_note("A", Some(parent));
+        let b = tree.create_note("B", Some(parent));
+
+        assert!(tree.move_note(a, Some(parent)).is_ok());
+
+        // Order and membership must be untouched, not duplicated.
+        assert_eq!(tree.children(parent), &[a, b]);
+    }
+
+    #[test]
+    fn move_note_appends_after_existing_children() {
+        let mut tree = Tree::new();
+        let a = tree.create_note("A", None);
+        let b = tree.create_note("B", None);
+        let existing_child = tree.create_note("Existing", Some(b));
+
+        assert!(tree.move_note(a, Some(b)).is_ok());
+
+        assert_eq!(tree.children(b), &[existing_child, a]);
     }
 
     #[test]
@@ -475,6 +573,36 @@ mod tests {
     }
 
     #[test]
+    fn move_down_at_end_is_noop() {
+        let mut tree = Tree::new();
+        let parent = tree.create_note("Parent", None);
+        let a = tree.create_note("A", Some(parent));
+        let b = tree.create_note("B", Some(parent));
+        assert!(!tree.move_down(b));
+        assert_eq!(tree.children(parent), &[a, b]);
+    }
+
+    #[test]
+    fn move_up_and_down_reorder_root_level_siblings() {
+        let mut tree = Tree::new();
+        let a = tree.create_note("A", None);
+        let b = tree.create_note("B", None);
+
+        assert!(tree.move_up(b));
+        assert_eq!(tree.roots(), &[b, a]);
+
+        assert!(tree.move_down(b));
+        assert_eq!(tree.roots(), &[a, b]);
+    }
+
+    #[test]
+    fn move_up_and_down_on_a_missing_note_return_false() {
+        let mut tree = Tree::new();
+        assert!(!tree.move_up(NoteId::new()));
+        assert!(!tree.move_down(NoteId::new()));
+    }
+
+    #[test]
     fn deep_copy_duplicates_subtree_with_new_ids() {
         let mut tree = Tree::new();
         let root = tree.create_note("Root", None);
@@ -493,6 +621,47 @@ mod tests {
 
         // originals untouched
         assert_eq!(tree.children(root), &[child]);
+    }
+
+    #[test]
+    fn deep_copy_missing_note_returns_none() {
+        let mut tree = Tree::new();
+        assert!(tree.deep_copy(NoteId::new(), None).is_none());
+    }
+
+    #[test]
+    fn deep_copy_preserves_tags() {
+        let mut tree = Tree::new();
+        let id = NoteId::new();
+        let mut note = Note::new("Root", None);
+        note.tags = vec!["a".to_string(), "b".to_string()];
+        tree.insert_loaded(id, note);
+        tree.rebuild_hierarchy();
+
+        let copy_id = tree.deep_copy(id, None).unwrap();
+
+        assert_eq!(
+            tree.get(copy_id).unwrap().tags,
+            vec!["a".to_string(), "b".to_string()]
+        );
+    }
+
+    #[test]
+    fn deep_copy_assigns_fresh_timestamps_not_the_originals() {
+        let mut tree = Tree::new();
+        let id = NoteId::new();
+        let mut note = Note::new("Root", None);
+        let ancient = time::OffsetDateTime::UNIX_EPOCH;
+        note.created = ancient;
+        note.updated = ancient;
+        tree.insert_loaded(id, note);
+        tree.rebuild_hierarchy();
+
+        let copy_id = tree.deep_copy(id, None).unwrap();
+
+        let copy = tree.get(copy_id).unwrap();
+        assert_ne!(copy.created, ancient);
+        assert_ne!(copy.updated, ancient);
     }
 
     #[test]
@@ -531,5 +700,37 @@ mod tests {
         assert_eq!(orphaned, vec![orphan_id]);
         assert_eq!(tree.roots(), &[orphan_id]);
         assert_eq!(tree.get(orphan_id).unwrap().parent, None);
+    }
+
+    #[test]
+    fn rebuild_hierarchy_promotes_a_note_whose_parent_is_itself() {
+        // Not reachable through any in-app mutation (move_note's cycle
+        // check already refuses this), but malformed on-disk frontmatter
+        // (a hand-edited `parent:` field naming its own note) can still
+        // produce one. Without the `parent_id != id` guard in
+        // `rebuild_hierarchy`, this note would become its own sole child
+        // and never appear in `roots` — invisible to every real
+        // traversal despite still existing in the tree.
+        let mut tree = Tree::new();
+        let id = NoteId::new();
+        tree.insert_loaded(id, Note::new("Self-parented", Some(id)));
+
+        let orphaned = tree.rebuild_hierarchy();
+
+        assert_eq!(orphaned, vec![id]);
+        assert_eq!(tree.roots(), &[id]);
+        assert_eq!(tree.get(id).unwrap().parent, None);
+        assert!(tree.children(id).is_empty());
+    }
+
+    #[test]
+    fn subtree_ids_is_root_first_depth_first() {
+        let mut tree = Tree::new();
+        let root = tree.create_note("Root", None);
+        let a = tree.create_note("A", Some(root));
+        let a1 = tree.create_note("A1", Some(a));
+        let b = tree.create_note("B", Some(root));
+
+        assert_eq!(tree.subtree_ids(root), vec![root, a, a1, b]);
     }
 }

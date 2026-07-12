@@ -744,8 +744,49 @@ Goal: notes are never trapped in Mycora.
 
 Goal: stability before a public release.
 
-- [ ] Test coverage on tree operations (especially move/copy/delete edge
-      cases) and link integrity
+- [x] Test coverage on tree operations (especially move/copy/delete edge
+      cases) and link integrity (2026-07-12) — audited `tree.rs`,
+      `link.rs`, `vault.rs`, and `index.rs` against their own operations
+      for untested edge cases before adding anything; `index.rs`'s
+      link-integrity coverage (fan-out, broken links, self-links,
+      cross-vault resolution/backlinks) was already thorough, so this
+      focused on `tree.rs` and `link.rs`, where the gaps actually were.
+      19 new tests: `move_note` to root, a same-parent no-op, appending
+      after existing children, a direct-child (not just grandchild)
+      cycle rejection; `move_up`/`move_down` at the opposite untested
+      boundary, at root level (siblings tests only exercised the
+      under-a-parent path before), and on a missing note; `deep_copy` on
+      a missing note, and two claims its own doc comment made but no
+      test actually checked — that tags carry over and that timestamps
+      are freshly stamped, not cloned from the original; `delete_subtree`
+      removing a root from `roots()`, preserving untouched siblings, and
+      the returned `Vec<(NoteId, Note)>` actually holding each removed
+      note's own title/body (not just the right ids) — that data is what
+      a caller would restore from on undo, so its correctness matters as
+      much as the ids; a direct `subtree_ids` ordering test; three
+      `link.rs` cases (adjacent wikilinks with no separator, a stray
+      `]]` before the first real link, and a pinning test for the
+      documented nested-bracket "naive scanner" quirk already called out
+      in this file's own module doc comment and CLAUDE.md, which nothing
+      had actually locked in before). Auditing `rebuild_hierarchy`
+      surfaced a real, if narrow, bug along the way: a note whose
+      `parent` field names itself (unreachable through any in-app
+      mutation — `move_note`'s cycle check already refuses it — but
+      producible by hand-edited on-disk frontmatter) became its own sole
+      child and never appeared in `roots()`, silently unreachable from
+      any real traversal despite still existing in the tree. This broke
+      the self-healing contract every other malformed-parent case already
+      gets (see [[Markdown as source of truth]] in the showcase vault),
+      so fixed it the same way: treated like any other unresolvable
+      parent, promoted to root with a warning, self-healed on next save.
+      One `tree.rs` unit test pins the fix directly; a `vault.rs`
+      integration test (hand-crafted on-disk frontmatter with
+      `parent: <own id>`) confirms the same self-heal end to end through
+      a real `Vault::load()`. Manually verified: `mycora reindex` against
+      a hand-crafted self-parented note file printed the same "parent not
+      found, promoted to root" warning and rewrote the file with
+      `parent: null`; a full TUI session (reorder, copy, delete the copy)
+      against a generated test vault showed no regression.
 - [x] Crash-safety: no data loss on unexpected exit (atomic writes)
       (2026-07-12) — audited every persistent-state write path in the
       crate for atomicity before touching any of them. `vault.rs`'s note

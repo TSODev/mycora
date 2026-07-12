@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T09:00:00Z
+updated: 2026-07-12T10:00:00Z
 ---
 
 # Built so far
@@ -44,4 +44,8 @@ updated: 2026-07-12T09:00:00Z
   stretch-goal templating hooks are left unstarted
 - **v0.9 (in progress)** — stability before a public release:
   [[Every write to disk is atomic]] closes the crash-safety gap in
-  `config.toml`/`session.toml`
+  `config.toml`/`session.toml`; an audit of `tree.rs`/`link.rs`'s test
+  coverage added 19 tests for untested move/copy/delete edge cases and
+  caught a real self-healing gap along the way — a self-parented note
+  used to vanish from navigation instead of being healed like any other
+  malformed parent (see [[Markdown as source of truth]])

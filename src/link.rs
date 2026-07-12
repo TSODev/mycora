@@ -63,4 +63,34 @@ mod tests {
             vec!["Spaced Title"]
         );
     }
+
+    #[test]
+    fn extracts_adjacent_wikilinks_with_no_separator() {
+        assert_eq!(
+            extract_wikilink_titles("[[A]][[B]][[C]]"),
+            vec!["A", "B", "C"]
+        );
+    }
+
+    #[test]
+    fn ignores_a_stray_closing_bracket_before_the_first_wikilink() {
+        assert_eq!(
+            extract_wikilink_titles("see ]] over there, then [[Real Note]]"),
+            vec!["Real Note"]
+        );
+    }
+
+    #[test]
+    fn a_nested_opening_bracket_is_swallowed_into_the_title_up_to_the_next_close() {
+        // Documented, deliberate naive-scanner behavior (see this module's
+        // doc comment and CLAUDE.md): once an unclosed `[[` is seen, the
+        // scanner takes the *next* `]]` anywhere later as that link's
+        // close, even past a second `[[` in between. Pinning this exact
+        // shape so a future "smarter" rewrite doesn't silently change it
+        // without the change being deliberate.
+        assert_eq!(
+            extract_wikilink_titles("[[Outer [[Inner]] tail]]"),
+            vec!["Outer [[Inner"]
+        );
+    }
 }

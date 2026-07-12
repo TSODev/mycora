@@ -35,6 +35,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   existing output path. No frontmatter or `[[wikilink]]` rewriting yet.
 
 ### Fixed
+- **A self-parented note vanished from the tree (v0.9)** — a note whose
+  `parent` field named its own id (not reachable through any in-app
+  operation, but possible via hand-edited on-disk frontmatter) became
+  its own sole child and never appeared in `roots()` after
+  `rebuild_hierarchy`, silently unreachable from any real navigation.
+  Now treated like any other unresolvable parent: promoted to root with
+  a warning, self-healed on next save.
 - **`config.toml`/`session.toml` writes weren't crash-safe (v0.9)** —
   both used a plain `fs::write`, unlike `vault.rs`'s note writes (atomic
   since v0.2); a crash or power loss mid-write could leave either file

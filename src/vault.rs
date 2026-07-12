@@ -349,6 +349,33 @@ mod tests {
     }
 
     #[test]
+    fn load_self_heals_a_note_whose_parent_is_itself() {
+        // Not producible by any in-app operation, but a hand-edited
+        // frontmatter `parent:` field naming its own note's id is a real
+        // possibility for a file on disk — same self-healing contract as
+        // a missing parent, so it must not vanish from the tree silently.
+        let dir = temp_vault_dir();
+        let id = NoteId::new();
+        let mut note = Note::new("Self-parented", Some(id));
+        note.order = 0;
+
+        {
+            let mut vault = Vault::open(dir.clone()).unwrap();
+            vault.save_note(id, &note).unwrap();
+        }
+
+        let mut vault = Vault::open(dir.clone()).unwrap();
+        let (tree, report) = vault.load().unwrap();
+
+        assert_eq!(report.warnings.len(), 1);
+        assert_eq!(tree.roots(), &[id]);
+        assert_eq!(tree.get(id).unwrap().parent, None);
+        assert!(tree.children(id).is_empty());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn load_reassigns_duplicate_ids() {
         let dir = temp_vault_dir();
         let shared_id = NoteId::new();
