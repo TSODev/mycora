@@ -9,7 +9,7 @@ tags:
 - v0.4
 - v0.6
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T10:00:00Z
+updated: 2026-07-13T11:00:00Z
 ---
 
 # Search and indexing
@@ -32,7 +32,10 @@ full-text search and tag filtering.
   the current selection's — a tag is applied the same way across
   vaults, so "everything tagged X, anywhere" beats "only where I'm
   looking." `:tags list`'s counts sum across vaults; `:tags` results
-  each show which vault they came from.
+  each show which vault they came from. If that gets noisy, `:tags
+  limit <vault-name>` narrows both back to one named vault until `:tags
+  unlimit` lifts it — not persisted across restarts, and the overlay's
+  title always names the active scope.
 - **Faceted search** — tag, date-range, and tree-branch facets can be
   ANDed onto a ranked query at the API level (backend only, no dedicated
   keybinding for picking facets yet).

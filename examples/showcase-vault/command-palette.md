@@ -7,7 +7,7 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T10:00:00Z
+updated: 2026-07-13T11:00:00Z
 ---
 
 # Command palette
@@ -31,6 +31,11 @@ command also appears above the prompt for as long as it's open.
   this already covers in practice. Deliberately spans every vault,
   unlike `/` search's per-selection scoping — see
   [[Search and indexing]] for why the two went opposite ways.
+- `:tags limit <vault-name>` / `:tags unlimit` — narrows `:tags`/`:tags
+  list` to one named mounted vault when spanning all of them gets noisy,
+  until lifted. Errors on an unknown vault name; not persisted across
+  restarts — the `Tags`/`Tag results` overlay's title always names the
+  active scope so a limit is never invisible.
 - `:panes reset` — resets the [[Layout]] back to 40/40/20, the way back
   after resizing now that widths persist across restarts
 - `:export <path>` — flattens the *selected* note's subtree to Markdown

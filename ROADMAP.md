@@ -157,6 +157,36 @@ Goal: fast lookups without scanning the filesystem every time.
       on the second correctly jumped into the read-only vault and
       selected it; `:tags list` showed `urgent (2 notes)`, the summed
       total, not two separate entries.
+      **Since extended again** (2026-07-13, user-requested): with
+      several mounted vaults, an always-global `:tags` can get noisy —
+      the user asked for an escape hatch to narrow it back down to one
+      named vault. New `:tags limit <vault-name>` / `:tags unlimit`:
+      sets/clears a new `App::tags_limit: Option<String>` that
+      `tags_scope()` (the single place both `:tags` and `:tags list`
+      read their vault list from) checks before falling back to every
+      mounted vault. `limit` errors if `<vault-name>` isn't currently
+      mounted, same "don't silently guess" instinct as `vault mount`
+      refusing an unknown name; `unlimit` is a no-op message, not an
+      error, when nothing was limited, matching `vault mount` on an
+      already-mounted vault. Two forks confirmed via `AskUserQuestion`
+      before implementing: `unlimit` over the user's own first suggestion
+      of `freeup` (clearer antonym of "limit," reads more naturally);
+      and *not* persisting the limit in `Session` the way
+      `show_unmounted`/`show_archived` are — deliberately a temporary
+      working focus rather than a durable display preference, so a
+      limit set one session doesn't silently keep filtering out vaults
+      days later with no visible reason why. Both `Mode::TagList` and
+      `Mode::TagResults`' titles now name the active scope (`Tags [all
+      vaults]` vs `Tags [vault-name]`) so an active limit is never
+      invisible. Manually verified in tmux with three mounted vaults,
+      each with a note tagged `shared`: `:tags list` showed `shared (3
+      notes)` under `[all vaults]`; `:tags limit b` then `:tags list`
+      showed `shared (1 note)` under `[b]`; `:tags shared` while limited
+      showed only vault `b`'s note; `:tags unlimit` reported "tags no
+      longer limited" and `:tags list` went back to all 3; a second
+      `:tags unlimit` reported the no-op message instead of an error;
+      `:tags limit nope` and bare `:tags limit` both showed the expected
+      error messages.
 
 v0.4 is now feature-complete against this list.
 

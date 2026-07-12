@@ -163,6 +163,14 @@ pub struct App {
     /// asks).
     show_unmounted: bool,
     show_archived: bool,
+    /// When `Some`, `:tags`/`:tags list` are restricted to just this one
+    /// mounted vault instead of spanning all of them (`:tags limit
+    /// <name>` / `:tags unlimit`) — a temporary working focus, not a
+    /// display preference like `show_unmounted`/`show_archived`, so
+    /// deliberately *not* persisted in `Session`: it always starts
+    /// `None` (global) on a fresh launch rather than leaving a limit
+    /// active from days ago as a surprise.
+    tags_limit: Option<String>,
     /// The active `ratatui-textarea` widget state while `mode ==
     /// Mode::EditBody`; `None` otherwise. Full-pane overlay rather than a
     /// split layout (tree + body pane) — the latter is its own separate
@@ -206,6 +214,11 @@ pub const COMMAND_REFERENCE: &[(&str, &str)] = &[
         "list notes matching any of the given tags",
     ),
     (":tags list", "list every known tag, pick one to filter by"),
+    (
+        ":tags limit <vault-name>",
+        "restrict :tags/:tags list to one mounted vault",
+    ),
+    (":tags unlimit", "lift a :tags limit, back to every mounted vault"),
     (":panes reset", "reset pane widths to the default 40/40/20"),
     (
         ":export <path>",
@@ -446,6 +459,7 @@ impl App {
             selected_archived_vault: None,
             show_unmounted,
             show_archived,
+            tags_limit: None,
             body_editor: None,
             session_path,
             pane_widths,
@@ -521,6 +535,23 @@ impl App {
         let mut ids = vec![self.vault_id.as_str()];
         ids.extend(self.other_vaults.iter().map(|v| v.id.as_str()));
         ids
+    }
+
+    /// What `:tags`/`:tags list` actually query: every mounted vault, or
+    /// just the one `:tags limit <name>` narrowed to, if any. `ui.rs`
+    /// reads `tags_limit()` directly to show which in the overlay title.
+    fn tags_scope(&self) -> Vec<&str> {
+        match &self.tags_limit {
+            Some(name) => vec![name.as_str()],
+            None => self.mounted_vault_ids(),
+        }
+    }
+
+    /// The vault `:tags`/`:tags list` are currently limited to, if any
+    /// (`:tags limit <name>` / `:tags unlimit`) — `None` means every
+    /// mounted vault.
+    pub fn tags_limit(&self) -> Option<&str> {
+        self.tags_limit.as_deref()
     }
 
     /// `true` iff `id` belongs to the active (editable) vault. Every
@@ -1588,11 +1619,18 @@ impl App {
     /// - `reindex` — rebuilds the index for every mounted vault, same as
     ///   `mycora reindex` from the CLI but without leaving the TUI
     /// - `tags <tag1,tag2,...>` — notes matching *any* of the given tags
-    ///   (`TagFilterOp::Any`); opens `Mode::TagResults` if there are hits
-    /// - `tags list` — every distinct tag in the active vault, in
-    ///   `Mode::TagList`; `Enter` on one filters by it (same as typing
-    ///   `:tags <that-tag>`), so you don't need to already know or type
-    ///   its exact spelling to use it
+    ///   (`TagFilterOp::Any`) across every mounted vault (see
+    ///   `tags_scope`), each hit labeled with its own; opens
+    ///   `Mode::TagResults` if there are hits
+    /// - `tags list` — every distinct tag across every mounted vault,
+    ///   note counts summed across all of them, in `Mode::TagList`;
+    ///   `Enter` on one filters by it (same as typing `:tags <that-tag>`),
+    ///   so you don't need to already know or type its exact spelling
+    /// - `tags limit <vault-name>` / `tags unlimit` — narrows
+    ///   `tags`/`tags list` to one named mounted vault instead of
+    ///   spanning all of them, until lifted. Errors if `<vault-name>`
+    ///   isn't currently mounted. Deliberately *not* persisted in
+    ///   `Session` — a temporary working focus, not a display preference
     /// - `panes reset` — resets the split layout to `DEFAULT_PANE_WIDTHS`;
     ///   the only way back to it now that widths persist across restarts,
     ///   short of hand-editing or deleting `session.toml`
@@ -1668,8 +1706,26 @@ impl App {
     /// to reach via this command — the same minor, accepted trade-off as
     /// `:panes reset`'s literal-argument dispatch.
     fn command_tags(&mut self, args: &str) {
-        if args.trim() == "list" {
+        let trimmed = args.trim();
+        if trimmed == "list" {
             self.command_tags_list();
+            return;
+        }
+        if trimmed == "unlimit" {
+            self.command_tags_unlimit();
+            return;
+        }
+        if trimmed == "limit" {
+            self.last_message = None;
+            self.last_error = Some("usage: :tags limit <vault-name>".to_string());
+            return;
+        }
+        // Same "literal first-argument" dispatch as "list"/"unlimit"
+        // above — a tag actually named "limit ..." needs a comma to
+        // reach via filtering instead, same accepted edge case as a tag
+        // literally named "list".
+        if let Some(name) = trimmed.strip_prefix("limit ") {
+            self.command_tags_limit(name.trim());
             return;
         }
 
@@ -1681,18 +1737,58 @@ impl App {
             .collect();
         if tags.is_empty() {
             self.last_message = None;
-            self.last_error = Some("usage: :tags <tag1,tag2,...> or :tags list".to_string());
+            self.last_error = Some(
+                "usage: :tags <tag1,tag2,...> or :tags list or :tags limit <vault-name> or \
+                 :tags unlimit"
+                    .to_string(),
+            );
             return;
         }
 
         self.show_tag_results(tags);
     }
 
+    /// `:tags limit <name>`. Errors if `name` isn't a currently mounted
+    /// vault — same "don't silently guess" instinct as `vault mount`
+    /// refusing an unknown name — rather than silently limiting to
+    /// nothing and reporting "no tags" as if that vault existed.
+    fn command_tags_limit(&mut self, name: &str) {
+        if name.is_empty() {
+            self.last_message = None;
+            self.last_error = Some("usage: :tags limit <vault-name>".to_string());
+            return;
+        }
+        if !self.mounted_vault_ids().contains(&name) {
+            self.last_message = None;
+            self.last_error = Some(format!("no mounted vault named \"{name}\""));
+            return;
+        }
+        self.tags_limit = Some(name.to_string());
+        self.last_error = None;
+        self.last_message = Some(format!("tags limited to \"{name}\""));
+    }
+
+    /// `:tags unlimit`. A no-op message (not an error) if nothing was
+    /// limited, same "redundant, not wrong" instinct as `vault mount` on
+    /// an already-mounted vault.
+    fn command_tags_unlimit(&mut self) {
+        if self.tags_limit.take().is_none() {
+            self.last_error = None;
+            self.last_message = Some("tags were not limited".to_string());
+            return;
+        }
+        self.last_error = None;
+        self.last_message = Some("tags no longer limited".to_string());
+    }
+
     fn command_tags_list(&mut self) {
-        match self.index.all_tags(&self.mounted_vault_ids()) {
+        match self.index.all_tags(&self.tags_scope()) {
             Ok(tags) if tags.is_empty() => {
                 self.last_error = None;
-                self.last_message = Some("no tags in any mounted vault".to_string());
+                self.last_message = Some(match &self.tags_limit {
+                    Some(name) => format!("no tags in \"{name}\""),
+                    None => "no tags in any mounted vault".to_string(),
+                });
             }
             Ok(tags) => {
                 self.last_error = None;
@@ -1714,14 +1810,15 @@ impl App {
     fn show_tag_results(&mut self, tags: Vec<String>) {
         match self
             .index
-            .filter_by_tags(&self.mounted_vault_ids(), &tags, TagFilterOp::Any)
+            .filter_by_tags(&self.tags_scope(), &tags, TagFilterOp::Any)
         {
             Ok(hits) if hits.is_empty() => {
                 self.last_error = None;
-                self.last_message = Some(format!(
-                    "no notes tagged {} in any mounted vault",
-                    tags.join(", ")
-                ));
+                let joined = tags.join(", ");
+                self.last_message = Some(match &self.tags_limit {
+                    Some(name) => format!("no notes tagged {joined} in \"{name}\""),
+                    None => format!("no notes tagged {joined} in any mounted vault"),
+                });
             }
             Ok(hits) => {
                 self.last_error = None;

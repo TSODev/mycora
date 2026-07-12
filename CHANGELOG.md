@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`:tags limit <vault-name>` / `:tags unlimit`** — narrows the now-global
+  `:tags`/`:tags list` back down to one named mounted vault when spanning
+  all of them gets noisy, until lifted. Errors on an unknown vault name;
+  a no-op message, not an error, when unlimiting nothing. Not persisted
+  across restarts — a temporary focus, not a display preference. The
+  active scope (or lack of one) shows in the `Tags`/`Tag results`
+  overlay's title.
 - **`:tags`/`:tags list` now span every mounted vault** — the opposite
   choice from `/` search's per-selection scoping just above: a tag is a
   deliberate signal applied the same way across vaults, so filtering by

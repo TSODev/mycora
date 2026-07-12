@@ -386,13 +386,20 @@ command yet, only reachable through the Rust API directly.
 
 Unlike `/` search — scoped to whichever vault the current selection is
 in (see [Searching](#searching)) — both `:tags` commands deliberately
-span *every mounted vault at once*, active or read-only. A tag is a
-tag regardless of where you happen to be looking: `:tags list` sums a
-tag's note count across every mounted vault rather than showing it once
-per vault, and `:tags <tag1,...>`'s results each name their own vault
-(`[vault-name] Title`) since they can come from more than one at a
+span *every mounted vault at once* by default, active or read-only. A
+tag is a tag regardless of where you happen to be looking: `:tags list`
+sums a tag's note count across every mounted vault rather than showing
+it once per vault, and `:tags <tag1,...>`'s results each name their own
+vault (`[vault-name] Title`) since they can come from more than one at a
 time — `Enter` jumps to whichever one, the same cross-vault jump
 `/` search and backlinks already do.
+
+If that gets noisy with several mounted vaults, `:tags limit
+<vault-name>` narrows both commands back down to just that one vault
+until `:tags unlimit` lifts it — not persisted across restarts, so it
+always starts unlimited on a fresh launch. The `Tags`/`Tag results`
+overlay's title always names the active scope (`Tags [all vaults]` or
+`Tags [vault-name]`), so a limit is never silently in effect.
 
 `:tag add <tag>`/`:tag del <tag>` are a different operation entirely —
 they add/remove a tag on the *selected* note itself, shown as `#tag`
@@ -533,6 +540,10 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
   `:tags <that-tag>` yourself, landing in the same result list as above)
   — a way to browse and pick a tag without already knowing or typing its
   exact spelling, `Esc` cancels.
+- `:tags limit <vault-name>` / `:tags unlimit` — narrows `:tags`/`:tags
+  list` to one named mounted vault instead of spanning all of them, until
+  lifted (see [Tags](#tags)). Errors on an unknown vault name; not
+  persisted across restarts.
 - `:panes reset` — resets the split layout (see [Layout](#layout)) back
   to the default 40/40/20, the quickest way back after resizing since
   pane widths persist across restarts

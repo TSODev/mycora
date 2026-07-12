@@ -389,16 +389,17 @@ fn draw_tag_results(frame: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
-    let list =
-        List::new(items).block(Block::default().borders(Borders::ALL).title("Tag results"));
+    let title = format!("Tag results [{}]", tags_scope_label(app));
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     let mut state = ListState::default().with_selected(Some(app.tag_results_selected()));
     frame.render_stateful_widget(list, area, &mut state);
 }
 
 /// Every distinct tag across every mounted vault (`:tags list`), each
-/// with its total note count summed across all of them — `Enter` on one
-/// filters by it, transitioning into `draw_tag_results` for that tag
-/// (see `App::confirm_tag_list`).
+/// with its total note count summed across all of them — or, if `:tags
+/// limit <name>` narrowed it, just that one vault (the title names
+/// which). `Enter` on one filters by it, transitioning into
+/// `draw_tag_results` for that tag (see `App::confirm_tag_list`).
 fn draw_tag_list(frame: &mut Frame, area: Rect, app: &App) {
     let items: Vec<ListItem> = app
         .tag_list()
@@ -416,9 +417,21 @@ fn draw_tag_list(frame: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
-    let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Tags"));
+    let title = format!("Tags [{}]", tags_scope_label(app));
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     let mut state = ListState::default().with_selected(Some(app.tag_list_selected()));
     frame.render_stateful_widget(list, area, &mut state);
+}
+
+/// `"all vaults"` or the one vault name `:tags limit` narrowed to —
+/// shared by `draw_tag_results`/`draw_tag_list`'s titles so a `:tags
+/// limit` set in a previous session doesn't silently keep filtering out
+/// vaults with no visible indication why.
+fn tags_scope_label(app: &App) -> String {
+    match app.tags_limit() {
+        Some(name) => name.to_string(),
+        None => "all vaults".to_string(),
+    }
 }
 
 /// Small reference popup listing every command `App::execute_command`
