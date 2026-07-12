@@ -95,6 +95,11 @@ enum UndoAction {
     /// `EditBody` holding what the body was before — one entry per whole
     /// edit session, not per keystroke.
     EditBody { id: NoteId, body: String },
+    /// Applying this replaces `id`'s whole tag list and produces another
+    /// `SetTags` holding what it was before — `:tag add`/`:tag del` each
+    /// record one of these per invocation, not per tag, same "one entry
+    /// per user action" shape as `EditBody`.
+    SetTags { id: NoteId, tags: Vec<String> },
 }
 
 pub struct App {
@@ -214,6 +219,8 @@ pub const COMMAND_REFERENCE: &[(&str, &str)] = &[
         ":config archive <show|hide>",
         "show/hide archived vault rows in the tree",
     ),
+    (":tag add <tag>", "add a tag to the selected note"),
+    (":tag del <tag>", "remove a tag from the selected note"),
     (":q, :quit", "quit Mycora"),
 ];
 
@@ -1103,6 +1110,16 @@ impl App {
                     body: previous,
                 })
             }
+            UndoAction::SetTags { id, tags } => {
+                let previous = self.tree.get(id)?.tags.clone();
+                self.tree.set_tags(id, tags);
+                self.persist(id);
+                self.set_selected(Some(id));
+                Some(UndoAction::SetTags {
+                    id,
+                    tags: previous,
+                })
+            }
         }
     }
 
@@ -1558,6 +1575,10 @@ impl App {
     ///   registry with several of either. Persisted in `Session`
     ///   (`show_unmounted`/`show_archived`), not per-vault — a display
     ///   preference, same as `pane_widths`.
+    /// - `tag add <tag>` / `tag del <tag>` — adds/removes a tag on the
+    ///   selected note. Gated by `require_editable`; a no-op reported
+    ///   via `last_message` (not an error) when the tag is already
+    ///   there (`add`) or already gone (`del`).
     ///
     /// Kept in sync with `COMMAND_REFERENCE` above by hand — not worth
     /// generating one from the other at this size.
@@ -1581,6 +1602,7 @@ impl App {
             "panes" => self.command_panes(args),
             "export" => self.command_export(args),
             "config" => self.command_config(args),
+            "tag" => self.command_tag(args),
             _ => {
                 self.last_message = None;
                 self.last_error = Some(format!("unknown command: {name}"));
@@ -1745,6 +1767,72 @@ impl App {
         self.last_error = None;
         let verb = if show { "shown" } else { "hidden" };
         self.last_message = Some(format!("{noun} vaults now {verb} in the tree"));
+    }
+
+    /// `:tag add <tag>` / `:tag del <tag>` — mutates the selected note's
+    /// tags. Gated by `require_editable` like every other mutating
+    /// command; a no-op (reported via `last_message`, not `last_error`)
+    /// rather than a hard error when adding a tag that's already there
+    /// or removing one that isn't — redundant, not wrong, same instinct
+    /// as `vault mount` on an already-mounted vault. Appends/removes in
+    /// place rather than re-sorting the whole list, so a deliberately
+    /// ordered tag list in frontmatter isn't silently reshuffled by an
+    /// unrelated add/del elsewhere in it.
+    fn command_tag(&mut self, args: &str) {
+        const USAGE: &str = "usage: :tag <add|del> <tag>";
+
+        let (action, tag) = match args.split_once(char::is_whitespace) {
+            Some((action, tag)) => (action, tag.trim()),
+            None => {
+                self.last_message = None;
+                self.last_error = Some(USAGE.to_string());
+                return;
+            }
+        };
+        if tag.is_empty() || !matches!(action, "add" | "del") {
+            self.last_message = None;
+            self.last_error = Some(USAGE.to_string());
+            return;
+        }
+
+        let Some(id) = self.selected else {
+            self.last_message = None;
+            self.last_error = Some("nothing selected to tag".to_string());
+            return;
+        };
+        if !self.require_editable(id) {
+            return;
+        }
+        let Some(note) = self.tree.get(id) else {
+            return;
+        };
+        let previous = note.tags.clone();
+        let already_has = previous.iter().any(|t| t == tag);
+
+        let new_tags = if action == "add" {
+            if already_has {
+                self.last_error = None;
+                self.last_message = Some(format!("already tagged \"{tag}\""));
+                return;
+            }
+            let mut tags = previous.clone();
+            tags.push(tag.to_string());
+            tags
+        } else {
+            if !already_has {
+                self.last_error = None;
+                self.last_message = Some(format!("not tagged \"{tag}\""));
+                return;
+            }
+            previous.iter().filter(|t| t.as_str() != tag).cloned().collect()
+        };
+
+        self.tree.set_tags(id, new_tags);
+        self.persist(id);
+        self.record(UndoAction::SetTags { id, tags: previous });
+        self.last_error = None;
+        let verb = if action == "add" { "added" } else { "removed" };
+        self.last_message = Some(format!("tag \"{tag}\" {verb}"));
     }
 
     fn command_export(&mut self, args: &str) {

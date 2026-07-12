@@ -401,7 +401,11 @@ row only, leaving the breadcrumb above it in place.
   the selection, resetting scroll to the top each time. `Ctrl+d`/`Ctrl+u`
   scroll it down/up for notes longer than the pane. Read-only and not
   interactive: links and `[[wikilinks]]` render as plain text, not as
-  something you can click or navigate from the preview itself.
+  something you can click or navigate from the preview itself. A fixed
+  one-line row along the bottom shows the note's tags as `#tag` badges
+  (cyan), always reserved even with none — add/remove them with
+  `:tag add <tag>`/`:tag del <tag>` (see
+  [Command palette](#command-palette)).
 - **Backlinks** (right) — notes linking to the selected note, live. No
   border color while idle; press `b` to move keyboard focus into it (cyan
   border, highlighted entry) — see [Backlinks](#backlinks) below.
@@ -498,6 +502,11 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
   in the tree entirely (see [Layout](#layout)), for a registry with
   enough of either to feel cluttered. Persists across restarts, same as
   pane widths.
+- `:tag add <tag>` / `:tag del <tag>` — adds or removes a tag on the
+  *selected* note (see the tag badge row under [Layout](#layout)).
+  Refuses on a read-only mounted vault's note, same as every other
+  mutating command. Adding a tag that's already there, or removing one
+  that isn't, reports a no-op message rather than an error.
 - `:q` / `:quit` — quits Mycora, same as `q` `q` in Normal mode
 
 An unrecognized command shows an error in the status bar rather than
@@ -647,8 +656,8 @@ than just jump to a note — isn't built yet.
 - `u` — undo the last action
 - `Ctrl+R` — redo
 
-Covers renames, moves, reorders, copies, and deletes, for the rest of the
-session. Not persisted across restarts.
+Covers renames, moves, reorders, copies, deletes, body edits, and tag
+changes, for the rest of the session. Not persisted across restarts.
 
 ## Keybinding reference
 

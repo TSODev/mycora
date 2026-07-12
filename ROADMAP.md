@@ -559,6 +559,34 @@ Goal: make daily use pleasant, not just functional.
       "exported to ..." showed in the hint row, pressed `j`, confirmed
       the row immediately reverted to Normal mode's usual keybinding
       hints instead of staying stuck.
+      **Since extended a fifth time** (2026-07-12, user-requested):
+      `:tag add <tag>` / `:tag del <tag>` mutate the selected note's tag
+      list, plus a fixed one-line row of `#tag` badges (`Color::Cyan`)
+      along the bottom of the body preview pane — split off the block's
+      own inner area (`Block::inner`) rather than a second bordered
+      widget, so it reads as part of the same box; always reserved, even
+      at zero tags, so the body text's height doesn't jump around as you
+      move between tagged and untagged notes. `Tree` gained `set_tags`
+      (replaces the whole list — the caller decides add/remove, mirroring
+      how `set_body` doesn't itself decide what the new body should be),
+      and `UndoAction` gained a `SetTags` variant, same "one entry per
+      whole action, not per keystroke" shape as `EditBody`. Gated by
+      `require_editable` like every other mutating command. Adding a tag
+      that's already there, or removing one that isn't, is a no-op
+      reported via `last_message` rather than an error — same "redundant,
+      not wrong" instinct as `vault mount` on an already-mounted vault —
+      and appends/removes in place instead of re-sorting the whole list,
+      so a deliberately ordered tag list in frontmatter isn't silently
+      reshuffled by an unrelated add/del elsewhere in it. 2 new tests in
+      `tree.rs` (`set_tags` replaces the list; missing note returns
+      `false`). Manually verified in tmux against a note with an existing
+      `existing` tag: the badge row showed `#existing`; `:tag add urgent`
+      showed `#existing #urgent` and persisted to the note's frontmatter
+      on disk; `:tag add urgent` again reported "already tagged" without
+      duplicating it; `:tag del nope` reported "not tagged" as a no-op;
+      `:tag del existing` removed it and persisted; `u` (undo) correctly
+      restored `existing` (both in the badge row and on disk); `:tag
+      bogus foo` showed the usage error.
 - [x] Session state: remember last open note, expanded/collapsed branches
       (2026-07-10) — new `src/session.rs`: `Session::load`/`save` read and
       write `~/.local/share/mycora/session.toml` (XDG data dir alongside

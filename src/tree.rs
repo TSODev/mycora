@@ -155,6 +155,22 @@ impl Tree {
         }
     }
 
+    /// Replaces `id`'s tag list wholesale — the add/remove-a-single-tag
+    /// logic (dedup on add, no-op if missing on remove) lives in the
+    /// caller (`App::command_tag`); `Tree` just applies the already-
+    /// decided result, same as `set_body` doesn't itself decide what the
+    /// new body should be.
+    pub fn set_tags(&mut self, id: NoteId, tags: Vec<String>) -> bool {
+        match self.notes.get_mut(&id) {
+            Some(note) => {
+                note.tags = tags;
+                note.updated = time::OffsetDateTime::now_utc();
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn roots(&self) -> &[NoteId] {
         &self.roots
     }
@@ -383,6 +399,20 @@ mod tests {
     fn rename_missing_note_returns_false() {
         let mut tree = Tree::new();
         assert!(!tree.rename(NoteId::new(), "New"));
+    }
+
+    #[test]
+    fn set_tags_replaces_the_tag_list() {
+        let mut tree = Tree::new();
+        let id = tree.create_note("Note", None);
+        assert!(tree.set_tags(id, vec!["a".to_string(), "b".to_string()]));
+        assert_eq!(tree.get(id).unwrap().tags, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn set_tags_missing_note_returns_false() {
+        let mut tree = Tree::new();
+        assert!(!tree.set_tags(NoteId::new(), vec!["a".to_string()]));
     }
 
     #[test]

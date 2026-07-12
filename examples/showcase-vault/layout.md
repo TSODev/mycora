@@ -6,7 +6,7 @@ tags:
 - interface
 - layout
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-11T01:00:00Z
+updated: 2026-07-12T15:00:00Z
 ---
 
 # Layout
@@ -28,7 +28,11 @@ app — scrolls to keep whatever's selected on screen; see
   to the top on every new selection. The padding is deliberately only
   here for now — continuous prose reads more cramped flush against a
   border than a short list row does, so this pane got it first; tree
-  and backlinks stay flush, kept open to apply there too later.
+  and backlinks stay flush, kept open to apply there too later. A fixed
+  one-line row along the bottom shows the note's tags as `#tag` badges
+  (cyan) — always reserved, even with none, so the body text's height
+  doesn't jump around as you move between tagged and untagged notes;
+  `:tag add`/`:tag del` (see [[Command palette]]) manage them.
 - **Backlinks** (right) — notes linking to the selected note, live. No
   border color while idle; `b` moves keyboard focus into it (cyan border)
   — see [[Cross-links and backlinks]].

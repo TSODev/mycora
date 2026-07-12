@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`:tag add`/`:tag del` and a tag badge row in the body preview** — the
+  selected note's tags now show as `#tag` badges along the bottom of the
+  body preview pane (always reserved, even with none); `:tag add <tag>`
+  and `:tag del <tag>` mutate them, gated like every other mutating
+  command, undo/redo-aware, and a no-op (not an error) when the tag is
+  already there or already gone.
 - **Archived vaults get a tree row, and `:config` can declutter both** —
   an archived vault now shows as its own `▦ name` placeholder row
   (distinct from unmounted vaults' `⊘ name`), pointing at `mycora vault

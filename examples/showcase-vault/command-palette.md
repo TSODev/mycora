@@ -7,7 +7,7 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T14:00:00Z
+updated: 2026-07-12T15:00:00Z
 ---
 
 # Command palette
@@ -35,6 +35,11 @@ command also appears above the prompt for as long as it's open.
 - `:config unmount <show|hide>` / `:config archive <show|hide>` —
   shows/hides the placeholder rows for unmounted/archived vaults in the
   tree — see [[Unmounted vaults are visible too]]
+- `:tag add <tag>` / `:tag del <tag>` — adds/removes a tag on the
+  *selected* note, shown as `#tag` badges along the bottom of the body
+  preview pane (see [[Layout]]). Refuses on a read-only vault's note;
+  adding a duplicate or removing a missing tag is a no-op message, not
+  an error. Undo/redo-aware, same as renames and body edits.
 - `:q` / `:quit` — quits, same as `q` `q` in Normal mode
 
 Every exposed command surfaces backend functionality or a real gap that

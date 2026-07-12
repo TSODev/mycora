@@ -201,7 +201,10 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
 /// active vault. Empty when nothing's selected or the note has no body
 /// yet. When the selection is an unmounted or archived vault's
 /// placeholder row instead of a note, shows how to mount/unarchive it
-/// rather than an empty pane.
+/// rather than an empty pane. A fixed one-line row along the bottom
+/// (inside the same border, split off the block's inner area rather than
+/// its own bordered widget) shows the note's tags as `#tag` badges — see
+/// `App::command_tag` for adding/removing them via `:tag add`/`:tag del`.
 fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
     if let Some((name, path)) = app.selected_unmounted_vault_info() {
         let text = format!(
@@ -237,27 +240,44 @@ fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
     let note = app.selected_note();
     let title = note.map(|n| n.title.as_str()).unwrap_or("");
     let body = note.map(|n| n.body.as_str()).unwrap_or("");
+    let tags = note.map(|n| n.tags.as_slice()).unwrap_or(&[]);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(PANE_BODY_COLOR))
+        .title(title)
+        // Continuous prose reads better with a little breathing
+        // room off the border than a list of short titles does —
+        // the tree/backlinks panes stay flush for now (see
+        // ROADMAP.md), this one gets it first since it's the one
+        // pane that's mostly running text rather than list rows.
+        .padding(ratatui::widgets::Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // A fixed bottom line for the tag badges, always reserved (even with
+    // zero tags) so the body text's height doesn't jump around as you
+    // move between tagged and untagged notes.
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(inner);
 
     let paragraph = Paragraph::new(crate::markdown::render(body))
         .wrap(Wrap { trim: false })
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(PANE_BODY_COLOR))
-                .title(title)
-                // Continuous prose reads better with a little breathing
-                // room off the border than a list of short titles does —
-                // the tree/backlinks panes stay flush for now (see
-                // ROADMAP.md), this one gets it first since it's the one
-                // pane that's mostly running text rather than list rows.
-                .padding(ratatui::widgets::Padding::horizontal(1)),
-        )
         // Manual offset (not auto-follow — there's no "selected line"
         // concept for prose): `Ctrl+d`/`Ctrl+u` adjust `App::body_scroll`,
         // reset to 0 by `App::set_selected` whenever the selection
         // changes so a freshly picked note always starts at the top.
         .scroll((app.body_scroll(), 0));
-    frame.render_widget(paragraph, area);
+    frame.render_widget(paragraph, chunks[0]);
+
+    let tag_style = Style::default().fg(Color::Cyan);
+    let tag_spans: Vec<Span> = tags
+        .iter()
+        .map(|tag| Span::styled(format!("#{tag} "), tag_style))
+        .collect();
+    frame.render_widget(Paragraph::new(Line::from(tag_spans)), chunks[1]);
 }
 
 /// List of notes linking to the selected note — follows the current

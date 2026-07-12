@@ -8,14 +8,20 @@ other across branches, the way a mycelial network links the root systems of
 otherwise separate trees.
 
 > Status: working, in active development. Hierarchical notes, Markdown
-> persistence, full tree editing with undo/redo, SQLite-backed full-text
-> search, the "mycelial" cross-link layer (`[[wikilink]]`-style
-> references with a backlinks panel), a resizable three-pane layout with
-> a `:` command palette, multi-vault mounting, and Obsidian import /
-> Markdown-or-PDF export are all shipped today (v0.1–v0.8). Two items are
-> deliberately deferred — link autocompletion and configurable
+> persistence, full tree editing with undo/redo, tag management, SQLite-
+> backed full-text search, the "mycelial" cross-link layer
+> (`[[wikilink]]`-style references with a backlinks panel), a resizable
+> three-pane layout with a `:` command palette, multi-vault mounting
+> (including archiving a vault to a single compressed file), and Obsidian
+> import / Markdown-or-PDF export are all shipped today (v0.1–v0.9). Two
+> items are deliberately deferred — link autocompletion and configurable
 > keybindings — see [ROADMAP.md](./ROADMAP.md) for what's built vs.
 > still ahead, and [USAGE.md](./USAGE.md) to actually use it.
+
+![Mycora's three-pane layout: tree on the left (with a second, read-only
+mounted vault below it), a Markdown-rendered body preview with tag
+badges in the middle, and backlinks on the
+right](./docs/screenshot.png)
 
 ---
 
@@ -77,30 +83,42 @@ names the part of the design that's actually differentiating: not the tree
   return relevant results fast, with ranking that reflects relevance
   (BM25-class scoring), not just substring matches.
 
-## Built (v0.1–v0.8)
+## Built (v0.1–v0.9)
 
 - **Tree operations**: create, rename, delete (the whole subtree moves to
   `.trash/`, never erased outright), move/reparent with cycle detection,
   reorder siblings, deep-copy a subtree (fresh ids, no shared identity).
-- **Undo/redo**: every structural operation is reversible for the rest of
-  the session, built on inverses computed against the live tree, not
-  frozen snapshots.
+- **Tags**: `:tag add <tag>` / `:tag del <tag>` on the selected note,
+  shown as `#tag` badges along the bottom of the body preview; undo/redo-
+  aware, a no-op (not an error) on a duplicate add or a missing removal.
+- **Undo/redo**: every structural operation, body edit, and tag change is
+  reversible for the rest of the session, built on inverses computed
+  against the live tree, not frozen snapshots.
 - **Local-first storage**: Markdown + YAML frontmatter is the sole source
-  of truth; malformed files, duplicate ids, and orphaned parents are
-  self-healed with a warning rather than causing a crash or data loss.
+  of truth; malformed files, duplicate ids, orphaned parents, and even a
+  note listing itself as its own parent are self-healed with a warning
+  rather than causing a crash or data loss. Every write (a note,
+  `config.toml`, `session.toml`) is atomic — a crash or power loss
+  mid-write can't leave a truncated file behind.
 - **Full-text search**: SQLite FTS5 over titles + bodies, BM25-ranked
   with snippets, plus faceted filtering by tag/date/branch; a live `/`
   search overlay in the TUI, `:tags`/`:tags list` for tag-only browsing;
-  `mycora reindex --watch` keeps the index in sync as files change on disk.
+  `mycora reindex --watch` keeps the index in sync as files change on
+  disk. Scales linearly to thousands of notes — see
+  [BENCHMARK.md](./BENCHMARK.md).
 - **Cross-links**: `[[wikilink]]`-style references between any two notes,
   independent of tree position, resolved across mounted vaults; a
   backlinks panel per note; ambiguous titles fan out to a link per match
   rather than erroring, unresolved ones surface as broken-link warnings.
 - **Multi-vault mounting**: a registry of named vaults, exactly one
   editable (`"default"`) at a time and every other mounted vault
-  read-only but fully navigable; a `mycora vault` CLI
-  (`add`/`init`/`rename`/`promote`/`mount`/`unmount`/`remove`/`list`)
-  manages the registry.
+  read-only but fully navigable. An unmounted vault still shows up in
+  the tree as its own placeholder row (`⊘`), and can be compressed to a
+  single archive file to reclaim disk space (`▦` row, `mycora vault
+  archive`/`unarchive`) — either row category can be hidden with
+  `:config unmount/archive show/hide`. A `mycora vault` CLI
+  (`add`/`init`/`rename`/`promote`/`mount`/`unmount`/`archive`/
+  `unarchive`/`remove`/`list`) manages the registry.
 - **A three-pane layout**: resizable tree + Markdown-rendered body
   preview + backlinks panes, a full-pane body editor, a `:` command
   palette, light/dark theming for free via named ANSI colors, and
@@ -116,8 +134,9 @@ names the part of the design that's actually differentiating: not the tree
   editor — deliberately deferred until it's built.
 - **Configurable keybindings** — deliberately out of scope until real
   friction shows up in practice, rather than built speculatively.
-- **v0.9 — Hardening**: broader test coverage on tree edge cases,
-  crash-safety, large-vault performance, a full documentation pass.
+- **v0.9 — Hardening**: crash-safety, tree/link test coverage, and
+  large-vault performance are all done; a full documentation pass is the
+  one thing left.
 - **v1.0 — Public release**: a versioned crates.io publish, a release
   checklist, gathering feedback.
 
@@ -153,6 +172,9 @@ In use today:
 - **notify** — filesystem watching for `mycora reindex --watch`
 - **markdown2pdf** — renders a flattened subtree to a paginated PDF for
   `:export`/`mycora export` when the output path ends in `.pdf`
+- **tar** + **flate2** — `mycora vault archive`/`unarchive`'s `.tar.gz`
+  compression, both pure-Rust (`flate2` defaults to its `miniz_oxide`
+  backend, no system zlib needed)
 - **uuid**, **time**, **anyhow**, **clap** — note ids, timestamps, error
   handling, CLI parsing
 
@@ -177,18 +199,20 @@ Considered and deliberately not adopted:
 
 ## Status
 
-Working and daily-usable — v0.1 through v0.8 are functionally complete
+Working and daily-usable — v0.1 through v0.9 are functionally complete
 (except link autocompletion and configurable keybindings, both
-deliberately deferred): in-memory tree with full structural operations
-and undo/redo, Markdown + YAML frontmatter persistence, SQLite-backed
-search (FTS5 full-text, BM25 ranking, tag/date/branch facets), the
-`[[wikilink]]` cross-link layer with a backlinks panel, multi-vault
-mounting with a full `mycora vault` CLI, a resizable three-pane TUI
-layout with a `:` command palette, and Obsidian import / Markdown-or-PDF
-export. See [USAGE.md](./USAGE.md) for how to use it today,
-[ROADMAP.md](./ROADMAP.md) for what's still ahead (hardening, then a
-stable v1.0), and [BENCHMARK.md](./BENCHMARK.md) for how it performs at
-thousands of notes.
+deliberately deferred, and v0.9's documentation pass): in-memory tree
+with full structural operations, undo/redo, and tag management,
+Markdown + YAML frontmatter persistence with atomic writes throughout,
+SQLite-backed search (FTS5 full-text, BM25 ranking, tag/date/branch
+facets) that scales linearly to thousands of notes, the `[[wikilink]]`
+cross-link layer with a backlinks panel, multi-vault mounting (including
+archiving a vault to a single compressed file) with a full `mycora
+vault` CLI, a resizable three-pane TUI layout with a `:` command
+palette, and Obsidian import / Markdown-or-PDF export. See
+[USAGE.md](./USAGE.md) for how to use it today, [ROADMAP.md](./ROADMAP.md)
+for what's still ahead (the rest of v0.9, then a stable v1.0), and
+[BENCHMARK.md](./BENCHMARK.md) for how it performs at thousands of notes.
 
 ## License
 
