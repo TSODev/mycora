@@ -6,7 +6,7 @@ tags:
 - roadmap
 - planned
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-11T11:30:00Z
+updated: 2026-07-12T09:00:00Z
 ---
 
 # What's still ahead
@@ -18,8 +18,9 @@ updated: 2026-07-11T11:30:00Z
   and [[Importing an Obsidian vault]] are both done; still ahead:
   optional Postman/Terapi-style templating hooks (stretch goal, may not
   belong in Mycora itself)
-- **v0.9 — Hardening**: broader test coverage on tree edge cases,
-  crash-safety, large-vault performance, a full documentation pass
+- **v0.9 — Hardening (in progress)**: [[Every write to disk is atomic]]
+  is done; still ahead: broader test coverage on tree edge cases,
+  large-vault performance, a full documentation pass
 - **v1.0 — Public release**: crates.io publish, release checklist,
   gather feedback
 

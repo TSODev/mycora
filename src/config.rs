@@ -334,15 +334,20 @@ fn read_raw(config_path: &Path) -> Result<RawConfig> {
 
 /// Serializes and writes `raw` to `config_path`, creating its parent
 /// directory first if needed — shared by every `Config::*_vault` writer
-/// method.
+/// method. Atomic (temp file + rename, same pattern as `vault.rs`'s note
+/// writes) so a crash or power loss mid-write can't leave a truncated
+/// `config.toml` behind.
 fn write_raw(config_path: &Path, raw: &RawConfig) -> Result<()> {
     if let Some(parent) = config_path.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating {}", parent.display()))?;
     }
     let text = toml::to_string_pretty(raw).context("serializing config.toml")?;
-    std::fs::write(config_path, text)
-        .with_context(|| format!("writing {}", config_path.display()))
+    let tmp_path = config_path.with_extension("toml.tmp");
+    std::fs::write(&tmp_path, text)
+        .with_context(|| format!("writing {}", tmp_path.display()))?;
+    std::fs::rename(&tmp_path, config_path)
+        .with_context(|| format!("finalizing write to {}", config_path.display()))
 }
 
 /// If the registry is empty but a legacy `vault_path` key is set, turns
@@ -508,6 +513,17 @@ mod tests {
         assert!(config.vaults[0].mounted);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn add_vault_leaves_no_leftover_tmp_file() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        assert!(path.exists());
+        assert!(!path.with_extension("toml.tmp").exists());
+
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]

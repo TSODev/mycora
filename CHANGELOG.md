@@ -35,6 +35,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   existing output path. No frontmatter or `[[wikilink]]` rewriting yet.
 
 ### Fixed
+- **`config.toml`/`session.toml` writes weren't crash-safe (v0.9)** —
+  both used a plain `fs::write`, unlike `vault.rs`'s note writes (atomic
+  since v0.2); a crash or power loss mid-write could leave either file
+  truncated or corrupted on next load. Both now write to a `.tmp` file
+  first and `fs::rename` it into place, same pattern as note writes.
 - **`mycora --help`/`mycora reindex --help` said "the active vault"** —
   `reindex` has covered every mounted vault, read-only ones included,
   since the v0.5 multi-vault work; only the CLI's own `--help` text

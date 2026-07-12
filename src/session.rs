@@ -113,7 +113,12 @@ impl Session {
             std::fs::create_dir_all(parent)?;
         }
         let text = toml::to_string_pretty(&self.raw)?;
-        std::fs::write(&self.path, text)?;
+        // Atomic (temp file + rename, same pattern as `vault.rs`'s note
+        // writes) so a crash or power loss mid-write can't leave a
+        // truncated session.toml behind.
+        let tmp_path = self.path.with_extension("toml.tmp");
+        std::fs::write(&tmp_path, text)?;
+        std::fs::rename(&tmp_path, &self.path)?;
         Ok(())
     }
 }
@@ -151,6 +156,20 @@ mod tests {
         let (saved_selected, saved_expanded) = reloaded.for_vault("default").unwrap();
         assert_eq!(saved_selected, Some(selected));
         assert_eq!(saved_expanded, expanded);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn save_leaves_no_leftover_tmp_file() {
+        let path = scratch_path();
+        let mut session = Session::load(&path);
+        session
+            .save("default", None, &HashSet::new(), [40, 40, 20])
+            .unwrap();
+
+        assert!(path.exists());
+        assert!(!path.with_extension("toml.tmp").exists());
 
         std::fs::remove_file(&path).ok();
     }

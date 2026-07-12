@@ -746,7 +746,32 @@ Goal: stability before a public release.
 
 - [ ] Test coverage on tree operations (especially move/copy/delete edge
       cases) and link integrity
-- [ ] Crash-safety: no data loss on unexpected exit (atomic writes)
+- [x] Crash-safety: no data loss on unexpected exit (atomic writes)
+      (2026-07-12) — audited every persistent-state write path in the
+      crate for atomicity before touching any of them. `vault.rs`'s note
+      writes were already atomic (temp file + `fs::rename`, since v0.2);
+      `config.rs`'s `write_raw` and `session.rs`'s `Session::save` were
+      not — both used a plain `fs::write`, so a crash or power loss
+      mid-write could leave `config.toml` or `session.toml` truncated or
+      corrupted on next load. Fixed both with the same temp-file+rename
+      pattern `vault.rs` already used (`path.with_extension("toml.tmp")`,
+      write there, then `fs::rename` onto the real path — a rename is
+      atomic on the same filesystem, so the real file is either the old
+      complete content or the new complete content, never a partial
+      write). Deliberately left `export.rs`'s `write_output` alone — an
+      export target is an arbitrary user-chosen path outside any vault,
+      already guarded by refuse-if-exists, and not persistent Mycora
+      state, so a failed write there just means "retry the export," not
+      data loss the way a corrupted `config.toml`/`session.toml` would
+      be. The SQLite index was also left alone: it's explicitly
+      disposable (see `Disposable SQLite index`) and `mycora reindex`
+      rebuilds it from scratch at any time, so partial-write corruption
+      there is a non-issue by design, not a gap. 2 new unit tests
+      (`config.rs`, `session.rs`) assert no `*.toml.tmp` file is left
+      behind after a save. Manually verified end to end in a scratch
+      `HOME`: a full TUI session (navigate, quit) produced a clean
+      `session.toml` with no leftover `.tmp`; `mycora vault add`
+      produced a clean `config.toml` the same way.
 - [ ] Large-vault performance pass (thousands of notes)
 - [ ] Documentation: user guide, keybinding reference, file format spec
 
