@@ -81,10 +81,18 @@ impl Renderer {
             Event::Code(text) => {
                 self.push_text(text, Style::default().fg(Color::Green));
             }
-            Event::SoftBreak => {
-                self.current.push(Span::raw(" "));
-            }
-            Event::HardBreak => {
+            // CommonMark treats a single newline inside a paragraph as a
+            // "soft break" — conventionally rendered as a space, folding
+            // the line into the paragraph around it (needs a blank line,
+            // not just Enter, to start a new paragraph). Deliberately not
+            // followed here: for a note-taking tool where notes are often
+            // short fragments (commands, lists) typed one Enter at a
+            // time rather than hard-wrapped prose, "what you typed is
+            // what you see" is a friendlier default than requiring a
+            // blank line for every line break. The vault file on disk is
+            // untouched either way — this only changes how the body
+            // preview pane renders it.
+            Event::SoftBreak | Event::HardBreak => {
                 self.flush_line();
             }
             Event::Rule => {
@@ -211,6 +219,18 @@ mod tests {
             plain_text(&lines),
             vec!["First paragraph.", "Second paragraph."]
         );
+    }
+
+    #[test]
+    fn a_single_newline_within_a_paragraph_becomes_its_own_line_too() {
+        // CommonMark's own rule treats this as a "soft break" — folded
+        // into the same line as a space, not a real line break —
+        // deliberately not followed here (see `Renderer::handle`'s
+        // `SoftBreak` arm): a note-taking body is more often short
+        // fragments typed one Enter at a time than hard-wrapped prose,
+        // so what you typed is what you see takes priority.
+        let lines = render("First line.\nSecond line.");
+        assert_eq!(plain_text(&lines), vec!["First line.", "Second line."]);
     }
 
     #[test]

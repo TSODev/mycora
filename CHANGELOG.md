@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Line breaks typed in the body editor collapsed into one run-on line
+  in the preview** — a single Enter within a paragraph (no blank line)
+  is a Markdown "soft break," which CommonMark folds into a space rather
+  than a real line break; `HardBreak` (two trailing spaces or a
+  backslash) was the only thing that rendered as a new line. For a
+  note-taking body that's typically short fragments typed one Enter at a
+  time rather than hard-wrapped prose, this made the preview
+  misleadingly merge lines the user clearly separated. The file on disk
+  was never affected — only `markdown.rs`'s rendering now treats every
+  single newline as a real line break, matching what was typed.
+
+## [0.9.0] — 2026-07-14
+
 ### Added
 - **`:tags limit <vault-name>` / `:tags unlimit`** — narrows the now-global
   `:tags`/`:tags list` back down to one named mounted vault when spanning

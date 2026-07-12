@@ -6,7 +6,7 @@ tags:
 - interface
 - layout
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T15:00:00Z
+updated: 2026-07-12T21:00:00Z
 ---
 
 # Layout
@@ -23,9 +23,14 @@ app — scrolls to keep whatever's selected on screen; see
 - **Body preview** (middle, magenta border, with a little horizontal
   padding off the border) — the selected note's body, rendered as
   formatted Markdown (headings, bold/italic, code, lists, blockquotes,
-  rules). Read-only; links and wikilinks render as plain text here, not
-  as something clickable. `Ctrl+d`/`Ctrl+u` scroll it down/up, resetting
-  to the top on every new selection. The padding is deliberately only
+  rules). Every Enter you typed renders as its own line, even without a
+  blank line after it — strict CommonMark would fold a lone newline into
+  a space instead, but that reads wrong for notes that are usually short
+  Enter-separated fragments rather than hard-wrapped prose, so this pane
+  deliberately shows exactly what was typed. Read-only; links and
+  wikilinks render as plain text here, not as something clickable.
+  `Ctrl+d`/`Ctrl+u` scroll it down/up, resetting to the top on every new
+  selection. The padding is deliberately only
   here for now — continuous prose reads more cramped flush against a
   border than a short list row does, so this pane got it first; tree
   and backlinks stay flush, kept open to apply there too later. A fixed

@@ -441,12 +441,18 @@ row only, leaving the breadcrumb above it in place.
 - **Body preview** (middle, magenta border, with a little horizontal
   padding off the border since it's mostly running prose) — the selected
   note's body, rendered as Markdown (headings, bold/italic, inline/block
-  code, lists, blockquotes, horizontal rules). Updates live as you move
-  the selection, resetting scroll to the top each time. `Ctrl+d`/`Ctrl+u`
-  scroll it down/up for notes longer than the pane. Read-only and not
-  interactive: links and `[[wikilinks]]` render as plain text, not as
-  something you can click or navigate from the preview itself. A fixed
-  one-line row along the bottom shows the note's tags as `#tag` badges
+  code, lists, blockquotes, horizontal rules). Every line break you type
+  renders as its own line, even a single Enter with no blank line after
+  it — a deliberate deviation from strict CommonMark (which folds a lone
+  newline into a space, requiring a blank line for a real paragraph
+  break) in favor of "what you typed is what you see," since notes here
+  tend to be short Enter-separated fragments rather than hard-wrapped
+  prose. Updates live as you move the selection, resetting scroll to the
+  top each time. `Ctrl+d`/`Ctrl+u` scroll it down/up for notes longer
+  than the pane. Read-only and not interactive: links and `[[wikilinks]]`
+  render as plain text, not as something you can click or navigate from
+  the preview itself. A fixed one-line row along the bottom shows the
+  note's tags as `#tag` badges
   (cyan), always reserved even with none — add/remove them with
   `:tag add <tag>`/`:tag del <tag>` (see
   [Command palette](#command-palette)).

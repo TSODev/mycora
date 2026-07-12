@@ -539,6 +539,29 @@ Goal: make daily use pleasant, not just functional.
       `[[wikilinks]]` aren't CommonMark syntax so they render as literal
       bracketed text too — highlighting them specially is a separate,
       not-yet-scoped concern from "render the Markdown"
+      **Since extended** (2026-07-12, user-reported): line breaks typed
+      in the body editor with a plain Enter (no blank line between them)
+      were rendering as one run-on paragraph, joined by spaces, in the
+      preview pane. Root cause was CommonMark spec compliance working
+      against the tool's own grain: `pulldown-cmark` reports a lone `\n`
+      inside a paragraph as `Event::SoftBreak` (conventionally a space,
+      requiring a blank line for a real new paragraph), and only
+      `Event::HardBreak` (two trailing spaces or a backslash before the
+      newline) triggered `flush_line()`. Confirmed first, before
+      proposing a fix, that this was a rendering issue and not data
+      loss: the raw `.md` file on disk always had the real `\n`
+      characters intact, only the preview's interpretation of them was
+      collapsing lines. Fix: merged `SoftBreak` into the same
+      `flush_line()` arm as `HardBreak`, so every single newline renders
+      as its own line — a deliberate deviation from strict CommonMark,
+      justified by notes here being closer to short Enter-separated
+      fragments (commands, lists) than hard-wrapped prose, so "what you
+      typed is what you see" beats requiring a blank line per break. New
+      unit test `a_single_newline_within_a_paragraph_becomes_its_own_line_too`
+      in `markdown.rs`. Manually verified in tmux: typed three
+      Enter-separated lines in the body editor, saved, confirmed the raw
+      file held exactly those three lines and the preview rendered them
+      as three separate lines rather than one merged line
 - [x] Command palette (`:` command mode, à la vim/helix) (2026-07-10) —
       `:` in Normal mode enters `Mode::Command`; the input replaces only
       the status bar's hint row (row 2), leaving the breadcrumb (row 1)
