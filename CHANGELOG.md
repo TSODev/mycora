@@ -35,6 +35,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   existing output path. No frontmatter or `[[wikilink]]` rewriting yet.
 
 ### Fixed
+- **`mycora reindex` was quadratic in vault size (v0.9)** — 104 seconds
+  at 10,000 notes, growing much faster than linearly. `notes` had no
+  index on `title`, so every `[[wikilink]]` resolution in
+  `Index::write_links` (`WHERE title = ?1`) was a full table scan.
+  Added `CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title)`
+  and switched a per-iteration `tx.prepare` to `tx.prepare_cached`.
+  10,000-note reindex: 104.28s → 311.7ms, ~335× faster, now linear. See
+  [BENCHMARK.md](./BENCHMARK.md).
 - **A self-parented note vanished from the tree (v0.9)** — a note whose
   `parent` field named its own id (not reachable through any in-app
   operation, but possible via hand-edited on-disk frontmatter) became

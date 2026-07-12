@@ -185,9 +185,10 @@ search (FTS5 full-text, BM25 ranking, tag/date/branch facets), the
 `[[wikilink]]` cross-link layer with a backlinks panel, multi-vault
 mounting with a full `mycora vault` CLI, a resizable three-pane TUI
 layout with a `:` command palette, and Obsidian import / Markdown-or-PDF
-export. See [USAGE.md](./USAGE.md) for how to use it today, and
+export. See [USAGE.md](./USAGE.md) for how to use it today,
 [ROADMAP.md](./ROADMAP.md) for what's still ahead (hardening, then a
-stable v1.0).
+stable v1.0), and [BENCHMARK.md](./BENCHMARK.md) for how it performs at
+thousands of notes.
 
 ## License
 

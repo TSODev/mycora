@@ -151,6 +151,7 @@ impl Index {
                 vault_id UNINDEXED,
                 note_id UNINDEXED
             );
+            CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title);
             ",
         )
         .context("creating index schema")?;
@@ -305,7 +306,12 @@ impl Index {
         for (id, note) in tree.iter() {
             for title in extract_wikilink_titles(&note.body) {
                 let targets: Vec<(String, String)> = {
-                    let mut stmt = tx.prepare(&lookup_sql)?;
+                    // `lookup_sql`'s text is identical on every iteration
+                    // (it only depends on `known_vault_ids`, fixed for the
+                    // whole call) — `prepare_cached` compiles it once and
+                    // reuses that plan for every wikilink instead of
+                    // recompiling per lookup.
+                    let mut stmt = tx.prepare_cached(&lookup_sql)?;
                     let mut lookup_params: Vec<&dyn rusqlite::ToSql> = vec![&title];
                     for vid in known_vault_ids {
                         lookup_params.push(vid);

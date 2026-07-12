@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T10:00:00Z
+updated: 2026-07-12T11:00:00Z
 ---
 
 # Built so far
@@ -48,4 +48,6 @@ updated: 2026-07-12T10:00:00Z
   coverage added 19 tests for untested move/copy/delete edge cases and
   caught a real self-healing gap along the way — a self-parented note
   used to vanish from navigation instead of being healed like any other
-  malformed parent (see [[Markdown as source of truth]])
+  malformed parent (see [[Markdown as source of truth]]); a large-vault
+  benchmark pass found and fixed a quadratic `mycora reindex` (see
+  [[Reindex was quadratic, one missing index fixed it]])
