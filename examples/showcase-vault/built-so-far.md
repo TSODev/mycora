@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T11:00:00Z
+updated: 2026-07-12T12:00:00Z
 ---
 
 # Built so far
@@ -34,7 +34,10 @@ updated: 2026-07-12T11:00:00Z
   `mount`, `unmount`, `remove`, `list`); [[Read-only secondary vaults]]
   became fully navigable (not just visible), with every mutation guarded
   against acting on the wrong vault (see
-  [[Guard every mutation against the wrong vault]])
+  [[Guard every mutation against the wrong vault]]); an *unmounted*
+  vault stopped being invisible too, showing up as its own unexpandable
+  placeholder row with a "how to mount it" message (see
+  [[Unmounted vaults are visible too]])
 - **v0.8** — notes are never trapped in Mycora: [[Exporting a subtree]]
   flattens a note and its descendants to Markdown or PDF (see
   [[PDF export renders through a pure-Rust crate]]);

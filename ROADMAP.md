@@ -1106,3 +1106,48 @@ Goal: stability before a public release.
   and `reindex -h`) plus a longer explanation for `reindex --help`.
   `mycora vault --help` and every subcommand's own `--help` were already
   accurate and complete, checked at the same time — no changes needed.
+  **Since extended a tenth time** (2026-07-12, user-requested): an
+  unmounted registered vault used to be entirely invisible in the TUI —
+  the only way to know it existed was `mycora vault list` from the
+  shell, or remembering `config.toml`'s contents. Now every unmounted
+  entry gets its own single, unexpandable placeholder row in the tree
+  (`⊘ name`, `Color::DarkGray`, no fold marker — confirmed the exact
+  icon/color with the user via a side-by-side preview before
+  implementing, see `AskUserQuestion`'s options), appended after every
+  mounted vault's section. Selecting it shows the vault's path and the
+  exact `mycora vault mount <name>` command to bring it back, in the
+  body preview, instead of a note body; the breadcrumb's corner marker
+  reads `UNMOUNTED` instead of `READ-ONLY`; every mutating hint dims out
+  same as a read-only note's does, plus `h`/`l`/`Space` (fold) on top of
+  that, since there's nothing loaded to expand at all. `App::selected`
+  can't represent this (there's no `NoteId` — nothing is loaded), so a
+  new `selected_unmounted_vault: Option<String>` field holds it instead,
+  mutually exclusive with `selected` via the existing `set_selected`
+  choke point plus a new `set_selected_unmounted_vault` mirroring it —
+  deliberately *not* a bigger `Selection` enum replacing `selected`
+  outright, which would have rippled through every one of the ~15
+  existing call sites that already assume a bare `Option<NoteId>`, for
+  a purely additive feature that doesn't need it.
+
+  Auditing every mutating command for how it behaves when `self.selected`
+  is `None` (now reachable just by navigating onto an unmounted vault's
+  row, not only by deleting the very last note in an otherwise-empty
+  vault, the one existing way to reach it before) surfaced a real latent
+  bug: `create_sibling` used `if let Some(id) = self.selected && \
+  !self.require_editable(id) { return; }`, which only returns early when
+  something selected turns out not to be editable — with nothing
+  selected at all, that condition is false and it fell straight through,
+  silently creating a new *root-level* note in the *active* vault instead
+  of doing nothing. Fixed to the same `let Some(id) = self.selected else
+  { return };` shape every other mutating command already used.
+
+  Manually verified end to end in tmux: launched against a config with
+  one mounted and one unmounted vault, confirmed the `⊘ old-notes` row
+  renders correctly; selecting it showed the exact path and mount
+  command in the body preview, `UNMOUNTED` in the breadcrumb; `tmux
+  capture-pane -e` confirmed `h/l/space` through `d: delete` render
+  fully dimmed while `j/k`, `u`, `^R`, `/` keep normal styling; pressing
+  `l`/`o`/`a`/`d` on that row each did nothing at all (no note created,
+  no delete prompt, no navigation change) — confirming the
+  `create_sibling` fix; `j`/`k` correctly wrapped through the row in
+  both directions.

@@ -141,6 +141,14 @@ becomes registry-only-but-inactive if you explicitly set
 (reparenting into it, switching which one you're "in") isn't implemented
 yet.
 
+A `mounted = false` entry isn't invisible, either: it shows up in the
+tree as its own `⊘ name` row (dark gray, no fold marker — nothing is
+loaded for it, so there's nothing to expand). Selecting it shows the
+vault's path and the exact `mycora vault mount` command to bring it
+back, in place of a note body; every mutating key (including fold) is a
+no-op there, and the breadcrumb's corner marker reads `UNMOUNTED`
+instead of `READ-ONLY`.
+
 The older single-vault form is still accepted as a fallback when
 `[[vaults]]` is absent:
 
@@ -330,14 +338,16 @@ only reachable through the Rust API (`Index::filter_by_tags`) for now. See
 Three columns, plus a 2-line status bar at the bottom: the top row is a
 breadcrumb (`vault › branch › note`) for the selected note, with a
 `READ-ONLY` marker on the right whenever that selection is in a
-read-only mounted vault; the bottom row shows the current mode and the
+read-only mounted vault (`UNMOUNTED` instead when it's an unmounted
+vault's placeholder row); the bottom row shows the current mode and the
 relevant keybinding hints (`key: label`, key in bold) — while a
 read-only note is selected, the hints for actions that would refuse
 anyway (`a`/`o`, `y`, `Tab`/`Shift+Tab`, `K`/`J`, `i`, `e`, `d`) dim out
-rather than sitting at full brightness for keys that won't do anything.
-A prompt — the delete confirmation, the quit-confirm notice, or an
-error — replaces the bottom row only, leaving the breadcrumb above it in
-place.
+rather than sitting at full brightness for keys that won't do anything;
+on an unmounted vault's row, `h`/`l`/`Space` (fold) dims too, since
+there's nothing loaded to expand. A prompt — the delete confirmation,
+the quit-confirm notice, or an error — replaces the bottom row only,
+leaving the breadcrumb above it in place.
 
 - **Tree** (left, blue border) — the indented, collapsible note tree, same
   as before. If other vaults are mounted alongside the default one (see
@@ -347,6 +357,10 @@ place.
   like the default one — dimmed rows to mark them read-only, but fully
   browsable, not roots-only. Their link-count badges work the same as
   the default vault's, just computed against that vault's own notes.
+  Below all of that, every *unmounted* registered vault gets its own
+  single `⊘ name` row (`Color::DarkGray`, no fold marker — see
+  [Configuration](#configuration)); selecting one shows how to mount it
+  in the body preview instead of a note body.
 - **Body preview** (middle, magenta border, with a little horizontal
   padding off the border since it's mostly running prose) — the selected
   note's body, rendered as Markdown (headings, bold/italic, inline/block

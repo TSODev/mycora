@@ -6,7 +6,7 @@ tags:
 - design-decision
 - multi-vault
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T22:00:00Z
+updated: 2026-07-12T12:00:00Z
 ---
 
 # Read-only secondary vaults
@@ -31,3 +31,6 @@ Link-count badges needed none of this — they worked for read-only vaults
 from the start, since they only need a vault id, not a selectable tree —
 which is what originally proved the shared [[Search and indexing]] index
 works correctly across mounted vaults, before navigation caught up.
+
+An *unmounted* vault (registered but not loaded at all) is a different
+case again — see [[Unmounted vaults are visible too]].

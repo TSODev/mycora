@@ -6,7 +6,7 @@ tags:
 - features
 - multi-vault
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T22:00:00Z
+updated: 2026-07-12T12:00:00Z
 ---
 
 # Multi-vault mounting
@@ -30,6 +30,12 @@ link-count badges and cross-vault link resolution (see
 editing — every mutating key refuses with "this vault is read-only" (see
 [[Guard every mutation against the wrong vault]]). `/` full-text search
 stays scoped to the active vault's notes only, for now.
+
+A registered vault that *isn't* mounted still shows up — as a single,
+unexpandable `⊘ name` row after every mounted vault's section, since
+nothing is loaded for it. Selecting it shows the vault's path and the
+exact command to bring it back instead of a note body (see
+[[Unmounted vaults are visible too]]).
 
 See [[Read-only secondary vaults]] for why full editing wasn't built up
 front, and [[Managing vaults from the CLI]] for the `mycora vault ...`

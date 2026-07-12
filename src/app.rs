@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use ratatui::widgets::{Block, Borders};
 use ratatui_textarea::TextArea;
@@ -130,6 +130,18 @@ pub struct App {
     backlinks_selected: usize,
     /// Every other mounted vault (see `Config::mounted_vaults`), read-only.
     other_vaults: Vec<ReadOnlyVault>,
+    /// Registered vaults that are *not* currently mounted — nothing is
+    /// loaded for them, but each still gets a single unexpandable
+    /// placeholder row in the tree (see `TreeRow::UnmountedVault`) so
+    /// their existence isn't invisible until a restart after `mycora
+    /// vault mount`.
+    unmounted_vaults: Vec<VaultEntry>,
+    /// Set instead of `selected` when the current row is an unmounted
+    /// vault's placeholder rather than a note — mutually exclusive with
+    /// `selected` (see `set_selected`/`set_selected_unmounted_vault`),
+    /// exactly one of the two is `Some` whenever anything is highlighted
+    /// in the tree pane at all.
+    selected_unmounted_vault: Option<String>,
     /// The active `ratatui-textarea` widget state while `mode ==
     /// Mode::EditBody`; `None` otherwise. Full-pane overlay rather than a
     /// split layout (tree + body pane) — the latter is its own separate
@@ -182,9 +194,10 @@ pub const COMMAND_REFERENCE: &[(&str, &str)] = &[
 ];
 
 /// One row in the tree pane, as returned by `App::visible_rows`: a note
-/// (possibly in a read-only mounted vault) or a `── vault name ──`
-/// separator marking where a read-only vault's section begins.
-/// Separators aren't navigable — `App::move_selection` skips them.
+/// (possibly in a read-only mounted vault), a `── vault name ──`
+/// separator marking where a read-only vault's section begins, or a
+/// registered-but-unmounted vault's placeholder row. Separators aren't
+/// navigable — `App::move_selection` skips them.
 pub enum TreeRow {
     Note {
         id: NoteId,
@@ -197,6 +210,13 @@ pub enum TreeRow {
         editable: bool,
     },
     VaultSeparator(String),
+    /// A registered vault that isn't currently mounted — nothing is
+    /// loaded for it (no `Tree`, no `Vault`), so unlike `Note` it can
+    /// never expand, and selecting it sets `App::selected_unmounted_vault`
+    /// instead of `App::selected` (there's no `NoteId` to hold). The body
+    /// preview shows how to mount it instead of a note body — see
+    /// `App::selected_unmounted_vault_info`.
+    UnmountedVault { name: String, path: PathBuf },
 }
 
 impl App {
@@ -206,6 +226,16 @@ impl App {
     pub fn new() -> anyhow::Result<(Self, Vec<String>)> {
         let config = Config::load()?;
         let active = config.active_vault().clone();
+        // Excludes `active` itself even if its own `mounted` flag is
+        // `false` — that can happen via `Config::active_vault`'s
+        // self-heal (see below), and it's actively loaded regardless, so
+        // showing it *again* as an unmounted placeholder would be wrong.
+        let unmounted_vaults: Vec<VaultEntry> = config
+            .vaults
+            .iter()
+            .filter(|v| !v.mounted && v.name != active.name)
+            .cloned()
+            .collect();
 
         // Load every mounted vault (primary included) before indexing any
         // of them — cross-vault wikilink resolution needs every vault's
@@ -357,6 +387,8 @@ impl App {
             search_selected: 0,
             backlinks_selected: 0,
             other_vaults,
+            unmounted_vaults,
+            selected_unmounted_vault: None,
             body_editor: None,
             session_path,
             pane_widths,
@@ -439,12 +471,13 @@ impl App {
     }
 
     /// Depth-first rows across *every* mounted vault — the active one
-    /// first, then each read-only one behind its own separator — used by
-    /// both `ui.rs`'s tree rendering and `move_selection`. Read-only
-    /// branches respect `self.expanded` exactly like the active tree does
-    /// (ids are globally unique UUIDs, so the same set works across
-    /// vaults); this replaces the old roots-only, always-collapsed
-    /// `other_vault_sections` view with real navigation.
+    /// first, then each read-only one behind its own separator, then one
+    /// placeholder row per unmounted registry entry — used by both
+    /// `ui.rs`'s tree rendering and `move_selection`. Read-only branches
+    /// respect `self.expanded` exactly like the active tree does (ids are
+    /// globally unique UUIDs, so the same set works across vaults); this
+    /// replaces the old roots-only, always-collapsed `other_vault_sections`
+    /// view with real navigation.
     pub fn visible_rows(&self) -> Vec<TreeRow> {
         let mut out = Vec::new();
         for &root in self.tree.roots() {
@@ -455,6 +488,12 @@ impl App {
             for &root in v.tree.roots() {
                 self.push_visible_row(&v.tree, &v.id, root, 0, false, &mut out);
             }
+        }
+        for entry in &self.unmounted_vaults {
+            out.push(TreeRow::UnmountedVault {
+                name: entry.name.clone(),
+                path: entry.path.clone(),
+            });
         }
         out
     }
@@ -497,38 +536,63 @@ impl App {
         }
     }
 
-    /// The single place `self.selected` is ever written — also resets
-    /// `body_scroll` to 0, so a freshly selected note (or a fresh search/
-    /// backlinks/tag-list jump) always starts at the top of the body
-    /// preview rather than wherever a previous note happened to be
+    /// The single place `self.selected` is ever written — also clears
+    /// `selected_unmounted_vault` (the two are mutually exclusive) and
+    /// resets `body_scroll` to 0, so a freshly selected note (or a fresh
+    /// search/backlinks/tag-list jump) always starts at the top of the
+    /// body preview rather than wherever a previous note happened to be
     /// scrolled to.
     fn set_selected(&mut self, id: Option<NoteId>) {
         self.selected = id;
+        self.selected_unmounted_vault = None;
+        self.body_scroll = 0;
+    }
+
+    /// The `selected_unmounted_vault` counterpart to `set_selected` —
+    /// clears `selected` (mutually exclusive) and resets `body_scroll`
+    /// the same way.
+    fn set_selected_unmounted_vault(&mut self, name: Option<String>) {
+        self.selected = None;
+        self.selected_unmounted_vault = name;
         self.body_scroll = 0;
     }
 
     pub fn move_selection(&mut self, delta: isize) {
-        let ids: Vec<NoteId> = self
+        enum Stop {
+            Note(NoteId),
+            Unmounted(String),
+        }
+
+        let stops: Vec<Stop> = self
             .visible_rows()
             .into_iter()
             .filter_map(|row| match row {
-                TreeRow::Note { id, .. } => Some(id),
+                TreeRow::Note { id, .. } => Some(Stop::Note(id)),
                 TreeRow::VaultSeparator(_) => None,
+                TreeRow::UnmountedVault { name, .. } => Some(Stop::Unmounted(name)),
             })
             .collect();
-        if ids.is_empty() {
+        if stops.is_empty() {
             self.set_selected(None);
             return;
         }
 
-        let current_pos = self
-            .selected
-            .and_then(|id| ids.iter().position(|&v| v == id))
+        let current_pos = stops
+            .iter()
+            .position(|stop| match stop {
+                Stop::Note(id) => self.selected == Some(*id),
+                Stop::Unmounted(name) => {
+                    self.selected_unmounted_vault.as_deref() == Some(name.as_str())
+                }
+            })
             .unwrap_or(0);
 
-        let len = ids.len() as isize;
+        let len = stops.len() as isize;
         let new_pos = (current_pos as isize + delta).rem_euclid(len) as usize;
-        self.set_selected(Some(ids[new_pos]));
+        match &stops[new_pos] {
+            Stop::Note(id) => self.set_selected(Some(*id)),
+            Stop::Unmounted(name) => self.set_selected_unmounted_vault(Some(name.clone())),
+        }
     }
 
     pub fn toggle_expand(&mut self) {
@@ -559,15 +623,19 @@ impl App {
     }
 
     pub fn create_sibling(&mut self) {
-        if let Some(id) = self.selected
-            && !self.require_editable(id)
-        {
+        // `let Some(id) = ... else { return }`, not `if let ... && !...`:
+        // the latter only returns early when something selected turns out
+        // not to be editable, but falls straight through — treating a
+        // `None` selection (nothing selected, or an unmounted vault's
+        // placeholder row) as "create at root" instead of a no-op. That
+        // was reachable even before unmounted-vault rows existed (delete
+        // the very last note and `selected` goes to `None` too), just
+        // rare enough not to have been noticed.
+        let Some(id) = self.selected else { return };
+        if !self.require_editable(id) {
             return;
         }
-        let parent = self
-            .selected
-            .and_then(|id| self.tree.get(id))
-            .and_then(|note| note.parent);
+        let parent = self.tree.get(id).and_then(|note| note.parent);
         let new_id = self.tree.create_note("New note", parent);
         if let Some(parent) = parent {
             self.expanded.insert(parent);
@@ -1127,6 +1195,9 @@ impl App {
     /// rather than always claiming `default` while browsing a read-only
     /// vault.
     pub fn vault_name(&self) -> &str {
+        if let Some(name) = &self.selected_unmounted_vault {
+            return name;
+        }
         self.selected
             .and_then(|id| self.resolve(id))
             .map(|(_, vault_id)| vault_id)
@@ -1137,6 +1208,26 @@ impl App {
     /// drives the breadcrumb row's "READ-ONLY" marker in `ui.rs`.
     pub fn selected_is_read_only(&self) -> bool {
         self.selected.is_some_and(|id| self.tree.get(id).is_none())
+    }
+
+    /// `true` if the current row is an unmounted vault's placeholder
+    /// rather than a note — drives the breadcrumb row's "UNMOUNTED"
+    /// marker, the hint row's full mutation lockout (nothing is loaded to
+    /// act on), and `draw_body_preview`'s "how to mount" message.
+    pub fn selected_is_unmounted_vault(&self) -> bool {
+        self.selected_unmounted_vault.is_some()
+    }
+
+    /// `(name, path)` of the currently selected row's unmounted vault, if
+    /// that's what's selected — the whole reason the row exists is to
+    /// tell the user how to bring it back, so the body preview needs
+    /// both the display name and the exact path to put in that message.
+    pub fn selected_unmounted_vault_info(&self) -> Option<(&str, &Path)> {
+        let name = self.selected_unmounted_vault.as_deref()?;
+        self.unmounted_vaults
+            .iter()
+            .find(|entry| entry.name == name)
+            .map(|entry| (entry.name.as_str(), entry.path.as_path()))
     }
 
     /// Current percent widths of the split layout's tree/body/backlinks

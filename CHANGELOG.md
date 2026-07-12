@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Unmounted vaults are now visible in the tree** — a registered but
+  unmounted vault used to be invisible in the TUI entirely; it now gets
+  its own single, unexpandable `⊘ name` row (dark gray, no fold marker)
+  after every mounted vault's section. Selecting it shows the vault's
+  path and the exact `mycora vault mount <name>` command in the body
+  preview instead of a note body; the breadcrumb marker reads
+  `UNMOUNTED`; every mutating hint (plus fold, unlike a read-only note)
+  dims out and is a true no-op.
 - **PDF export (v0.8)** — `:export`/`mycora export` now render a `.pdf`
   output path to a real, paginated PDF (via the `markdown2pdf` crate)
   instead of writing Markdown, purely based on the output path's
@@ -35,6 +43,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   existing output path. No frontmatter or `[[wikilink]]` rewriting yet.
 
 ### Fixed
+- **`o` (new sibling) with nothing selected silently created a root note**
+  — `create_sibling`'s guard only returned early when something selected
+  turned out not to be editable; with nothing selected at all it fell
+  through and created a new root-level note in the active vault instead
+  of doing nothing. Only reachable before by deleting the very last note
+  in an otherwise-empty vault; the new unmounted-vault placeholder row
+  made it common enough to notice. Fixed to match every other mutating
+  command's `let Some(id) = self.selected else { return };` shape.
 - **`mycora reindex` was quadratic in vault size (v0.9)** — 104 seconds
   at 10,000 notes, growing much faster than linearly. `notes` had no
   index on `title`, so every `[[wikilink]]` resolution in
