@@ -296,6 +296,21 @@ vault still shows up in the TUI, as its own `▦ name` row — see
 [Layout](#layout) and `:config archive show/hide` under
 [Command palette](#command-palette).
 
+Renaming a note (see [Naming / renaming](#naming--renaming)) keeps its
+underlying file's name in sync automatically — but only from that point
+on. If notes created before this existed still have a generic filename
+(`new-note-7.md`) despite a real title, fix all of them at once:
+
+```sh
+mycora vault sync-filenames <name>
+```
+
+Re-saves every note in the named vault, renaming any file whose name no
+longer matches its title. Safe to run repeatedly — a note that's
+already in sync is left untouched, so there's no harm running it as a
+habit after a big renaming session. Reports how many notes it checked
+and how many files it actually renamed.
+
 To see everything currently registered:
 
 ```sh
@@ -716,6 +731,13 @@ empty, same as export's refuse-on-existing-file.
   itself — it's kept, titled "New note", ready to rename later with `i`.
 - `i` — rename the selected note (prefills its current title so you can
   edit it, rather than starting blank)
+
+Renaming a note also renames its underlying `.md` file to match, so a
+vault browsed outside Mycora stays readable at a glance instead of a
+directory full of `new-note-N.md`. If notes from before this existed
+still have stale filenames, `mycora vault sync-filenames <name>` fixes
+all of them at once (see
+[Registering a vault from the CLI](#registering-a-vault-from-the-cli)).
 
 ## Editing a note's body
 

@@ -120,7 +120,7 @@ names the part of the design that's actually differentiating: not the tree
   archive`/`unarchive`) — either row category can be hidden with
   `:config unmount/archive show/hide`. A `mycora vault` CLI
   (`add`/`init`/`rename`/`promote`/`mount`/`unmount`/`archive`/
-  `unarchive`/`remove`/`list`) manages the registry.
+  `unarchive`/`remove`/`list`/`sync-filenames`) manages the registry.
 - **A three-pane layout**: resizable tree + Markdown-rendered body
   preview + backlinks panes, a full-pane body editor, a `:` command
   palette, light/dark theming for free via named ANSI colors, and

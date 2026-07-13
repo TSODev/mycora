@@ -103,16 +103,45 @@ impl Vault {
         self.paths.get(&id).map(PathBuf::as_path)
     }
 
-    pub fn save_note(&mut self, id: NoteId, note: &Note) -> Result<()> {
-        let path = match self.paths.get(&id) {
-            Some(path) => path.clone(),
+    /// Writes `note` to disk. If a file is already known for `id` but its
+    /// name no longer matches `note.title` (the note was renamed since it
+    /// was last saved — titling *never* renames the file on its own,
+    /// `save_note` is the one place that reconciles the two), the file is
+    /// moved to a fresh name derived from the current title first, same
+    /// slugify-and-disambiguate logic as a brand new note gets. Returns
+    /// `true` when that rename happened, so a caller doing this in bulk
+    /// (`mycora vault sync-filenames`) can report how many it touched.
+    /// A body/tag-only edit is the common case and never touches the
+    /// filename at all, since the slug only depends on the title.
+    pub fn save_note(&mut self, id: NoteId, note: &Note) -> Result<bool> {
+        let desired_stem = slugify(&note.title);
+        let (path, renamed) = match self.paths.get(&id) {
+            Some(existing) => {
+                let current_stem = existing.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                if current_stem == desired_stem {
+                    (existing.clone(), false)
+                } else {
+                    let existing = existing.clone();
+                    let new_path = self.allocate_path(&note.title);
+                    fs::rename(&existing, &new_path).with_context(|| {
+                        format!(
+                            "renaming {} to {} to match its new title",
+                            existing.display(),
+                            new_path.display()
+                        )
+                    })?;
+                    self.paths.insert(id, new_path.clone());
+                    (new_path, true)
+                }
+            }
             None => {
                 let path = self.allocate_path(&note.title);
                 self.paths.insert(id, path.clone());
-                path
+                (path, false)
             }
         };
-        write_note_file(&path, id, note)
+        write_note_file(&path, id, note)?;
+        Ok(renamed)
     }
 
     /// Moves a note's file into `<vault>/.trash/` rather than deleting it
@@ -315,6 +344,86 @@ mod tests {
         assert_eq!(loaded_note.title, "Round Trip");
         assert_eq!(loaded_note.body, "Some body content.");
         assert_eq!(loaded_note.tags, vec!["alpha", "beta"]);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_note_renames_the_file_when_the_title_changes() {
+        let dir = temp_vault_dir();
+        let mut vault = Vault::open(dir.clone()).unwrap();
+
+        let mut note = Note::new("New note", None);
+        let id = NoteId::new();
+        let renamed = vault.save_note(id, &note).unwrap();
+        assert!(!renamed, "first save is a creation, not a rename");
+        let original_path = vault.path(id).unwrap().to_path_buf();
+        assert_eq!(original_path.file_stem().unwrap(), "new-note");
+        assert!(original_path.exists());
+
+        note.title = "Project Alpha".to_string();
+        let renamed = vault.save_note(id, &note).unwrap();
+        assert!(renamed);
+        let new_path = vault.path(id).unwrap().to_path_buf();
+        assert_eq!(new_path.file_stem().unwrap(), "project-alpha");
+        assert!(new_path.exists());
+        assert!(!original_path.exists(), "the old file should be moved, not copied");
+
+        // The note itself is still readable at its new location.
+        let mut reloaded = Vault::open(dir.clone()).unwrap();
+        let (tree, report) = reloaded.load().unwrap();
+        assert!(report.warnings.is_empty());
+        assert_eq!(tree.get(id).unwrap().title, "Project Alpha");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_note_does_not_rename_the_file_for_a_body_only_edit() {
+        let dir = temp_vault_dir();
+        let mut vault = Vault::open(dir.clone()).unwrap();
+
+        let mut note = Note::new("Stable Title", None);
+        let id = NoteId::new();
+        vault.save_note(id, &note).unwrap();
+        let original_path = vault.path(id).unwrap().to_path_buf();
+
+        note.body = "Some new body content, title unchanged.".to_string();
+        let renamed = vault.save_note(id, &note).unwrap();
+        assert!(!renamed);
+        assert_eq!(vault.path(id).unwrap(), original_path);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_note_disambiguates_a_rename_that_collides_with_another_note() {
+        let dir = temp_vault_dir();
+        let mut vault = Vault::open(dir.clone()).unwrap();
+
+        let note_a = Note::new("Alpha", None);
+        let id_a = NoteId::new();
+        vault.save_note(id_a, &note_a).unwrap();
+
+        let mut note_b = Note::new("Beta", None);
+        let id_b = NoteId::new();
+        vault.save_note(id_b, &note_b).unwrap();
+
+        note_b.title = "Alpha".to_string();
+        vault.save_note(id_b, &note_b).unwrap();
+
+        // Both files exist, distinctly, and each note is still exactly
+        // itself once reloaded -- the collision was disambiguated, not
+        // silently overwritten.
+        assert_ne!(vault.path(id_a).unwrap(), vault.path(id_b).unwrap());
+        assert!(vault.path(id_a).unwrap().exists());
+        assert!(vault.path(id_b).unwrap().exists());
+
+        let mut reloaded = Vault::open(dir.clone()).unwrap();
+        let (tree, report) = reloaded.load().unwrap();
+        assert!(report.warnings.is_empty());
+        assert_eq!(tree.get(id_a).unwrap().title, "Alpha");
+        assert_eq!(tree.get(id_b).unwrap().title, "Alpha");
 
         fs::remove_dir_all(&dir).ok();
     }

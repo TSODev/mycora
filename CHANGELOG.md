@@ -7,6 +7,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Renaming a note never renamed its file** — a note created via `a`/`o`
+  gets its filename slugified from whatever title it had at that exact
+  moment (often the "New note" placeholder, before you've typed a real
+  one); renaming it afterward updated the title everywhere it's shown,
+  but never the underlying `.md` file, which kept its original name
+  forever. `Vault::save_note` now renames the file to match whenever the
+  title-derived slug changes, colliding names disambiguated the same
+  way a brand new note's would be.
+
+### Added
+- **`mycora vault sync-filenames <name>`** — retroactively fixes every
+  note already on disk with a stale, title-mismatched filename (the
+  fix above only prevents new drift; this catches up anything created
+  before it existed). Safe to run repeatedly — a note whose filename
+  already matches its title is left untouched. Reports how many notes
+  it checked and how many files it actually renamed.
+
 ## [0.10.0] — 2026-07-13
 
 ### Added

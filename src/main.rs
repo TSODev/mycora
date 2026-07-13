@@ -158,6 +158,20 @@ enum VaultCommand {
         /// Name of the vault to unarchive.
         name: String,
     },
+    /// Rename every note's file to match its current title.
+    ///
+    /// A note created via `a`/`o` in the TUI gets its filename from
+    /// whatever title it had at that exact moment (often the "New note"
+    /// placeholder, before you've typed a real one) — renaming the note
+    /// afterward has never renamed the file to match, only new saves do
+    /// (as of the version that added this command). This retroactively
+    /// fixes every note already on disk with a stale, title-mismatched
+    /// filename; safe to run repeatedly, notes whose filename already
+    /// matches their title are left untouched.
+    SyncFilenames {
+        /// Name of the vault to fix.
+        name: String,
+    },
 }
 
 /// Restores the terminal (raw mode + alternate screen) before a panic's
@@ -218,6 +232,9 @@ fn main() -> anyhow::Result<()> {
         Some(Command::Vault {
             action: VaultCommand::Unarchive { name },
         }) => return vault_unarchive(&name),
+        Some(Command::Vault {
+            action: VaultCommand::SyncFilenames { name },
+        }) => return vault_sync_filenames(&name),
         Some(Command::Export { title, output }) => return export_note(&title, output),
         Some(Command::Import { source, name, path }) => return import_vault(source, &name, path),
         None => {}
@@ -478,6 +495,58 @@ fn vault_unarchive(name: &str) -> anyhow::Result<()> {
         "mycora: unarchived \"{name}\" to {} (archive file removed) — still unmounted, \
          `mycora vault mount {name}` to activate it",
         entry.path.display()
+    );
+    Ok(())
+}
+
+/// Retroactively fixes every note whose filename no longer matches its
+/// title — see `VaultCommand::SyncFilenames`'s doc comment for why that
+/// can happen. Loads the named vault directly (doesn't need it mounted;
+/// this is a maintenance pass over its files, not something that touches
+/// the registry), re-saves every note via `Vault::save_note` — the exact
+/// same rename-on-mismatch logic a normal in-TUI edit now triggers,
+/// just run once over everything instead of waiting for each note's
+/// next edit — and reports how many files actually moved. Safe to run
+/// repeatedly: a note whose filename already matches is left untouched
+/// (`save_note` only renames when the slug actually differs).
+fn vault_sync_filenames(name: &str) -> anyhow::Result<()> {
+    let config = Config::load()?;
+    let entry = config
+        .vaults
+        .iter()
+        .find(|v| v.name == name)
+        .with_context(|| format!("no vault named \"{name}\""))?;
+    if entry.archived.is_some() {
+        bail!(
+            "vault \"{name}\" is archived — `mycora vault unarchive {name}` first, then retry"
+        );
+    }
+
+    let mut vault = Vault::open(entry.path.clone())?;
+    let (tree, report) = vault.load()?;
+    for warning in &report.warnings {
+        eprintln!("mycora: [{name}] {warning}");
+    }
+
+    let ids: Vec<NoteId> = tree
+        .roots()
+        .iter()
+        .flat_map(|&root| tree.subtree_ids(root))
+        .collect();
+    let mut renamed_count = 0;
+    for id in &ids {
+        let note = tree
+            .get(*id)
+            .expect("every id from subtree_ids resolves in the same tree");
+        if vault.save_note(*id, note)? {
+            renamed_count += 1;
+        }
+    }
+
+    println!(
+        "mycora: checked {} note(s) in \"{name}\", renamed {renamed_count} file(s) to match \
+         their titles",
+        ids.len()
     );
     Ok(())
 }

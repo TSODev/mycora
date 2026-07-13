@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (184 tests, all in-crate, no external deps)
+cargo test                # all unit tests (187 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -101,6 +101,16 @@ directly and guarantee its synthetic output matches the real on-disk format.
   the same warning doesn't repeat on the next load. Writes are atomic
   (temp file + `rename`). `trash_note` moves a file to `<vault>/.trash/`
   instead of deleting it; trash is never auto-scanned or auto-emptied.
+  `save_note` returns `Result<bool>` (renamed-the-file-or-not): a
+  filename is allocated (`slugify` + `unique_path`) once on a note's
+  first save, and every later save compares that file's stem against a
+  fresh `slugify(&note.title)`, `fs::rename`-ing to a freshly
+  disambiguated path when they differ — the file only ever drifts from
+  the title between the note's creation (title still "New note") and
+  its first real rename, not indefinitely. `mycora vault
+  sync-filenames <name>` (`main.rs`) is the retroactive fixer for notes
+  that already drifted before this existed — just every note re-saved
+  through the same path.
 - **`config.rs` — `Config`**: reads `~/.config/mycora/config.toml`. Holds a
   registry of named vaults (`VaultEntry { name, path, mounted }`);
   `mounted_vaults()` filters to what should load at startup, `active_vault()`

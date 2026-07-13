@@ -7,7 +7,7 @@ tags:
 - multi-vault
 - cli
 created: 2026-07-10T20:00:00Z
-updated: 2026-07-12T13:00:00Z
+updated: 2026-07-13T20:00:00Z
 ---
 
 # CLI vault management stays registry-only
@@ -53,6 +53,14 @@ any code, rather than guessing:
   right there wouldn't have reclaimed anything. See
   [[Compressing a vault trades files for one archive, deliberately]]
   for that decision and the two forks it took to get there.
+- **`vault sync-filenames` is a second exception, for a different
+  reason.** It doesn't touch `config.toml` at all — it re-saves every
+  note through `Vault::save_note`, which now renames a note's file
+  whenever it's drifted from the current title (see
+  [[Markdown as source of truth]]). Grouped here anyway because it's
+  the same category of thing archive/unarchive already are: a
+  subcommand whose whole reason to exist is touching files on disk,
+  not the registry.
 
 Every command that writes to `config.toml` shares one implementation:
 parse the whole file fresh, mutate in memory, rewrite it — the same

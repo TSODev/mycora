@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T18:00:00Z
+updated: 2026-07-13T20:00:00Z
 ---
 
 # Built so far
@@ -65,11 +65,12 @@ updated: 2026-07-13T18:00:00Z
   audit checked USAGE.md against the actual code rather than assuming it
   was current (see [[Roadmap]]), and found (and fixed) several places it
   had quietly gone stale
-- **Since v0.9** — every line break typed in the body editor now renders
-  as its own line in the preview, even without a blank line between them
-  (see [[Layout]]'s body-preview note); the interface itself went
-  multilingual — English, French, Spanish, German, switchable live with
-  `:lang <en|fr|es|de>` and persisted to `config.toml` (see
+- **v0.10** — done, published to crates.io: every line break typed in
+  the body editor now renders as its own line in the preview, even
+  without a blank line between them (see [[Layout]]'s body-preview
+  note); the interface itself went multilingual — English, French,
+  Spanish, German, switchable live with `:lang <en|fr|es|de>` and
+  persisted to `config.toml` (see
   [[The interface speaks four languages]]); every mounted vault gets a
   centered, background-colored name header in the tree pane (see
   [[Layout]]); the body editor now offers wikilink autocompletion as you
@@ -82,3 +83,8 @@ updated: 2026-07-13T18:00:00Z
   reference for everything else, and the breadcrumb row gained a
   centered "last modified" timestamp, shown only when there's room
   (see [[Status bar]])
+- **Since v0.10** — renaming a note now renames its underlying `.md`
+  file too, instead of leaving it stuck with whatever name it got on
+  first save (often "New note"); `mycora vault sync-filenames <name>`
+  retroactively fixes notes that already drifted before this existed
+  (see [[Markdown as source of truth]])

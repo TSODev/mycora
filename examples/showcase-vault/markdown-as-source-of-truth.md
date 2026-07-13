@@ -6,7 +6,7 @@ tags:
 - philosophy
 - storage
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T09:00:00Z
+updated: 2026-07-13T20:00:00Z
 ---
 
 # Markdown as source of truth
@@ -16,6 +16,16 @@ one file per note (`id`, `parent`, `order`, `tags`, `created`, `updated`,
 then `# Title` and the body). Nothing about your data should require
 Mycora to remain readable: open any note in any text editor and it's
 still just Markdown with a small metadata header.
+
+The filename itself tries to stay meaningful too — a fresh note's file
+is named from whatever its title is *the first time it's saved* (often
+still "New note", before you've typed a real one via [[Tree operations]]'
+rename), but every save after that keeps the file's name in sync with
+whatever the title has become, renaming it if they've drifted apart. A
+vault stays readable from outside Mycora — `ls`, another editor, a
+backup tool — instead of turning into a directory of `new-note-N.md`.
+Notes saved before this existed can still be caught up all at once:
+`mycora vault sync-filenames <name>`.
 
 Writes are **atomic**: every persistent file Mycora owns (a note, plus
 `config.toml` and `session.toml`) is written to a temp file first, then

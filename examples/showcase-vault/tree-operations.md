@@ -7,7 +7,7 @@ tags:
 - tree
 - undo-redo
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-13T20:00:00Z
 ---
 
 # Tree operations
@@ -15,7 +15,10 @@ updated: 2026-07-10T09:00:00Z
 All the structural operations on the [[The tree model]]:
 
 - **Create** — `a` for a new child, `o` for a new sibling
-- **Rename** — `i`, prefilled with the current title
+- **Rename** — `i`, prefilled with the current title; the underlying
+  `.md` file's name is kept in sync too (see
+  [[Markdown as source of truth]]) — notes created before that existed
+  can be caught up with `mycora vault sync-filenames <name>`
 - **Move / reparent** — `Tab`/`Shift+Tab` indent/outdent; internally
   cycle-safe, walking *up* from the candidate new parent to reject any
   move that would create a loop

@@ -1074,7 +1074,7 @@ impl App {
             return;
         };
         match self.vault.save_note(id, note) {
-            Ok(()) => self.last_error = None,
+            Ok(_) => self.last_error = None,
             Err(err) => self.last_error = Some(self.lang.save_failed(&err)),
         }
     }

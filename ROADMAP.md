@@ -1538,6 +1538,54 @@ Goal: stability before a public release.
       pass (no new test — this is `event.rs` dispatch wiring, already
       covered behaviorally by every existing `handle_normal`-reachable
       action's own tests), clippy clean.
+- [x] **Renaming a note now renames its file, `mycora vault
+      sync-filenames` fixes existing ones** (2026-07-13, user-reported)
+      — noticed every real note in their vault was named `new-note-N.md`
+      regardless of its actual title, and asked whether they could be
+      given real names. Root cause: `Vault::save_note` only ever
+      allocates a filename (via `slugify` + `unique_path`) the *first*
+      time a note is saved — which happens immediately on `a`/`o`,
+      before `begin_naming` even opens the Insert-mode prompt, so the
+      very first save is almost always titled "New note" (or whichever
+      language's equivalent). Every subsequent save, including the real
+      title landing seconds later via `commit_rename`, reused that
+      already-allocated path unconditionally — the title was correct
+      everywhere it's *displayed*, but the underlying file just never
+      caught up. Fix: `save_note` now compares the existing path's file
+      stem against a fresh `slugify(&note.title)` on every call, and if
+      they differ, `fs::rename`s the file to a newly allocated path
+      before writing — reusing the exact same disambiguation logic
+      (`unique_path`'s `-2`, `-3`, ... suffixing) a brand new note's
+      first save already had, so a rename that collides with another
+      note's filename doesn't overwrite it. Changed `save_note`'s
+      return type from `Result<()>` to `Result<bool>` (did it rename)
+      so a caller doing this in bulk can report a count — every existing
+      call site either already discards the value via `?`/`.unwrap()`
+      (fine, `bool` isn't `#[must_use]`) or, in `App::persist`, just
+      needed `Ok(())` widened to `Ok(_)`. New `mycora vault
+      sync-filenames <name>` CLI command retroactively fixes every note
+      already on disk with a stale filename — the `save_note` fix alone
+      only stops *new* drift, it doesn't rewind notes that already
+      exist; running the command is just re-saving every note in the
+      vault via the same reconciling `save_note`, so a note whose file
+      already matches its title is silently left alone (safe to run
+      repeatedly, e.g. after every real edit session as a habit, with
+      no risk of doing anything on a vault that's already in sync).
+      3 new `vault.rs` tests (renames on a title change / leaves the
+      file alone on a body-only edit / disambiguates a rename that
+      collides with another note's existing filename). **Caught during
+      manual verification, not before**: testing the new CLI command
+      in tmux, one invocation was run without the scratch `HOME=`
+      prefix by mistake and landed on the user's real `~/mycora`
+      vault instead of the intended `/tmp` one — `fs::rename` only
+      moves files (never touches content), and a follow-up `mycora
+      reindex` confirmed all 17 real notes loaded cleanly with their
+      correct titles/bodies afterward, but this was disclosed to the
+      user immediately rather than silently left unmentioned just
+      because the outcome happened to be exactly what they'd asked
+      for — running an unrequested operation against real data, even
+      a beneficial and non-destructive one, isn't something to gloss
+      over. 187 tests, clippy clean.
 
 ---
 

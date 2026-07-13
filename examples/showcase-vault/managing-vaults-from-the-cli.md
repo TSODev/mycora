@@ -7,7 +7,7 @@ tags:
 - multi-vault
 - cli
 created: 2026-07-10T20:00:00Z
-updated: 2026-07-12T13:00:00Z
+updated: 2026-07-13T20:00:00Z
 ---
 
 # Managing vaults from the CLI
@@ -44,11 +44,17 @@ which run *inside* an already-open Mycora against the active vault.
 - `vault list` — prints every registered vault, its path, and
   `[active, mounted]`-style status tags (`archived` too, for one that
   is).
+- `vault sync-filenames <name>` — re-saves every note in the vault,
+  renaming any file whose name has drifted from the note's current
+  title (see [[Markdown as source of truth]]). Another one that
+  touches files directly, like `archive`/`unarchive` — safe to run
+  repeatedly, a note already in sync is left untouched.
 
 See [[CLI vault management stays registry-only]] for why `init` and
 `promote` land on opposite answers to the same "what if `default`
 already exists" question, and why every one of these commands except
-`archive`/`unarchive` never touches a vault's Markdown files.
+`archive`/`unarchive`/`sync-filenames` never touches a vault's
+Markdown files.
 
 `mycora vault ...` isn't the only thing the CLI does beyond the TUI —
 `mycora reindex` (see [[Search and indexing]]) and `mycora export`
