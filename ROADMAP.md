@@ -1061,6 +1061,95 @@ Goal: stability before a public release.
 
 ---
 
+## v1.1 — Move/copy a subtree to an arbitrary target, including across vaults
+
+- [ ] **Cut/paste and cross-vault copy** (2026-07-12, user-requested) —
+      raised as "can we cut-and-paste tree branches, and between vaults?"
+      Current state: `y` deep-copies the selected subtree as the very
+      next sibling (immediate, no target picking); `Tab`/`BackTab`
+      reparent only relative to the current position (previous sibling /
+      grandparent). Nothing lets you pick an arbitrary destination, and
+      nothing crosses a vault boundary — every mutating `App` method is
+      gated by `require_editable`, which refuses anything outside the
+      one active/editable vault (see this file's "Multiple vaults" open
+      design question above — every other mounted vault is read-only by
+      design, not by oversight).
+
+      **Proposed design** (not yet implemented — keybindings and the
+      cross-vault split below need a confirmation pass before coding):
+      - `x` marks the selected note/subtree as *pending move*. Guarded
+        by `require_editable` on the source, same as `d`/`i` today — a
+        note in a read-only vault can't be marked for a real cut, since
+        completing it would require deleting from a vault this app
+        never mutates. Pressing `x` again elsewhere, or `Esc`, clears
+        the pending mark without touching anything.
+      - `c` marks the selected note/subtree as *pending copy* — no
+        `require_editable` restriction on the source, since copying only
+        *reads* it; a note in any mounted vault, read-only included, can
+        be marked. Deliberately a different key from the existing `y`
+        (which stays exactly what it is today: an immediate duplicate-
+        in-place, no target picking, no pending state) rather than
+        overloading one key with two very different interaction shapes.
+      - `p`, pressed on a new target note, completes whichever mark is
+        pending, inserting as the target's last child (mirroring `a`'s
+        existing "child" semantics — simplest predictable landing spot;
+        a `P` for "paste as sibling after," mirroring `o`, is a plausible
+        fast-follow but deliberately not in the first cut). Target is
+        always `require_editable`-checked — pasting into a read-only
+        vault's row refuses with the usual `last_error`, same UX as every
+        other guarded mutation.
+        - *Pending move*, target in the same (active) tree as the source
+          (the only place a pending move can ever be marked, per above):
+          a plain `tree.move_note`, reusing its existing cycle detection.
+        - *Pending copy*, source and target both in the active tree:
+          the existing single-tree `Tree::deep_copy` already does this.
+        - *Pending copy*, source in a different (read-only) mounted
+          vault: needs a new `Tree::deep_copy_from(&mut self, source:
+          &Tree, id: NoteId, new_parent: Option<NoteId>) -> Option<NoteId>`
+          — structurally `deep_copy` with the read side pointed at a
+          different `Tree`, since today's version can only read and
+          write the same one. Every copied id gets `self.persist(id)`
+          exactly like `copy_selected` already does for its own notes.
+      - Status bar reflects a pending mark for as long as it's active
+        ("Moving 'Title' — p to drop here, Esc to cancel" / "Copying
+        …") so it's never an invisible mode the user forgets they're in.
+      - Undo: one step per completed paste — a move's inverse is another
+        `move_note` back to the previous parent (same shape as
+        `Reorder`'s existing undo entry); a copy's inverse is removing
+        the whole new subtree, reusing `copy_selected`'s existing
+        `UndoAction::Remove` pattern verbatim.
+      - **Deliberately out of scope for this pass**: moving (not
+        copying) a note *out of* a read-only vault. That needs every
+        mutating method to resolve an arbitrary target vault, not just
+        refuse non-active ones — the "full multi-vault editing" lift
+        already flagged and deferred in the "Multiple vaults" open
+        design question below. Cross-vault stays copy-only until that
+        bigger lift is separately scoped.
+- [ ] **Attach images/other files to a note, without rendering them**
+      (2026-07-12, user-floated, explicitly not scheduled yet — just
+      captured for later) — asked "even if we don't display them, what
+      about attaching images or other media to a note?" Fits the current
+      "vault is just a directory of files" philosophy cheaply: `vault.rs`
+      already silently skips any non-`.md` file when loading (an
+      extension check, not a whitelist of known-good names), so a real
+      file sitting anywhere in the vault directory — an `attachments/`
+      subfolder, say — is already inert to it today, no special-casing
+      needed there. Referencing one from a note body would just be a
+      normal relative Markdown link (`![alt](attachments/photo.png)`),
+      which `markdown.rs` already degrades gracefully — no `Tag::Image`
+      handling exists, so it falls through to rendering the alt text
+      only, not a crash or literal broken markup.
+      The open fork, deliberately not resolved yet: do nothing further
+      (the user manually drops files into the vault directory and types
+      the relative link by hand — zero new code) versus a real `:attach
+      <path>` command that copies the file into the vault and inserts
+      the link at the cursor automatically (more useful, but touches
+      `vault.rs` for a first non-note file operation, and raises a
+      follow-on question of whether `:export`'s subtree flatten should
+      then also copy along any attachments a copied note references).
+
+---
+
 ## Open design questions
 
 - ~~**Copy semantics**~~ — resolved 2026-07-06: v0.3 implements deep-copy

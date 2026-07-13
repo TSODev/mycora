@@ -6,7 +6,7 @@ tags:
 - overview
 - welcome
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-13T10:00:00Z
 ---
 
 # Mycora
@@ -31,3 +31,4 @@ Start here:
 - [[Features]] — what's actually built
 - [[Design decisions]] — specific choices, and why they were made that way
 - [[Roadmap]] — what's done, what's still ahead
+- [[Other projects]] — other terminal tools from the same author

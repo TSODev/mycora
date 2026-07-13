@@ -215,3 +215,17 @@ thousands of notes.
 
 Dual-licensed under [MIT](./LICENSE-MIT) or [Apache-2.0](./LICENSE-APACHE),
 at your option.
+
+## Other projects
+
+Other terminal tools from the same author:
+
+- **[rowdy](https://github.com/TSODev/rowdy)** — a fast, modern TUI
+  database management tool (`ratatui` + `sqlx`), for inspecting,
+  querying, and managing databases without leaving the terminal.
+- **[terapi](https://github.com/TSODev/terapi)** — a keyboard-driven TUI
+  for exploring, testing, and automating REST and GraphQL APIs, with a
+  headless campaign runner.
+- **[jsoned](https://github.com/TSODev/jsoned)** — a keyboard-driven TUI
+  for viewing and editing JSON, with full structural editing, undo/redo,
+  search, and conversion to/from YAML, TOML, CSV, and JSONL.
