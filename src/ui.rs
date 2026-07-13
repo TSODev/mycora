@@ -6,7 +6,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, Mode, TreeRow, COMMAND_REFERENCE};
+use crate::app::{App, Mode, TreeRow};
+use crate::lang::Lang;
 
 /// Split-pane border accents. Named ANSI colors, not RGB/indexed — the
 /// terminal maps these to whatever's actually configured (light theme,
@@ -83,7 +84,7 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
     draw_backlinks_pane(frame, panes[2], app);
 
     if app.mode == Mode::Command {
-        draw_command_help(frame, area);
+        draw_command_help(frame, area, app.lang);
     }
 }
 
@@ -134,8 +135,7 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
                 let label = if app.mode == Mode::Insert && app.selected == Some(id) {
                     format!("{indent}{marker}{}", app.input)
                 } else if !expanded && has_children && link_count > 0 {
-                    let plural = if link_count == 1 { "" } else { "s" };
-                    format!("{indent}{marker}{title} ({link_count} link{plural})")
+                    format!("{indent}{marker}{title} {}", app.lang.links_badge(link_count))
                 } else {
                     format!("{indent}{marker}{title}")
                 };
@@ -207,10 +207,9 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
 /// `App::command_tag` for adding/removing them via `:tag add`/`:tag del`.
 fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
     if let Some((name, path)) = app.selected_unmounted_vault_info() {
-        let text = format!(
-            "Vault \"{name}\" is unmounted.\n\nPath: {}\n\nTo activate it:\n  mycora vault mount {name}",
-            path.display()
-        );
+        let text = app
+            .lang
+            .unmounted_vault_help(name, &path.display().to_string());
         let paragraph = Paragraph::new(text).wrap(Wrap { trim: false }).block(
             Block::default()
                 .borders(Borders::ALL)
@@ -222,10 +221,9 @@ fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
     if let Some((name, archive_path)) = app.selected_archived_vault_info() {
-        let text = format!(
-            "Vault \"{name}\" is archived.\n\nArchive: {}\n\nTo restore it:\n  mycora vault unarchive {name}",
-            archive_path.display()
-        );
+        let text = app
+            .lang
+            .archived_vault_help(name, &archive_path.display().to_string());
         let paragraph = Paragraph::new(text).wrap(Wrap { trim: false }).block(
             Block::default()
                 .borders(Borders::ALL)
@@ -314,7 +312,7 @@ fn draw_backlinks_pane(frame: &mut Frame, area: Rect, app: &App) {
         Block::default()
             .borders(Borders::ALL)
             .border_style(border_style)
-            .title("Backlinks"),
+            .title(app.lang.backlinks_title()),
     );
     // Scroll-to-selection only matters while focused — the passive view
     // (nothing highlighted) has no selection concept to keep on screen.
@@ -357,7 +355,7 @@ fn draw_search(frame: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
-    let title = format!("Search [{}]: {}", app.search_scope(), app.search_query());
+    let title = app.lang.search_title(app.search_scope(), app.search_query());
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     let mut state = ListState::default().with_selected(Some(app.search_selected()));
     frame.render_stateful_widget(list, area, &mut state);
@@ -389,7 +387,7 @@ fn draw_tag_results(frame: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
-    let title = format!("Tag results [{}]", tags_scope_label(app));
+    let title = app.lang.tag_results_title(&tags_scope_label(app));
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     let mut state = ListState::default().with_selected(Some(app.tag_results_selected()));
     frame.render_stateful_widget(list, area, &mut state);
@@ -411,13 +409,12 @@ fn draw_tag_list(frame: &mut Frame, area: Rect, app: &App) {
             } else {
                 Style::default()
             };
-            let plural = if *count == 1 { "" } else { "s" };
-            let label = format!("{tag} ({count} note{plural})");
+            let label = format!("{tag} {}", app.lang.notes_badge(*count));
             ListItem::new(Line::from(Span::styled(label, style)))
         })
         .collect();
 
-    let title = format!("Tags [{}]", tags_scope_label(app));
+    let title = app.lang.tag_list_title(&tags_scope_label(app));
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     let mut state = ListState::default().with_selected(Some(app.tag_list_selected()));
     frame.render_stateful_widget(list, area, &mut state);
@@ -430,26 +427,31 @@ fn draw_tag_list(frame: &mut Frame, area: Rect, app: &App) {
 fn tags_scope_label(app: &App) -> String {
     match app.tags_limit() {
         Some(name) => name.to_string(),
-        None => "all vaults".to_string(),
+        None => app.lang.all_vaults_label().to_string(),
     }
 }
 
 /// Small reference popup listing every command `App::execute_command`
-/// recognizes (`COMMAND_REFERENCE`), anchored to the bottom of the main
-/// area — directly above the status bar row where the `:` prompt itself
-/// is being typed (see `draw_hint_row`'s `Mode::Command` branch). Static:
-/// it doesn't filter as you type, just lists everything, since the
-/// command set is small enough that filtering wouldn't save much. `Clear`
-/// first so it reads as an opaque popup over the tree/body/backlinks
-/// panes rather than blending with whatever text is underneath it.
-fn draw_command_help(frame: &mut Frame, area: Rect) {
-    let width = COMMAND_REFERENCE
+/// recognizes (`Lang::command_reference`, in the configured language),
+/// anchored to the bottom of the main area — directly above the status
+/// bar row where the `:` prompt itself is being typed (see
+/// `draw_hint_row`'s `Mode::Command` branch). Static: it doesn't filter
+/// as you type, just lists everything, since the command set is small
+/// enough that filtering wouldn't save much. `Clear` first so it reads as
+/// an opaque popup over the tree/body/backlinks panes rather than
+/// blending with whatever text is underneath it. Width is computed in
+/// `chars`, not bytes — French descriptions contain multi-byte
+/// accented characters, and `len()` would overcount them into a popup
+/// wider than its text.
+fn draw_command_help(frame: &mut Frame, area: Rect, lang: Lang) {
+    let reference = lang.command_reference();
+    let width = reference
         .iter()
-        .map(|(cmd, desc)| cmd.len() + desc.len() + 4)
+        .map(|(cmd, desc)| cmd.chars().count() + desc.chars().count() + 4)
         .max()
         .unwrap_or(20) as u16
         + 2; // borders
-    let height = COMMAND_REFERENCE.len() as u16 + 2; // borders
+    let height = reference.len() as u16 + 2; // borders
 
     let popup = popup_rect(area, width, height);
     frame.render_widget(Clear, popup);
@@ -459,7 +461,7 @@ fn draw_command_help(frame: &mut Frame, area: Rect) {
         .add_modifier(Modifier::BOLD);
     let desc_style = Style::default().add_modifier(Modifier::DIM);
 
-    let lines: Vec<Line> = COMMAND_REFERENCE
+    let lines: Vec<Line> = reference
         .iter()
         .map(|(cmd, desc)| {
             Line::from(vec![
@@ -473,7 +475,7 @@ fn draw_command_help(frame: &mut Frame, area: Rect) {
     let paragraph = Paragraph::new(lines).block(
         Block::default()
             .borders(Borders::ALL)
-            .title("Commands"),
+            .title(lang.commands_title()),
     );
     frame.render_widget(paragraph, popup);
 }
@@ -543,12 +545,6 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
     draw_hint_row(frame, rows[1], app);
 }
 
-/// `READ-ONLY`/`UNMOUNTED`/`ARCHIVED` label reserved on the right of the
-/// breadcrumb row — a fixed-width column so the breadcrumb's own width
-/// doesn't shift as you move in and out of these vaults. Blank (but
-/// still painted with `STATUS_BG`) when the selection is editable.
-const READ_ONLY_MARKER_WIDTH: u16 = 12;
-
 fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
     let mut text = app.vault_name().to_string();
     for title in app.breadcrumb_titles() {
@@ -556,11 +552,16 @@ fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
         text.push_str(&title);
     }
 
+    // The `READ-ONLY`/`UNMOUNTED`/`ARCHIVED` label gets a fixed-width
+    // column on the right (per-language — see `Lang::marker_width`) so
+    // the breadcrumb's own width doesn't shift as you move in and out of
+    // these vaults. Blank (but still painted with `STATUS_BG`) when the
+    // selection is editable.
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Min(0),
-            Constraint::Length(READ_ONLY_MARKER_WIDTH),
+            Constraint::Length(app.lang.marker_width()),
         ])
         .split(area);
 
@@ -569,11 +570,11 @@ fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(breadcrumb, chunks[0]);
 
     let marker = if app.selected_is_unmounted_vault() {
-        "UNMOUNTED"
+        app.lang.marker_unmounted()
     } else if app.selected_is_archived_vault() {
-        "ARCHIVED"
+        app.lang.marker_archived()
     } else if app.selected_is_read_only() {
-        "READ-ONLY"
+        app.lang.marker_read_only()
     } else {
         ""
     };
@@ -603,13 +604,9 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     if app.mode == Mode::ConfirmDelete {
-        let title = app.pending_delete_title().unwrap_or("this note");
+        let title = app.pending_delete_title().unwrap_or(app.lang.this_note());
         let descendants = app.pending_delete_descendant_count().unwrap_or(0);
-        let text = if descendants > 0 {
-            format!("Delete '{title}' and its {descendants} descendant(s)? y/n")
-        } else {
-            format!("Delete '{title}'? y/n")
-        };
+        let text = app.lang.delete_prompt(title, descendants);
         let paragraph =
             Paragraph::new(text).style(bg.fg(Color::Yellow).add_modifier(Modifier::BOLD));
         frame.render_widget(paragraph, area);
@@ -617,14 +614,14 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     if app.confirm_quit {
-        let paragraph = Paragraph::new("Press q again to quit")
+        let paragraph = Paragraph::new(app.lang.press_q_again())
             .style(bg.fg(Color::Yellow).add_modifier(Modifier::BOLD));
         frame.render_widget(paragraph, area);
         return;
     }
 
     if let Some(err) = &app.last_error {
-        let paragraph = Paragraph::new(format!("ERROR  {err}"))
+        let paragraph = Paragraph::new(format!("{}  {err}", app.lang.error_prefix()))
             .style(bg.fg(Color::Red).add_modifier(Modifier::BOLD));
         frame.render_widget(paragraph, area);
         return;
@@ -636,28 +633,9 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    let (mode_label, hints) = match app.mode {
-        Mode::Normal => (
-            "NORMAL",
-            "j/k: move  h/l/space: fold  a/o: new  y: copy  Tab/S-Tab: move  \
-             K/J: reorder  i: rename  e: edit  d: delete  u: undo  ^R: redo  \
-             /: search  b: backlinks  [/]: tree width  {/}: backlinks width  \
-             colon: command  q: quit",
-        ),
-        Mode::Insert => ("INSERT", "Enter: confirm  Esc: cancel"),
-        Mode::Search => (
-            "SEARCH",
-            "type: filter  Up/Down: move  Enter: open  Esc: cancel",
-        ),
-        Mode::Backlinks => (
-            "BACKLINKS",
-            "j/k: move  Enter: jump  Esc/b: back to tree",
-        ),
-        Mode::EditBody => ("EDIT BODY", "Esc: save & exit"),
-        Mode::TagResults => ("TAG RESULTS", "j/k: move  Enter: open  Esc: cancel"),
-        Mode::TagList => ("TAGS", "j/k: move  Enter: filter  Esc: cancel"),
-        Mode::ConfirmDelete | Mode::Command => unreachable!("handled above"),
-    };
+    // ConfirmDelete/Command never reach here (both return above), so
+    // `Lang::mode_line`'s own unreachable arm for them never fires.
+    let (mode_label, hints) = app.lang.mode_line(app.mode);
 
     let mode_style = bg.fg(Color::Cyan).add_modifier(Modifier::BOLD);
     let key_style = bg.add_modifier(Modifier::BOLD);

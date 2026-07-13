@@ -5,7 +5,7 @@ order: 1
 tags:
 - interface
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-13T12:00:00Z
 ---
 
 # Interface
@@ -17,6 +17,8 @@ around in it.
 - [[Modes]] — Normal, Insert, Search, Command, and the rest
 - [[Status bar]] — the two-line breadcrumb + hint band at the bottom
 - [[Command palette]] — `:` commands, vim/helix-style
+- [[The interface speaks English and French]] — `language = "fr"`,
+  keybindings identical everywhere
 
 Keyboard-first, no compromises: no mouse-required interactions, modal
 navigation inspired by vim, consistent across every view.

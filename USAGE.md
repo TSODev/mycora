@@ -119,6 +119,8 @@ named vaults, every one of which is *mounted* (loaded) at startup unless
 you opt it out:
 
 ```toml
+language = "fr"   # optional TUI language: "en" (default) or "fr"
+
 [[vaults]]
 name = "default"
 path = "/path/to/your/notes"
@@ -166,6 +168,22 @@ path to mount until it's unarchived first. Either category can be
 hidden from the tree entirely with `:config unmount hide`/`:config
 archive hide` (see [Command palette](#command-palette)) if a registry
 with several of either gets cluttered.
+
+`language` switches every label, hint, prompt, and status message in the
+TUI — English (`"en"`, the default) and French (`"fr"`) are built in. What
+deliberately does *not* translate: keybindings, command names and their
+arguments (`:tags limit`, `show`/`hide`, ...), the `mycora` CLI's own
+output, and anything persisted in your notes — interface syntax stays
+identical everywhere, like vim's `:w`, so documentation and muscle memory
+work in any language. (The welcome note auto-created in an empty vault is
+the one exception: it's stamped in whichever language is configured at
+creation time, and being note content, stays as written.) An unrecognized
+code fails at startup with a clear error rather than silently falling
+back to English. Both languages ship inside the binary — there are no
+separate language files to install or keep in sync. You can also switch
+live from inside the TUI with `:lang <en|fr>` (see
+[Command palette](#command-palette)), which writes this same key back
+here for you.
 
 The older single-vault form is still accepted as a fallback when
 `[[vaults]]` is absent:
@@ -568,6 +586,11 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
   Refuses on a read-only mounted vault's note, same as every other
   mutating command. Adding a tag that's already there, or removing one
   that isn't, reports a no-op message rather than an error.
+- `:lang <en|fr>` — switches the interface language on the spot (the
+  very next frame renders in the new one) and writes the choice to
+  `config.toml` so it survives restarts (see
+  [Configuration](#configuration)). Bare `:lang` reports the current
+  language; an unknown code errors with the usage line.
 - `:q` / `:quit` — quits Mycora, same as `q` `q` in Normal mode
 
 An unrecognized command shows an error in the status bar rather than

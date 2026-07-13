@@ -1061,7 +1061,7 @@ Goal: stability before a public release.
 
 ---
 
-## v1.1 — Move/copy a subtree to an arbitrary target, including across vaults
+## v1.1 — Post-0.9 backlog (cut/paste, attachments, i18n, ...)
 
 - [ ] **Cut/paste and cross-vault copy** (2026-07-12, user-requested) —
       raised as "can we cut-and-paste tree branches, and between vaults?"
@@ -1125,6 +1125,81 @@ Goal: stability before a public release.
         already flagged and deferred in the "Multiple vaults" open
         design question below. Cross-vault stays copy-only until that
         bigger lift is separately scoped.
+- [x] **Multilingual interface — English/French via embedded language
+      tables** (2026-07-13, user-requested) — proposed as "language files
+      used to display the UI, keybindings staying the same." Keybindings
+      staying identical was adopted as-is (they're interface syntax, like
+      vim's `:w` — muscle memory, docs, and the help popup stay valid in
+      every language); the *storage* went a different way than the
+      initial "language files" framing, raised and confirmed via
+      `AskUserQuestion` before building: **both languages embedded in the
+      binary** (new `src/lang.rs`, a `Lang` enum with one method per
+      message) rather than external TOML files. The deciding constraint:
+      most messages are parameterized (`"Delete '{title}' and its {n}
+      descendant(s)?"`), and Rust's `format!` demands compile-time
+      literals — external files would mean a hand-rolled runtime template
+      engine plus missing-key handling, whereas embedded tables make a
+      missing translation or typo'd placeholder a *compile error*. Also
+      keeps the binary self-contained (no files to ship/parse) at the
+      cost of recompiling to add a language — an optional override file
+      remains possible later. `fluent`/`gettext` crates judged
+      overkill for ~60 messages. Selected by `language = "fr"` in
+      `config.toml` (`Config` gained a `language: Lang` field; unknown
+      codes fail startup loudly rather than silently defaulting; the
+      key round-trips through `add_vault`'s parse-and-rewrite
+      unharmed). `App` carries `lang`, every `last_error`/`last_message`
+      in `app.rs` routes through it, and `ui.rs` reads it for titles,
+      hints, prompts, markers, and the command-palette popup
+      (`COMMAND_REFERENCE` moved into `Lang::command_reference`,
+      per-language descriptions over identical command syntax — a unit
+      test asserts the syntax halves never diverge between languages).
+      Notable details: the breadcrumb's status-marker column width is
+      per-language ("LECTURE SEULE" needs 14 cells where "READ-ONLY"
+      fit in 12 — a unit test asserts every marker fits its column);
+      the help popup's width switched from `len()` (bytes) to
+      `chars().count()` since French descriptions carry multi-byte
+      accents; Normal-mode hint tokens keep byte-identical *key* halves
+      across languages because `ui.rs`'s `disabled_keys` dimming matches
+      on them (unit-tested too — that test caught Search's `type:`
+      pseudo-key being translated, resolved by scoping the invariant to
+      Normal mode, the only mode with key dimming). The welcome note
+      auto-created in an empty vault is stamped in the configured
+      language (it's persisted content, so it stays as written). CLI
+      output and load warnings deliberately stay English for now — TUI
+      first. Manually verified in tmux with `language = "fr"`: welcome
+      note, hint row, Rétroliens pane, `(188 liens)` badge, LECTURE
+      SEULE marker, "ERREUR ce vault est en lecture seule", the fully
+      French Commandes popup, `Tags [tous les vaults]`, `Recherche
+      [showcase] : ...`, the Supprimer prompt, and "Appuyez encore sur q
+      pour quitter"; then re-verified English renders unchanged with no
+      `language` key, and `language = "de"` refuses to start with
+      `unknown language "de" in config (expected "en" or "fr")`.
+      **Since extended** (2026-07-13, user-requested): `:lang <en|fr>`
+      switches the language *live*, mid-session. The user's two
+      questions — can we, and will the screen refresh — had a pleasing
+      answer baked into the i18n design above: since every string reads
+      `app.lang` on every draw of the 100ms render loop, assigning the
+      field is the entire refresh mechanism; the next frame simply
+      renders in the new language. Persistence was the one real fork,
+      raised via `AskUserQuestion` and confirmed: **write through to
+      `config.toml`** (new `Config::set_language`, reusing `add_vault`'s
+      parse-and-rewrite plumbing, validating through `Lang::from_code`
+      so nothing `load()` would refuse can ever be written) rather than
+      session-only à la `:tags limit` — a language is a durable
+      preference, and reverting to English on restart would read as a
+      bug. `App` now keeps `config_path` alongside `session_path` for
+      exactly this write. Deliberate details: the in-memory switch
+      applies *before* the config write and survives a write failure,
+      with the error message honestly describing the half-applied state
+      ("switched for this session, but saving failed") in the *new*
+      language; bare `:lang` reports the current language; the
+      confirmation message renders in the just-switched-to language,
+      which is itself the visible proof it worked. Manually verified in
+      tmux: launched English, `:lang fr` → "langue : français (fr)" and
+      a French hint row on the next keypress, `config.toml` gained
+      `language = "fr"` with the vault entries intact, bare `:lang`
+      reported it, `:lang de` errored with the usage line, and a
+      quit-relaunch came back in French.
 - [ ] **Attach images/other files to a note, without rendering them**
       (2026-07-12, user-floated, explicitly not scheduled yet — just
       captured for later) — asked "even if we don't display them, what

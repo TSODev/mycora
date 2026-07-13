@@ -7,6 +7,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Multilingual interface (English/French)** — `language = "fr"` in
+  `config.toml` switches every TUI label, hint, prompt, and status
+  message to French; English stays the default. Keybindings, command
+  names/arguments, and the CLI's output deliberately don't translate —
+  interface syntax stays identical in every language, like vim's `:w`.
+  Both languages are embedded in the binary (a `Lang` enum in the new
+  `src/lang.rs`, every message a compile-checked `format!`) rather than
+  loaded from external language files, so a missing translation is a
+  compile error and there's nothing extra to install; an unrecognized
+  `language` code fails loudly at startup instead of silently falling
+  back to English.
+- **`:lang <en|fr>`** — switches the interface language live (the very
+  next frame renders in the new language — every string reads the
+  current language on every draw, so no refresh mechanism was needed)
+  and persists the choice to `config.toml`, so it survives restarts.
+  Bare `:lang` reports the current language. If the config write fails,
+  the switch still applies for the session and the error says exactly
+  that, rather than pretending nothing happened.
+
 ### Fixed
 - **Line breaks typed in the body editor collapsed into one run-on line
   in the preview** — a single Enter within a paragraph (no blank line)

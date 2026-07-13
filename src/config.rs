@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::lang::Lang;
+
 /// A vault known to Mycora: a name (unique within the registry, doubling as
 /// the index's `vault_id`) and the on-disk directory `Vault::open` should
 /// point at.
@@ -30,6 +32,11 @@ struct RawConfig {
     /// unchanged rather than silently reverting to `~/mycora`.
     #[serde(skip_serializing_if = "Option::is_none")]
     vault_path: Option<PathBuf>,
+    /// TUI language, `"en"` (the default) or `"fr"` — see `crate::lang::Lang`.
+    /// Optional, and skipped on re-serialize when absent, so `add_vault`'s
+    /// parse-and-rewrite round trip neither invents the key nor drops it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
     #[serde(default)]
     vaults: Vec<RawVaultEntry>,
 }
@@ -48,6 +55,7 @@ fn default_mounted() -> bool {
     true
 }
 
+#[derive(Debug)]
 pub struct Config {
     /// Every vault the registry knows about. Always non-empty: falls back to
     /// a single `"default"` entry at `~/mycora` (or `vault_path`, see above)
@@ -56,6 +64,10 @@ pub struct Config {
     /// The resolved `$HOME`, kept around so callers that need an XDG-style
     /// path (e.g. `Index::default_path`) don't each re-read the env var.
     pub home: String,
+    /// TUI interface language (`language = "fr"` in `config.toml`),
+    /// defaulting to English. An unrecognized code fails `load()` loudly
+    /// rather than silently falling back — see `Lang::from_code`.
+    pub language: Lang,
 }
 
 impl Config {
@@ -113,9 +125,17 @@ impl Config {
             }
         }
 
+        let language = match raw.language.as_deref() {
+            None => Lang::default(),
+            Some(code) => Lang::from_code(code).ok_or_else(|| {
+                anyhow::anyhow!("unknown language \"{code}\" in config (expected \"en\" or \"fr\")")
+            })?,
+        };
+
         Ok(Self {
             vaults,
             home: home.to_string(),
+            language,
         })
     }
 
@@ -188,6 +208,23 @@ impl Config {
             archived: None,
         });
 
+        write_raw(config_path, &raw)
+    }
+
+    /// Persists the TUI language (`:lang <en|fr>`) into `config_path`, so
+    /// a language switched at runtime survives the next launch — a
+    /// language choice is a durable preference, not a per-session focus
+    /// like `:tags limit`. Validates `code` through `Lang::from_code`
+    /// first, so nothing unparseable-by-`load()` can ever be written.
+    /// Same parse-and-rewrite mechanism as `add_vault` above (and the
+    /// same trade-off: hand-added comments in the file don't survive).
+    pub fn set_language(config_path: &Path, code: &str) -> Result<()> {
+        if Lang::from_code(code).is_none() {
+            bail!("unknown language \"{code}\" (expected \"en\" or \"fr\")");
+        }
+
+        let mut raw = read_raw(config_path)?;
+        raw.language = Some(code.to_string());
         write_raw(config_path, &raw)
     }
 
@@ -450,6 +487,7 @@ mod tests {
     fn legacy_vault_path_still_works_when_no_registry_is_present() {
         let raw = RawConfig {
             vault_path: Some(PathBuf::from("/custom/vault")),
+            language: None,
             vaults: Vec::new(),
         };
         let config = Config::from_raw(raw, "/home/alice").unwrap();
@@ -462,6 +500,7 @@ mod tests {
     fn registry_entries_take_priority_over_legacy_vault_path() {
         let raw = RawConfig {
             vault_path: Some(PathBuf::from("/ignored")),
+            language: None,
             vaults: vec![raw_vault("work", "/vaults/work")],
         };
         let config = Config::from_raw(raw, "/home/alice").unwrap();
@@ -473,6 +512,7 @@ mod tests {
     fn duplicate_vault_names_are_rejected() {
         let raw = RawConfig {
             vault_path: None,
+            language: None,
             vaults: vec![
                 raw_vault("work", "/vaults/work"),
                 raw_vault("work", "/vaults/other"),
@@ -485,6 +525,7 @@ mod tests {
     fn active_vault_prefers_the_entry_named_default() {
         let raw = RawConfig {
             vault_path: None,
+            language: None,
             vaults: vec![
                 raw_vault("work", "/vaults/work"),
                 raw_vault("default", "/vaults/default"),
@@ -498,6 +539,7 @@ mod tests {
     fn active_vault_falls_back_to_the_first_entry_when_none_is_named_default() {
         let raw = RawConfig {
             vault_path: None,
+            language: None,
             vaults: vec![
                 raw_vault("work", "/vaults/work"),
                 raw_vault("personal", "/vaults/personal"),
@@ -511,6 +553,7 @@ mod tests {
     fn mounted_defaults_to_true_when_omitted() {
         let raw = RawConfig {
             vault_path: None,
+            language: None,
             vaults: vec![raw_vault("work", "/vaults/work")],
         };
         let config = Config::from_raw(raw, "/home/alice").unwrap();
@@ -523,6 +566,7 @@ mod tests {
         archive.mounted = false;
         let raw = RawConfig {
             vault_path: None,
+            language: None,
             vaults: vec![raw_vault("default", "/vaults/default"), archive],
         };
         let config = Config::from_raw(raw, "/home/alice").unwrap();
@@ -531,11 +575,83 @@ mod tests {
     }
 
     #[test]
+    fn language_defaults_to_english_and_parses_known_codes() {
+        let config = Config::from_raw(RawConfig::default(), "/home/alice").unwrap();
+        assert_eq!(config.language, Lang::En);
+
+        let raw = RawConfig {
+            vault_path: None,
+            language: Some("fr".to_string()),
+            vaults: vec![raw_vault("work", "/vaults/work")],
+        };
+        let config = Config::from_raw(raw, "/home/alice").unwrap();
+        assert_eq!(config.language, Lang::Fr);
+    }
+
+    #[test]
+    fn an_unknown_language_code_is_rejected_loudly() {
+        let raw = RawConfig {
+            vault_path: None,
+            language: Some("de".to_string()),
+            vaults: vec![raw_vault("work", "/vaults/work")],
+        };
+        let err = Config::from_raw(raw, "/home/alice").unwrap_err();
+        assert!(err.to_string().contains("unknown language"));
+    }
+
+    #[test]
+    fn set_language_writes_the_key_and_preserves_vault_entries() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        Config::set_language(&path, "fr").unwrap();
+
+        let config = config_at(&path);
+        assert_eq!(config.language, Lang::Fr);
+        assert_eq!(config.vaults[0].name, "work");
+
+        // Switching again overwrites rather than duplicating the key.
+        Config::set_language(&path, "en").unwrap();
+        assert_eq!(config_at(&path).language, Lang::En);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn set_language_rejects_an_unknown_code_without_touching_the_file() {
+        let path = scratch_config_path();
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+        let before = std::fs::read_to_string(&path).unwrap();
+
+        let err = Config::set_language(&path, "de").unwrap_err();
+        assert!(err.to_string().contains("unknown language"));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn add_vault_preserves_an_existing_language_key() {
+        let path = scratch_config_path();
+        std::fs::write(&path, "language = \"fr\"\n").unwrap();
+
+        Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
+
+        let raw: RawConfig = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let config = Config::from_raw(raw, "/home/alice").unwrap();
+        assert_eq!(config.language, Lang::Fr);
+        assert_eq!(config.vaults[0].name, "work");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
     fn active_vault_self_heals_when_nothing_is_mounted() {
         let mut work = raw_vault("work", "/vaults/work");
         work.mounted = false;
         let raw = RawConfig {
             vault_path: None,
+            language: None,
             vaults: vec![work],
         };
         let config = Config::from_raw(raw, "/home/alice").unwrap();

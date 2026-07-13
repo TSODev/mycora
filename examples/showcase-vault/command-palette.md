@@ -7,7 +7,7 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T11:00:00Z
+updated: 2026-07-13T13:00:00Z
 ---
 
 # Command palette
@@ -49,6 +49,9 @@ command also appears above the prompt for as long as it's open.
   preview pane (see [[Layout]]). Refuses on a read-only vault's note;
   adding a duplicate or removing a missing tag is a no-op message, not
   an error. Undo/redo-aware, same as renames and body edits.
+- `:lang <en|fr>` — switches the interface language live and persists
+  it to `config.toml` — see
+  [[The interface speaks English and French]]
 - `:q` / `:quit` — quits, same as `q` `q` in Normal mode
 
 Every exposed command surfaces backend functionality or a real gap that

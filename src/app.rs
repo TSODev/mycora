@@ -6,6 +6,7 @@ use ratatui_textarea::TextArea;
 
 use crate::config::{Config, VaultEntry};
 use crate::index::{Index, IndexedNote, SearchHit, TagFilterOp};
+use crate::lang::Lang;
 use crate::note::{Note, NoteId};
 use crate::session::Session;
 use crate::tree::Tree;
@@ -108,6 +109,10 @@ pub struct App {
     pub expanded: HashSet<NoteId>,
     pub selected: Option<NoteId>,
     pub mode: Mode,
+    /// Interface language, from `config.toml`'s `language` key — every
+    /// user-facing label/hint/message renders through this (see
+    /// `crate::lang::Lang`). Read directly by `ui.rs` too.
+    pub lang: Lang,
     pub input: String,
     pub should_quit: bool,
     pub last_error: Option<String>,
@@ -182,6 +187,9 @@ pub struct App {
     /// Where `save_session` writes on exit — computed once from
     /// `config.home` so later saves don't need a `Config` around.
     session_path: PathBuf,
+    /// Where `:lang` persists a language switch (`Config::set_language`)
+    /// — kept for the same reason as `session_path`.
+    config_path: PathBuf,
     /// Percent widths of the split layout's three columns (tree, body,
     /// backlinks — see `ui.rs`'s `draw_main`), always summing to 100.
     /// Persisted in `Session` (vault-agnostic, unlike `selected`/
@@ -202,40 +210,6 @@ pub struct App {
     /// selected note always starts at the top.
     body_scroll: u16,
 }
-
-/// `(syntax, description)` pairs for every command `execute_command`
-/// recognizes — rendered by `ui.rs`'s command-palette help popup, shown
-/// automatically for the duration of `Mode::Command` so the available
-/// commands are discoverable without leaving the prompt to look them up.
-pub const COMMAND_REFERENCE: &[(&str, &str)] = &[
-    (":reindex", "rebuild the search index"),
-    (
-        ":tags <tag1,tag2,...>",
-        "list notes matching any of the given tags",
-    ),
-    (":tags list", "list every known tag, pick one to filter by"),
-    (
-        ":tags limit <vault-name>",
-        "restrict :tags/:tags list to one mounted vault",
-    ),
-    (":tags unlimit", "lift a :tags limit, back to every mounted vault"),
-    (":panes reset", "reset pane widths to the default 40/40/20"),
-    (
-        ":export <path>",
-        "flatten the selected note's subtree to a Markdown file",
-    ),
-    (
-        ":config unmount <show|hide>",
-        "show/hide unmounted vault rows in the tree",
-    ),
-    (
-        ":config archive <show|hide>",
-        "show/hide archived vault rows in the tree",
-    ),
-    (":tag add <tag>", "add a tag to the selected note"),
-    (":tag del <tag>", "remove a tag from the selected note"),
-    (":q, :quit", "quit Mycora"),
-];
 
 /// One row in the tree pane, as returned by `App::visible_rows`: a note
 /// (possibly in a read-only mounted vault), a `── vault name ──`
@@ -278,6 +252,7 @@ impl App {
     /// the caller to print before the TUI takes over the terminal.
     pub fn new() -> anyhow::Result<(Self, Vec<String>)> {
         let config = Config::load()?;
+        let lang = config.language;
         let active = config.active_vault().clone();
         // Excludes `active` itself even if its own `mounted` flag is
         // `false` — that can happen via `Config::active_vault`'s
@@ -336,11 +311,8 @@ impl App {
         let (_, mut tree, mut vault) = loaded.remove(primary_idx);
 
         let mut selected = if tree.roots().is_empty() {
-            let welcome = tree.create_note("Welcome to Mycora", None);
-            tree.set_body(
-                welcome,
-                "a: child  o: sibling  i: rename  y: copy  d: delete  u: undo  q: quit",
-            );
+            let welcome = tree.create_note(lang.welcome_title(), None);
+            tree.set_body(welcome, lang.welcome_body());
             if let Some(note) = tree.get(welcome) {
                 vault.save_note(welcome, note)?;
             }
@@ -360,6 +332,7 @@ impl App {
         // dangling. Falls back to the defaults just computed above when
         // nothing was saved, or when the saved selection no longer exists.
         let session_path = Session::default_path(&config.home);
+        let config_path = Config::default_path(&config.home);
         let session = Session::load(&session_path);
         if let Some((saved_selected, saved_expanded)) = session.for_vault(&active.name) {
             expanded = saved_expanded
@@ -438,6 +411,7 @@ impl App {
             expanded,
             selected,
             mode: Mode::Normal,
+            lang,
             input: String::new(),
             should_quit: false,
             last_error: None,
@@ -462,6 +436,7 @@ impl App {
             tags_limit: None,
             body_editor: None,
             session_path,
+            config_path,
             pane_widths,
             command_input: String::new(),
             tag_results: Vec::new(),
@@ -566,7 +541,7 @@ impl App {
             true
         } else {
             self.last_message = None;
-            self.last_error = Some("this vault is read-only".to_string());
+            self.last_error = Some(self.lang.read_only_vault().to_string());
             false
         }
     }
@@ -769,7 +744,7 @@ impl App {
             return;
         }
         let parent = self.tree.get(id).and_then(|note| note.parent);
-        let new_id = self.tree.create_note("New note", parent);
+        let new_id = self.tree.create_note(self.lang.new_note_title(), parent);
         if let Some(parent) = parent {
             self.expanded.insert(parent);
         }
@@ -784,7 +759,7 @@ impl App {
             if !self.require_editable(parent) {
                 return;
             }
-            let new_id = self.tree.create_note("New note", Some(parent));
+            let new_id = self.tree.create_note(self.lang.new_note_title(), Some(parent));
             self.expanded.insert(parent);
             self.set_selected(Some(new_id));
             self.persist(new_id);
@@ -988,7 +963,7 @@ impl App {
         for &(note_id, _) in &removed {
             self.expanded.remove(&note_id);
             if let Err(err) = self.vault.trash_note(note_id) {
-                self.last_error = Some(format!("trash failed: {err}"));
+                self.last_error = Some(self.lang.trash_failed(&err));
             }
         }
         self.set_selected(next);
@@ -1045,7 +1020,7 @@ impl App {
         };
         match self.vault.save_note(id, note) {
             Ok(()) => self.last_error = None,
-            Err(err) => self.last_error = Some(format!("save failed: {err}")),
+            Err(err) => self.last_error = Some(self.lang.save_failed(&err)),
         }
     }
 
@@ -1123,7 +1098,7 @@ impl App {
                 for &(note_id, _) in &removed {
                     self.expanded.remove(&note_id);
                     if let Err(err) = self.vault.trash_note(note_id) {
-                        self.last_error = Some(format!("trash failed: {err}"));
+                        self.last_error = Some(self.lang.trash_failed(&err));
                     }
                 }
                 self.set_selected(next);
@@ -1175,7 +1150,7 @@ impl App {
     /// before the next search session.
     pub fn begin_search(&mut self) {
         if let Err(err) = self.reindex_mounted() {
-            self.last_error = Some(format!("reindex failed: {err}"));
+            self.last_error = Some(self.lang.reindex_failed(&err));
         }
         self.search_query.clear();
         self.search_results.clear();
@@ -1198,7 +1173,7 @@ impl App {
         self.search_results = match self.index.search(&vault_id, &self.search_query) {
             Ok(hits) => hits,
             Err(err) => {
-                self.last_error = Some(format!("search failed: {err}"));
+                self.last_error = Some(self.lang.search_failed(&err));
                 Vec::new()
             }
         };
@@ -1650,8 +1625,14 @@ impl App {
     ///   selected note. Gated by `require_editable`; a no-op reported
     ///   via `last_message` (not an error) when the tag is already
     ///   there (`add`) or already gone (`del`).
+    /// - `lang <en|fr>` — switches the interface language immediately
+    ///   (every string reads `self.lang` live, so the very next frame
+    ///   renders in the new language — no refresh mechanism needed) and
+    ///   persists it to `config.toml`. Bare `lang` reports the current
+    ///   one. See `command_lang` for the half-applied case.
     ///
-    /// Kept in sync with `COMMAND_REFERENCE` above by hand — not worth
+    /// Kept in sync with `Lang::command_reference` (which `ui.rs`'s help
+    /// popup renders, in the configured language) by hand — not worth
     /// generating one from the other at this size.
     pub fn execute_command(&mut self) {
         let input = std::mem::take(&mut self.command_input);
@@ -1674,9 +1655,10 @@ impl App {
             "export" => self.command_export(args),
             "config" => self.command_config(args),
             "tag" => self.command_tag(args),
+            "lang" => self.command_lang(args),
             _ => {
                 self.last_message = None;
-                self.last_error = Some(format!("unknown command: {name}"));
+                self.last_error = Some(self.lang.unknown_command(name));
             }
         }
     }
@@ -1685,11 +1667,11 @@ impl App {
         match self.reindex_mounted() {
             Ok(count) => {
                 self.last_error = None;
-                self.last_message = Some(format!("reindexed {count} note(s)"));
+                self.last_message = Some(self.lang.reindexed_notes(count));
             }
             Err(err) => {
                 self.last_message = None;
-                self.last_error = Some(format!("reindex failed: {err}"));
+                self.last_error = Some(self.lang.reindex_failed(&err));
             }
         }
     }
@@ -1717,7 +1699,7 @@ impl App {
         }
         if trimmed == "limit" {
             self.last_message = None;
-            self.last_error = Some("usage: :tags limit <vault-name>".to_string());
+            self.last_error = Some(self.lang.tags_limit_usage().to_string());
             return;
         }
         // Same "literal first-argument" dispatch as "list"/"unlimit"
@@ -1737,11 +1719,7 @@ impl App {
             .collect();
         if tags.is_empty() {
             self.last_message = None;
-            self.last_error = Some(
-                "usage: :tags <tag1,tag2,...> or :tags list or :tags limit <vault-name> or \
-                 :tags unlimit"
-                    .to_string(),
-            );
+            self.last_error = Some(self.lang.tags_usage().to_string());
             return;
         }
 
@@ -1755,17 +1733,17 @@ impl App {
     fn command_tags_limit(&mut self, name: &str) {
         if name.is_empty() {
             self.last_message = None;
-            self.last_error = Some("usage: :tags limit <vault-name>".to_string());
+            self.last_error = Some(self.lang.tags_limit_usage().to_string());
             return;
         }
         if !self.mounted_vault_ids().contains(&name) {
             self.last_message = None;
-            self.last_error = Some(format!("no mounted vault named \"{name}\""));
+            self.last_error = Some(self.lang.no_mounted_vault_named(name));
             return;
         }
         self.tags_limit = Some(name.to_string());
         self.last_error = None;
-        self.last_message = Some(format!("tags limited to \"{name}\""));
+        self.last_message = Some(self.lang.tags_limited_to(name));
     }
 
     /// `:tags unlimit`. A no-op message (not an error) if nothing was
@@ -1774,11 +1752,11 @@ impl App {
     fn command_tags_unlimit(&mut self) {
         if self.tags_limit.take().is_none() {
             self.last_error = None;
-            self.last_message = Some("tags were not limited".to_string());
+            self.last_message = Some(self.lang.tags_were_not_limited().to_string());
             return;
         }
         self.last_error = None;
-        self.last_message = Some("tags no longer limited".to_string());
+        self.last_message = Some(self.lang.tags_no_longer_limited().to_string());
     }
 
     fn command_tags_list(&mut self) {
@@ -1786,8 +1764,8 @@ impl App {
             Ok(tags) if tags.is_empty() => {
                 self.last_error = None;
                 self.last_message = Some(match &self.tags_limit {
-                    Some(name) => format!("no tags in \"{name}\""),
-                    None => "no tags in any mounted vault".to_string(),
+                    Some(name) => self.lang.no_tags_in(name),
+                    None => self.lang.no_tags_anywhere().to_string(),
                 });
             }
             Ok(tags) => {
@@ -1799,7 +1777,7 @@ impl App {
             }
             Err(err) => {
                 self.last_message = None;
-                self.last_error = Some(format!("tag list failed: {err}"));
+                self.last_error = Some(self.lang.tag_list_failed(&err));
             }
         }
     }
@@ -1816,8 +1794,8 @@ impl App {
                 self.last_error = None;
                 let joined = tags.join(", ");
                 self.last_message = Some(match &self.tags_limit {
-                    Some(name) => format!("no notes tagged {joined} in \"{name}\""),
-                    None => format!("no notes tagged {joined} in any mounted vault"),
+                    Some(name) => self.lang.no_notes_tagged_in(&joined, name),
+                    None => self.lang.no_notes_tagged_anywhere(&joined),
                 });
             }
             Ok(hits) => {
@@ -1829,7 +1807,7 @@ impl App {
             }
             Err(err) => {
                 self.last_message = None;
-                self.last_error = Some(format!("tag filter failed: {err}"));
+                self.last_error = Some(self.lang.tag_filter_failed(&err));
             }
         }
     }
@@ -1837,24 +1815,22 @@ impl App {
     fn command_panes(&mut self, args: &str) {
         if args.trim() != "reset" {
             self.last_message = None;
-            self.last_error = Some("usage: :panes reset".to_string());
+            self.last_error = Some(self.lang.panes_usage().to_string());
             return;
         }
         self.pane_widths = Self::DEFAULT_PANE_WIDTHS;
         self.last_error = None;
-        self.last_message = Some("pane widths reset to default".to_string());
+        self.last_message = Some(self.lang.panes_reset_done().to_string());
     }
 
     /// `:config unmount <show|hide>` / `:config archive <show|hide>` —
     /// see `execute_command`'s doc comment.
     fn command_config(&mut self, args: &str) {
-        const USAGE: &str = "usage: :config <unmount|archive> <show|hide>";
-
         let (category, state) = match args.split_whitespace().collect::<Vec<_>>().as_slice() {
             [category, state] => (*category, *state),
             _ => {
                 self.last_message = None;
-                self.last_error = Some(USAGE.to_string());
+                self.last_error = Some(self.lang.config_usage().to_string());
                 return;
             }
         };
@@ -1863,22 +1839,22 @@ impl App {
             "hide" => false,
             _ => {
                 self.last_message = None;
-                self.last_error = Some(USAGE.to_string());
+                self.last_error = Some(self.lang.config_usage().to_string());
                 return;
             }
         };
-        let noun = match category {
+        let unmounted = match category {
             "unmount" => {
                 self.show_unmounted = show;
-                "unmounted"
+                true
             }
             "archive" => {
                 self.show_archived = show;
-                "archived"
+                false
             }
             _ => {
                 self.last_message = None;
-                self.last_error = Some(USAGE.to_string());
+                self.last_error = Some(self.lang.config_usage().to_string());
                 return;
             }
         };
@@ -1901,8 +1877,7 @@ impl App {
         }
 
         self.last_error = None;
-        let verb = if show { "shown" } else { "hidden" };
-        self.last_message = Some(format!("{noun} vaults now {verb} in the tree"));
+        self.last_message = Some(self.lang.config_vaults_visibility(unmounted, show));
     }
 
     /// `:tag add <tag>` / `:tag del <tag>` — mutates the selected note's
@@ -1915,25 +1890,23 @@ impl App {
     /// ordered tag list in frontmatter isn't silently reshuffled by an
     /// unrelated add/del elsewhere in it.
     fn command_tag(&mut self, args: &str) {
-        const USAGE: &str = "usage: :tag <add|del> <tag>";
-
         let (action, tag) = match args.split_once(char::is_whitespace) {
             Some((action, tag)) => (action, tag.trim()),
             None => {
                 self.last_message = None;
-                self.last_error = Some(USAGE.to_string());
+                self.last_error = Some(self.lang.tag_usage().to_string());
                 return;
             }
         };
         if tag.is_empty() || !matches!(action, "add" | "del") {
             self.last_message = None;
-            self.last_error = Some(USAGE.to_string());
+            self.last_error = Some(self.lang.tag_usage().to_string());
             return;
         }
 
         let Some(id) = self.selected else {
             self.last_message = None;
-            self.last_error = Some("nothing selected to tag".to_string());
+            self.last_error = Some(self.lang.nothing_selected_to_tag().to_string());
             return;
         };
         if !self.require_editable(id) {
@@ -1948,7 +1921,7 @@ impl App {
         let new_tags = if action == "add" {
             if already_has {
                 self.last_error = None;
-                self.last_message = Some(format!("already tagged \"{tag}\""));
+                self.last_message = Some(self.lang.already_tagged(tag));
                 return;
             }
             let mut tags = previous.clone();
@@ -1957,7 +1930,7 @@ impl App {
         } else {
             if !already_has {
                 self.last_error = None;
-                self.last_message = Some(format!("not tagged \"{tag}\""));
+                self.last_message = Some(self.lang.not_tagged(tag));
                 return;
             }
             previous.iter().filter(|t| t.as_str() != tag).cloned().collect()
@@ -1967,27 +1940,68 @@ impl App {
         self.persist(id);
         self.record(UndoAction::SetTags { id, tags: previous });
         self.last_error = None;
-        let verb = if action == "add" { "added" } else { "removed" };
-        self.last_message = Some(format!("tag \"{tag}\" {verb}"));
+        self.last_message = Some(if action == "add" {
+            self.lang.tag_added(tag)
+        } else {
+            self.lang.tag_removed(tag)
+        });
+    }
+
+    /// `:lang <en|fr>` — switches `self.lang` in place (the whole UI
+    /// re-renders from it on the next frame) and writes the choice
+    /// through to `config.toml` so it survives restarts (confirmed with
+    /// the user: a language is a durable preference, unlike `:tags
+    /// limit`'s per-session focus). The in-memory switch is applied
+    /// *before* the write, and kept even if the write fails — the
+    /// failure message says exactly that ("switched for this session,
+    /// but saving failed"), in the new language, rather than pretending
+    /// nothing happened. Bare `:lang` just reports the current language.
+    /// Switching to the language already active still rewrites the file
+    /// — harmless, and it doubles as a way to materialize the key into a
+    /// config that never had one.
+    fn command_lang(&mut self, args: &str) {
+        let code = args.trim();
+        if code.is_empty() {
+            self.last_error = None;
+            self.last_message = Some(self.lang.language_now().to_string());
+            return;
+        }
+        let Some(new_lang) = Lang::from_code(code) else {
+            self.last_message = None;
+            self.last_error = Some(self.lang.lang_usage().to_string());
+            return;
+        };
+
+        self.lang = new_lang;
+        match Config::set_language(&self.config_path, new_lang.code()) {
+            Ok(()) => {
+                self.last_error = None;
+                self.last_message = Some(self.lang.language_now().to_string());
+            }
+            Err(err) => {
+                self.last_message = None;
+                self.last_error = Some(self.lang.language_save_failed(&err));
+            }
+        }
     }
 
     fn command_export(&mut self, args: &str) {
         let path_str = args.trim();
         if path_str.is_empty() {
             self.last_message = None;
-            self.last_error = Some("usage: :export <path>".to_string());
+            self.last_error = Some(self.lang.export_usage().to_string());
             return;
         }
         let Some(id) = self.selected else {
             self.last_message = None;
-            self.last_error = Some("nothing selected to export".to_string());
+            self.last_error = Some(self.lang.nothing_selected_to_export().to_string());
             return;
         };
 
         let path = std::path::Path::new(path_str);
         if path.exists() {
             self.last_message = None;
-            self.last_error = Some(format!("{path_str} already exists"));
+            self.last_error = Some(self.lang.already_exists(path_str));
             return;
         }
 
@@ -1999,7 +2013,7 @@ impl App {
             Some((tree, _)) => crate::export::flatten_subtree(tree, id),
             None => {
                 self.last_message = None;
-                self.last_error = Some("nothing selected to export".to_string());
+                self.last_error = Some(self.lang.nothing_selected_to_export().to_string());
                 return;
             }
         };
@@ -2007,11 +2021,11 @@ impl App {
         match crate::export::write_output(&content, path) {
             Ok(()) => {
                 self.last_error = None;
-                self.last_message = Some(format!("exported to {path_str}"));
+                self.last_message = Some(self.lang.exported_to(path_str));
             }
             Err(err) => {
                 self.last_message = None;
-                self.last_error = Some(format!("export failed: {err}"));
+                self.last_error = Some(self.lang.export_failed(&err));
             }
         }
     }

@@ -5,6 +5,7 @@ pub mod event;
 pub mod export;
 pub mod import;
 pub mod index;
+pub mod lang;
 pub mod link;
 pub mod markdown;
 pub mod note;
