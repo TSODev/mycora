@@ -7,7 +7,7 @@ tags:
 - editor
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-13T16:00:00Z
 ---
 
 # Full-pane body editor, save on exit
@@ -28,3 +28,7 @@ Deliberately **not** the split-pane [[Layout]]: true in-place
 split-pane editing was kept open as a separate, not-yet-built item on
 purpose, rather than being backed into as a side effect of building this
 editor.
+
+This is also what unblocked [[Cross-links and backlinks]]'s wikilink
+autocompletion — there was nowhere to type `[[` in the TUI at all until
+this editor existed, even once autocompleting it was worth building.

@@ -23,6 +23,38 @@ pub fn extract_wikilink_titles(body: &str) -> Vec<String> {
     titles
 }
 
+/// If there's an unclosed `[[` before `cursor_col` on `line` (no `]]`
+/// between it and the cursor), returns the character index right after
+/// it — the start of the in-progress wikilink title. Backs the body
+/// editor's autocomplete popup: whether to show it at all, what to
+/// filter suggestions by, and how many characters to remove when one is
+/// accepted. Scoped to a single line, unlike `extract_wikilink_titles`'s
+/// whole-body scan — a title being typed is always still on the line it
+/// was opened on, and restricting the scan avoids matching a stray,
+/// already-abandoned `[[` from an earlier paragraph. `cursor_col` and
+/// the returned index are both character counts (not byte offsets),
+/// matching `ratatui-textarea`'s own cursor addressing. If more than one
+/// `[[` opens before the cursor with no `]]` in between, the most recent
+/// one wins — the same "latest unclosed one" instinct as leaving an
+/// earlier bracket open by mistake and continuing to type.
+pub fn unclosed_wikilink_start(line: &str, cursor_col: usize) -> Option<usize> {
+    let prefix: Vec<char> = line.chars().take(cursor_col).collect();
+    let mut open_at: Option<usize> = None;
+    let mut i = 0;
+    while i + 1 < prefix.len() {
+        if prefix[i] == '[' && prefix[i + 1] == '[' {
+            open_at = Some(i + 2);
+            i += 2;
+        } else if prefix[i] == ']' && prefix[i + 1] == ']' {
+            open_at = None;
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    open_at
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,5 +124,34 @@ mod tests {
             extract_wikilink_titles("[[Outer [[Inner]] tail]]"),
             vec!["Outer [[Inner"]
         );
+    }
+
+    #[test]
+    fn unclosed_wikilink_start_finds_the_title_start_right_after_double_bracket() {
+        assert_eq!(unclosed_wikilink_start("[[", 2), Some(2));
+        assert_eq!(unclosed_wikilink_start("[[Real", 6), Some(2));
+    }
+
+    #[test]
+    fn unclosed_wikilink_start_is_none_once_the_link_is_closed() {
+        assert_eq!(unclosed_wikilink_start("[[A]]", 5), None);
+        assert_eq!(unclosed_wikilink_start("[[A]] typing after", 19), None);
+    }
+
+    #[test]
+    fn unclosed_wikilink_start_is_none_with_no_brackets_at_all() {
+        assert_eq!(unclosed_wikilink_start("just plain text", 10), None);
+    }
+
+    #[test]
+    fn unclosed_wikilink_start_only_looks_before_the_cursor() {
+        // A `]]` typed *after* the cursor shouldn't close a link the
+        // cursor is still in front of.
+        assert_eq!(unclosed_wikilink_start("[[Real]]", 6), Some(2));
+    }
+
+    #[test]
+    fn unclosed_wikilink_start_prefers_the_most_recently_opened_bracket() {
+        assert_eq!(unclosed_wikilink_start("[[A [[B", 7), Some(6));
     }
 }

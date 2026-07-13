@@ -248,10 +248,63 @@ Goal: notes can reference each other outside the tree.
       third both showed up, jumping to one moved the tree selection, and
       re-opening backlinks on the newly selected (unlinked) note correctly
       showed an empty list
-- [ ] Link autocompletion while typing `[[` — was blocked on a note-body
-      editor existing at all; that landed in v0.7 (2026-07-10,
-      `ratatui-textarea`-based), so this is unblocked now but still not
-      implemented itself
+- [x] Link autocompletion while typing `[[` (2026-07-13, user-requested)
+      — was blocked on a note-body editor existing at all; that landed in
+      v0.7 (2026-07-10, `ratatui-textarea`-based), unblocking it, but it
+      sat unimplemented for three more versions until asked for directly.
+      Typing `[[` in the body editor opens a small popup (bottom-center,
+      like the command-palette help popup) listing note titles —
+      case-insensitive prefix match against whatever's typed since,
+      every title when the query is still empty (browse-as-you-type
+      right after `[[`), capped at 8, alphabetical. `Up`/`Down` move the
+      selection, `Tab` or `Enter` accepts (replacing the partial text
+      with the full title plus a closing `]]`), `Esc` dismisses just the
+      popup — a real design point, since `Esc` outside the popup already
+      means "save and exit the whole editor" (see v0.7's note-body-editor
+      entry below); the popup has to intercept it first or every
+      cancel-the-suggestion press would silently end the edit session.
+      Detection is recomputed fresh from the editor's live cursor
+      position after *every* keystroke (new `link::unclosed_wikilink_start`,
+      scoped to the current line, unlike `extract_wikilink_titles`'s
+      whole-body scan) rather than tracked incrementally — this is what
+      lets plain typing, Backspace, and cursor-navigation keys all keep
+      the popup in sync automatically (typing narrows it, backspacing
+      widens it, moving the cursor away from the `[[` closes it) without
+      any of those keys needing their own special case in `event.rs`;
+      only the four popup-specific keys above are intercepted before
+      reaching the textarea. Candidates span the active vault and every
+      read-only mounted one (`App::wikilink_candidates`, deduplicated by
+      title) — the same scope wikilinks already resolve across at
+      reindex time (see [[Search and indexing]]'s cross-vault note), so
+      autocomplete offering a title it then couldn't actually resolve
+      would have been an inconsistency. `Tab`/`Enter` normally insert a
+      literal tab/newline in `ratatui-textarea`; repurposing both while
+      the popup is open is deliberate (neither is ever useful mid-title)
+      rather than picking just one, since both are common "accept" keys
+      in different editors' own autocomplete conventions (Obsidian's own
+      wikilink suggestions use Enter, most code editors use Tab) and
+      supporting either avoids forcing unfamiliar muscle memory either
+      way. Popup position is a known, documented simplification: anchored
+      bottom-center rather than following the cursor, since
+      `ratatui-textarea` doesn't expose the cursor's absolute on-screen
+      position once its internal viewport/scroll state is accounted for
+      — revisit if that becomes available upstream, or worth
+      reverse-engineering, later. Manually verified in tmux: typing `[[`
+      on a fresh note listed every other title in the vault; typing a
+      prefix narrowed it to exact matches; `Down` then confirmed via
+      captured ANSI escapes to have moved the reversed-highlight to the
+      second entry; `Tab` on that selection correctly replaced the typed
+      prefix with the full title and appended `]]`; a non-matching query
+      hid the popup entirely; `Esc` with the popup open dismissed only
+      the popup (hint row still read "EDIT BODY  Esc: save & exit",
+      confirming the editor itself stayed open) and a second `Esc`
+      afterward saved and exited normally; `Enter` on a single filtered
+      match also accepted correctly rather than inserting a newline; the
+      saved file and a subsequent `mycora reindex` both confirmed the
+      inserted links resolved with no broken-link warnings. 180 tests (5
+      new, all in `link.rs`, covering `unclosed_wikilink_start`'s open/
+      closed/no-brackets/cursor-scoping/most-recent-wins cases), clippy
+      clean.
 - [x] Handle broken links (target renamed/deleted) gracefully — `reindex`
       now returns a `ReindexReport { note_count, broken_links }` instead of
       a bare count; each unresolved `[[title]]` becomes a `BrokenLink {
@@ -275,8 +328,8 @@ Goal: notes can reference each other outside the tree.
       leaf-only branch with "(0 links)". Manually verified in tmux: a
       branch with two outgoing wikilinks showed "(2 links)" once collapsed
 
-v0.5 is done except link autocompletion, blocked on the v0.7 body editor
-as noted above.
+v0.5 is fully done — link autocompletion (the one item left open above,
+blocked on the v0.7 body editor at the time) was implemented 2026-07-13.
 
 ## v0.6 — Search engine upgrade (tantivy)
 
@@ -353,7 +406,8 @@ Goal: make daily use pleasant, not just functional.
       properly later instead of being backed into by the editor. This also
       retroactively unblocks v0.5's "Link autocompletion while typing
       `[[`" (there's now somewhere to type `[[`) — autocomplete itself
-      still isn't implemented, just no longer blocked. Manually verified
+      still isn't implemented, just no longer blocked (implemented
+      2026-07-13, see v0.5's own entry above). Manually verified
       in tmux: existing body loaded correctly, multi-line editing (Enter
       for newlines) worked, `Esc` persisted to disk, `u` correctly
       reverted the file, and a no-change edit session left the file's

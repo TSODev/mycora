@@ -334,6 +334,16 @@ impl Lang {
         }
     }
 
+    /// Title of the `[[wikilink]]` autocomplete popup in the body editor.
+    pub fn link_popup_title(self) -> &'static str {
+        match self {
+            Lang::En => "Link",
+            Lang::Fr => "Lien",
+            Lang::Es => "Enlace",
+            Lang::De => "Link",
+        }
+    }
+
     /// The `y/n` delete confirmation prompt. The `y/n` keys themselves
     /// don't translate (they're keybindings — see the type-level doc
     /// comment), so the prompt spells them out as-is in every language.

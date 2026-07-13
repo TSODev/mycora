@@ -7,11 +7,12 @@
 > thousands of notes, multi-vault mounting (read-only secondary vaults,
 > unmounted and archived vaults both visible as their own tree rows),
 > `[[wikilink]]` cross-links (including cross-vault ones) with a
-> backlinks panel and link-count badges, a full-pane note-body editor, a
-> resizable three-pane layout (tree, rendered-Markdown body preview,
-> backlinks) with light/dark-aware colors, and a `:` command palette
-> (`:reindex`, `:tags`, `:tag`, `:panes`, `:export`, `:config`, `:q`).
-> No link autocompletion or configurable keybindings yet — see
+> backlinks panel, link-count badges, and autocompletion while typing, a
+> full-pane note-body editor, a resizable three-pane layout (tree,
+> rendered-Markdown body preview, backlinks) with light/dark-aware
+> colors, a multilingual interface (English/French/Spanish/German), and
+> a `:` command palette (`:reindex`, `:tags`, `:tag`, `:lang`, `:panes`,
+> `:export`, `:config`, `:q`). No configurable keybindings yet — see
 > [ROADMAP.md](./ROADMAP.md) for what's still ahead.
 
 ## Table of Contents
@@ -704,8 +705,27 @@ Still a full-pane overlay rather than editing in place alongside the tree
 — true split-pane editing is a separate, still-open item (see
 [ROADMAP.md](./ROADMAP.md)). This is also what unblocks writing
 `[[wikilinks]]` from inside the TUI instead of editing the file by hand
-(see [The search index](#the-search-index)) — though autocompleting them
-as you type isn't implemented yet.
+(see [The search index](#the-search-index)).
+
+### Link autocompletion
+
+Typing `[[` opens a small popup listing note titles — every note in the
+vault if nothing's typed yet, narrowed to a case-insensitive prefix match
+as you keep typing, spanning the active vault and every read-only
+mounted one (the same scope `[[wikilinks]]` already resolve across).
+
+- `Up`/`Down` — move the popup's selection
+- `Tab` or `Enter` — accepts the selected title, replacing whatever
+  you'd typed so far with the full title and a closing `]]`
+- `Esc` — dismisses just the popup, leaving the rest of the edit session
+  untouched (a separate `Esc` afterward still saves and exits the
+  editor as usual)
+- Anything else (plain typing, `Backspace`, arrow-key navigation, ...)
+  keeps working normally and updates the popup to match — moving the
+  cursor away from the `[[` closes it, same as if you'd never opened it
+
+Typing `]]` yourself instead of picking a suggestion finishes the link
+manually; the popup just closes once there's nothing left to match.
 
 ## Moving notes
 
@@ -808,6 +828,16 @@ changes, for the rest of the session. Not persisted across restarts.
 |---|---|
 | *(type)* | Edit the body, multi-line — `Enter` inserts a newline |
 | `Esc` | Save and return to Normal mode (see [Editing a note's body](#editing-a-notes-body)) |
+
+While the `[[wikilink]]` autocomplete popup is open (see
+[Link autocompletion](#link-autocompletion)), `Up`/`Down`/`Tab`/`Enter`/`Esc`
+apply to the popup instead of the rows above:
+
+| Key | Action |
+|---|---|
+| `↑` / `↓` | Move the popup's selection |
+| `Tab` / `Enter` | Accept the selected title |
+| `Esc` | Dismiss just the popup (the editor stays open) |
 
 ### Backlinks (focused)
 

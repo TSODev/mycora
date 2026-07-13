@@ -8,7 +8,7 @@ tags:
 - backlinks
 - v0.5
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-10T09:00:00Z
+updated: 2026-07-13T16:00:00Z
 ---
 
 # Cross-links and backlinks
@@ -32,7 +32,7 @@ double-square-bracket title, independent of tree position.
   it to jump to one.
 - **Link-count badges** — a collapsed branch shows an aggregate link
   count across its subtree, e.g. `▸ Research (12 links)`.
-
-Link autocompletion while typing a wikilink is still open — it was blocked on a
-note-body editor existing at all, which landed in v0.7, so it's unblocked
-now but not yet implemented. See [[Roadmap]].
+- **Autocompletion** — typing an opening double bracket in the body
+  editor opens a popup of matching titles across every mounted vault;
+  `Up`/`Down` picks, `Tab`/`Enter` accepts, `Esc` dismisses just the
+  popup. See [[Full-pane body editor, save on exit]].

@@ -209,6 +209,21 @@ pub struct App {
     /// `set_selected` every time the selection changes, so a freshly
     /// selected note always starts at the top.
     body_scroll: u16,
+    /// `[[wikilink]]` autocomplete popup state while `Mode::EditBody` —
+    /// `Some` exactly when the cursor sits inside an unclosed `[[` on
+    /// the current line (see `refresh_link_autocomplete`). Recomputed
+    /// fresh from the editor's live cursor/buffer after every forwarded
+    /// keystroke rather than incrementally tracked, so it can never
+    /// drift out of sync with what's actually in the textarea.
+    link_autocomplete: Option<LinkAutocomplete>,
+}
+
+/// See `App::link_autocomplete`'s doc comment.
+struct LinkAutocomplete {
+    /// Candidate titles, already filtered/sorted/capped — see
+    /// `App::wikilink_candidates`.
+    matches: Vec<String>,
+    selected: usize,
 }
 
 /// One row in the tree pane, as returned by `App::visible_rows`: a note
@@ -450,6 +465,7 @@ impl App {
             tag_list: Vec::new(),
             tag_list_selected: 0,
             body_scroll: 0,
+            link_autocomplete: None,
         };
 
         Ok((app, warnings))
@@ -1529,15 +1545,138 @@ impl App {
         let mut editor = TextArea::new(lines);
         editor.set_block(Block::default().borders(Borders::ALL).title(note.title.clone()));
         self.body_editor = Some(editor);
+        self.link_autocomplete = None;
         self.mode = Mode::EditBody;
     }
 
-    /// Forwards one key event into the active body editor. No-op outside
-    /// `Mode::EditBody` (nothing to forward into).
+    /// Forwards one key event into the active body editor, then
+    /// recomputes the `[[wikilink]]` autocomplete popup from wherever
+    /// the cursor ended up — see `refresh_link_autocomplete`. No-op
+    /// outside `Mode::EditBody` (nothing to forward into). Popup-specific
+    /// keys (`Up`/`Down` to move the selection, `Tab`/`Enter` to accept,
+    /// `Esc` to dismiss) are intercepted in `event.rs` before reaching
+    /// here, while the popup is open — everything else, including plain
+    /// typing and cursor movement, comes through this same path either
+    /// way, which is what keeps the popup automatically in sync (typing
+    /// extends/narrows it, moving the cursor away closes it) without any
+    /// of those keys needing special-casing themselves.
     pub fn body_editor_input(&mut self, key: crossterm::event::KeyEvent) {
         if let Some(editor) = &mut self.body_editor {
             editor.input(key);
+            self.refresh_link_autocomplete();
         }
+    }
+
+    /// Recomputes `link_autocomplete` from the editor's current cursor
+    /// position and line — always from scratch, never incrementally, so
+    /// it can't drift out of sync with the textarea's actual buffer.
+    /// `None` unless the cursor sits right inside an unclosed `[[` on
+    /// the current line (see `link::unclosed_wikilink_start`) with at
+    /// least one candidate title matching whatever's been typed since.
+    fn refresh_link_autocomplete(&mut self) {
+        self.link_autocomplete = None;
+        let Some(editor) = &self.body_editor else { return };
+        let cursor = editor.cursor();
+        let (row, col) = (cursor.0, cursor.1);
+        let Some(line) = editor.lines().get(row) else { return };
+        let Some(start) = crate::link::unclosed_wikilink_start(line, col) else {
+            return;
+        };
+        let query: String = line.chars().skip(start).take(col - start).collect();
+
+        let matches = self.wikilink_candidates(&query);
+        if matches.is_empty() {
+            return;
+        }
+        self.link_autocomplete = Some(LinkAutocomplete { matches, selected: 0 });
+    }
+
+    /// Every note title, across the active vault and every read-only
+    /// mounted one (wikilinks already resolve cross-vault — see
+    /// `Index::reindex_mounted`'s doc comment — so suggestions follow
+    /// the same scope), matching `query` as a case-insensitive prefix.
+    /// Deduplicated: the text actually inserted is the bare title either
+    /// way, and which vault's note it "really means" when more than one
+    /// shares a title is exactly the existing fan-out-ambiguous-titles
+    /// behavior already resolves at reindex time, not something this
+    /// popup needs to disambiguate up front. Sorted alphabetically and
+    /// capped at 8 so the popup stays small; an empty `query` (right
+    /// after typing `[[`) matches every title, i.e. browse-as-you-type
+    /// rather than requiring at least one character first.
+    fn wikilink_candidates(&self, query: &str) -> Vec<String> {
+        let query = query.to_lowercase();
+        let mut titles: std::collections::BTreeSet<String> = self
+            .tree
+            .iter()
+            .map(|(_, note)| note.title.clone())
+            .filter(|title| title.to_lowercase().starts_with(&query))
+            .collect();
+        for v in &self.other_vaults {
+            titles.extend(
+                v.tree
+                    .iter()
+                    .map(|(_, note)| note.title.clone())
+                    .filter(|title| title.to_lowercase().starts_with(&query)),
+            );
+        }
+        titles.into_iter().take(8).collect()
+    }
+
+    /// Accepts the selected suggestion: removes what's been typed since
+    /// the triggering `[[` and inserts the full title plus the closing
+    /// `]]`. No-op if the popup isn't open.
+    pub fn accept_link_autocomplete(&mut self) {
+        let Some(popup) = self.link_autocomplete.take() else {
+            return;
+        };
+        let Some(title) = popup.matches.get(popup.selected).cloned() else {
+            return;
+        };
+        let Some(editor) = &mut self.body_editor else {
+            return;
+        };
+        let cursor = editor.cursor();
+        let (row, col) = (cursor.0, cursor.1);
+        let Some(line) = editor.lines().get(row) else {
+            return;
+        };
+        let Some(start) = crate::link::unclosed_wikilink_start(line, col) else {
+            return;
+        };
+        for _ in 0..(col - start) {
+            editor.delete_char();
+        }
+        editor.insert_str(title);
+        editor.insert_str("]]");
+    }
+
+    /// `Up`/`Down` while the popup is open.
+    pub fn move_link_autocomplete_selection(&mut self, delta: isize) {
+        let Some(popup) = &mut self.link_autocomplete else {
+            return;
+        };
+        if popup.matches.is_empty() {
+            return;
+        }
+        let len = popup.matches.len() as isize;
+        popup.selected = (popup.selected as isize + delta).rem_euclid(len) as usize;
+    }
+
+    /// `Esc` while the popup is open — dismisses just the popup, leaving
+    /// the rest of the edit session untouched (unlike `Esc` outside the
+    /// popup, which saves and exits the whole editor).
+    pub fn cancel_link_autocomplete(&mut self) {
+        self.link_autocomplete = None;
+    }
+
+    pub fn link_autocomplete_is_open(&self) -> bool {
+        self.link_autocomplete.is_some()
+    }
+
+    pub fn link_autocomplete(&self) -> Option<(&[String], usize)> {
+        self.link_autocomplete
+            .as_ref()
+            .map(|p| (p.matches.as_slice(), p.selected))
     }
 
     /// Writes the editor's current text back to the note being edited and
@@ -1547,6 +1686,7 @@ impl App {
     /// edit (body unchanged) skips both the disk write and the undo entry.
     pub fn save_and_exit_body_edit(&mut self) {
         self.mode = Mode::Normal;
+        self.link_autocomplete = None;
         let Some(editor) = self.body_editor.take() else {
             return;
         };

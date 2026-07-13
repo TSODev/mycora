@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T14:00:00Z
+updated: 2026-07-13T16:00:00Z
 ---
 
 # Built so far
@@ -70,4 +70,8 @@ updated: 2026-07-13T14:00:00Z
   (see [[Layout]]'s body-preview note); the interface itself went
   multilingual — English, French, Spanish, German, switchable live with
   `:lang <en|fr|es|de>` and persisted to `config.toml` (see
-  [[The interface speaks four languages]])
+  [[The interface speaks four languages]]); every mounted vault gets a
+  centered, background-colored name header in the tree pane (see
+  [[Layout]]); and the body editor now offers wikilink autocompletion
+  as you type (see [[Cross-links and backlinks]]) — the last of the two
+  long-deferred headline items from early on, open since v0.5

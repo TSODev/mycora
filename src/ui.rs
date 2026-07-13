@@ -62,6 +62,9 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
             if let Some(editor) = app.body_editor() {
                 frame.render_widget(editor, area);
             }
+            if let Some((matches, selected)) = app.link_autocomplete() {
+                draw_link_autocomplete(frame, area, app.lang, matches, selected);
+            }
             return;
         }
         Mode::TagResults => {
@@ -516,6 +519,53 @@ fn draw_command_help(frame: &mut Frame, area: Rect, lang: Lang) {
             .title(lang.commands_title()),
     );
     frame.render_widget(paragraph, popup);
+}
+
+/// The `[[wikilink]]` autocomplete popup, shown over the full-pane body
+/// editor whenever `App::link_autocomplete` is `Some` — see
+/// `App::refresh_link_autocomplete`'s doc comment for when that is.
+/// Anchored bottom-center via the same `popup_rect` as the command help
+/// popup above, rather than following the cursor: `ratatui-textarea`
+/// doesn't expose the cursor's absolute on-screen position once its
+/// internal viewport/scroll state is accounted for, and a fixed,
+/// predictable spot was judged better than a fragile approximation of
+/// it. `j: down k: up` aren't offered here (unlike the tree/search/tag
+/// lists) since `j`/`k` are themselves valid characters to type in a
+/// title — only `Up`/`Down` move the selection, matching `event.rs`'s
+/// `handle_edit_body` interception.
+fn draw_link_autocomplete(frame: &mut Frame, area: Rect, lang: Lang, matches: &[String], selected: usize) {
+    let width = matches
+        .iter()
+        .map(|m| m.chars().count())
+        .max()
+        .unwrap_or(10) as u16
+        + 2 // borders
+        + 2; // horizontal padding either side of the widest title
+    let height = matches.len() as u16 + 2; // borders
+
+    let popup = popup_rect(area, width, height);
+    frame.render_widget(Clear, popup);
+
+    let items: Vec<ListItem> = matches
+        .iter()
+        .enumerate()
+        .map(|(i, title)| {
+            let style = if i == selected {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            ListItem::new(Line::from(Span::styled(format!(" {title} "), style)))
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(lang.link_popup_title()),
+    );
+    frame.render_widget(list, popup);
 }
 
 /// A `width`x`height` rect anchored to the bottom-center of `area`,

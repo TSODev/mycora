@@ -6,14 +6,11 @@ tags:
 - roadmap
 - planned
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T21:00:00Z
+updated: 2026-07-13T16:00:00Z
 ---
 
 # What's still ahead
 
-- **Link autocompletion** while typing a wikilink in the
-  body editor — unblocked now that [[Full-pane body editor, save on exit]]
-  exists, but not yet implemented
 - **v0.8 — Import/export**: [[Exporting a subtree]] (Markdown or PDF)
   and [[Importing an Obsidian vault]] are both done; still ahead:
   optional Postman/Terapi-style templating hooks (stretch goal, may not
@@ -24,6 +21,11 @@ updated: 2026-07-12T21:00:00Z
   [[Reindex was quadratic, one missing index fixed it]]), and a
   documentation audit against the actual code (USAGE.md had drifted in
   several places — see [[Roadmap]] v0.9's last entry) are all done
+- **Since v0.9**: [[The interface speaks four languages]]; the
+  body-preview newline fix (see [[Layout]]); vault-name headers in the
+  tree pane; and **link autocompletion** — the last of the two
+  long-deferred headline items, open since v0.5, finally closed out
+  (see [[Cross-links and backlinks]])
 - **v1.0 — Public release**: crates.io publish, release checklist,
   gather feedback
 

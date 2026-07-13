@@ -143,7 +143,39 @@ fn handle_backlinks(app: &mut App, code: KeyCode) {
 /// there's no separate discard, `u` afterward covers that). Everything
 /// else — including `Enter` for newlines, arrow keys, `Tab` — goes
 /// straight to the textarea widget rather than being special-cased here.
+///
+/// The one exception: while the `[[wikilink]]` autocomplete popup is
+/// open (`App::link_autocomplete_is_open`), `Up`/`Down`/`Tab`/`Enter`/
+/// `Esc` are intercepted for the popup instead of reaching the textarea
+/// — `Tab`/`Enter` would otherwise insert a literal tab or newline
+/// (never useful mid-title), and `Esc` would otherwise save and exit the
+/// whole editor rather than just dismissing the popup. Every other key
+/// (plain typing, Backspace, arrow-key navigation, ...) still falls
+/// through to the normal path below, which keeps the popup in sync as a
+/// side effect — see `App::body_editor_input`'s doc comment.
 fn handle_edit_body(app: &mut App, key: KeyEvent) {
+    if app.link_autocomplete_is_open() {
+        match key.code {
+            KeyCode::Esc => {
+                app.cancel_link_autocomplete();
+                return;
+            }
+            KeyCode::Up => {
+                app.move_link_autocomplete_selection(-1);
+                return;
+            }
+            KeyCode::Down => {
+                app.move_link_autocomplete_selection(1);
+                return;
+            }
+            KeyCode::Tab | KeyCode::Enter => {
+                app.accept_link_autocomplete();
+                return;
+            }
+            _ => {}
+        }
+    }
+
     if key.code == KeyCode::Esc {
         app.save_and_exit_body_edit();
     } else {

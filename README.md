@@ -14,11 +14,11 @@ otherwise separate trees.
 > three-pane layout with a `:` command palette, multi-vault mounting
 > (including archiving a vault to a single compressed file), a
 > multilingual interface (English/French/Spanish/German, switchable
-> live with `:lang`), and Obsidian import / Markdown-or-PDF export are
-> all shipped today (v0.1–v0.9). Two items are deliberately deferred —
-> link autocompletion and configurable keybindings — see
-> [ROADMAP.md](./ROADMAP.md) for what's built vs. still ahead, and
-> [USAGE.md](./USAGE.md) to actually use it.
+> live with `:lang`), `[[wikilink]]` autocompletion while typing, and
+> Obsidian import / Markdown-or-PDF export are all shipped today
+> (v0.1–v0.9). Configurable keybindings are the one item still
+> deliberately deferred — see [ROADMAP.md](./ROADMAP.md) for what's
+> built vs. still ahead, and [USAGE.md](./USAGE.md) to actually use it.
 
 ![Mycora's three-pane layout: tree on the left (with a second, read-only
 mounted vault below it), a Markdown-rendered body preview with tag
@@ -135,11 +135,12 @@ names the part of the design that's actually differentiating: not the tree
   (folder structure becomes tree structure); `:export`/`mycora export`
   flattens a note's subtree to a single Markdown *or* PDF document
   (format inferred from the output path's extension).
+- **Link autocompletion**: typing `[[` in the body editor opens a popup
+  of matching note titles across every mounted vault — `Up`/`Down` to
+  pick, `Tab`/`Enter` to accept, `Esc` to keep typing manually.
 
 ## Still ahead
 
-- **Link autocompletion** while typing a `[[wikilink]]` in the body
-  editor — deliberately deferred until it's built.
 - **Configurable keybindings** — deliberately out of scope until real
   friction shows up in practice, rather than built speculatively.
 - **v1.0 — Public release**: a versioned crates.io publish, a release
@@ -205,13 +206,13 @@ Considered and deliberately not adopted:
 ## Status
 
 Working and daily-usable — v0.1 through v0.9 are functionally complete
-(except link autocompletion and configurable keybindings, both
-deliberately deferred): in-memory tree with full structural operations,
-undo/redo, and tag management, Markdown + YAML frontmatter persistence
-with atomic writes throughout, SQLite-backed search (FTS5 full-text,
-BM25 ranking, tag/date/branch facets) that scales linearly to thousands
-of notes, the `[[wikilink]]` cross-link layer with a backlinks panel,
-multi-vault mounting (including archiving a vault to a single
+(except configurable keybindings, deliberately deferred): in-memory tree
+with full structural operations, undo/redo, and tag management, Markdown
++ YAML frontmatter persistence with atomic writes throughout,
+SQLite-backed search (FTS5 full-text, BM25 ranking, tag/date/branch
+facets) that scales linearly to thousands of notes, the `[[wikilink]]`
+cross-link layer (with autocompletion while typing) and a backlinks
+panel, multi-vault mounting (including archiving a vault to a single
 compressed file) with a full `mycora vault` CLI, a resizable three-pane
 TUI layout with a `:` command palette, a multilingual interface
 (English/French/Spanish/German), and Obsidian import /

@@ -8,18 +8,18 @@ Mycora is a terminal application (Rust, `ratatui` + `crossterm`) for
 hierarchical, Markdown-backed note-taking: every note has exactly one parent
 (a strict tree, navigated vim-style), plus a "mycelial" cross-link layer on
 top (`[[wikilink]]`-style references, independent of tree position, with a
-backlinks panel and cross-vault resolution). Both halves are implemented and
+backlinks panel, cross-vault resolution, and autocompletion while typing —
+see `link.rs`'s `unclosed_wikilink_start`). Both halves are implemented and
 shipped, along with SQLite FTS5 search (ranked, with snippets and tag/date/
 branch facets), multi-vault mounting (a registry of vaults, only one of
 which is editable at a time), a resizable three-pane layout (tree + a
 Markdown-rendered body preview + backlinks), a `:` command palette,
 session persistence, and a multilingual interface (English/French/
 Spanish/German, `config.toml`'s `language` key or `:lang` to switch
-live — see `lang.rs`). v0.1 through v0.9 are functionally complete
-except two deliberately deferred items — link autocompletion while
-typing `[[`, and arbitrary configurable keybindings — see ROADMAP.md
-for the full staged plan and the reasoning behind every non-obvious
-decision along the way.
+live — see `lang.rs`). v0.1 through v0.9 are functionally complete except
+one deliberately deferred item — arbitrary configurable keybindings —
+see ROADMAP.md for the full staged plan and the reasoning behind every
+non-obvious decision along the way.
 `examples/showcase-vault/` is a real, committed Mycora vault documenting
 Mycora itself (philosophy, interface, features, design decisions, as
 interlinked notes) — a good first thing to open when getting oriented, and
@@ -31,7 +31,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (175 tests, all in-crate, no external deps)
+cargo test                # all unit tests (180 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -159,7 +159,11 @@ directly and guarantee its synthetic output matches the real on-disk format.
   unrelated sentences — don't write a bare illustrative `[[` in a note body
   (e.g. to describe the syntax itself) without a real matching `]]` right
   next to it, or a later, unrelated `]]` will get swallowed into a bogus
-  "broken link".
+  "broken link". `unclosed_wikilink_start(line, cursor_col)` is the
+  separate, single-line-scoped scanner backing the body editor's
+  autocomplete popup (`App::refresh_link_autocomplete` in `app.rs`) —
+  character-indexed to match `ratatui-textarea`'s own cursor addressing,
+  not byte offsets.
 - **`markdown.rs`**: `render(&str) -> Vec<Line>` walks `pulldown-cmark`'s
   event stream and builds styled `ratatui::text::Line`s directly (a small
   hand-rolled `Renderer` with a style stack, not a dedicated
