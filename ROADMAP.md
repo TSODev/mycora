@@ -1200,6 +1200,44 @@ Goal: stability before a public release.
       `language = "fr"` with the vault entries intact, bare `:lang`
       reported it, `:lang de` errored with the usage line, and a
       quit-relaunch came back in French.
+      **Since extended again** (2026-07-13, user-requested): asked what
+      adding a third/fourth language would cost now that the design was
+      in place — answered honestly (mechanical, compiler-enforced,
+      ~80 short strings per language, same order of effort as the
+      French pass, but flagged that Spanish/German quality couldn't be
+      guaranteed to native level the way French could be) and, on
+      confirmation, added **Spanish (`"es"`) and German (`"de"`)** in
+      the same sitting. Every `match self { Lang::En => ..., Lang::Fr
+      => ... }` in `src/lang.rs` gained two more arms — the compiler's
+      exhaustiveness check made this safe rather than error-prone: the
+      crate simply didn't build until every message had all four arms,
+      so nothing could be silently left in English. `command_reference`
+      gained two more 13-entry tables; `mode_line` gained 14 more tuple
+      arms (7 modes × 2 languages); `:lang`'s usage/help text and
+      `config.toml`'s error message both widened from "en\"/\"fr\"" to
+      list all four codes. One real per-language judgment call:
+      `notes_badge`'s note/notes pluralization is a simple `+"s"` suffix
+      in English/French/Spanish, but German's plural ("Notizen") isn't
+      a suffix on the singular ("Notiz") at all — that one method picks
+      the whole noun per-arm instead of sharing a computed `plural`
+      string, called out in its doc comment so it doesn't look like an
+      inconsistency. `marker_width` needed per-language tuning again
+      (Spanish's "SOLO LECTURA" needs 14 cells like French; German's
+      longest marker only needs 12, like English) — the existing
+      `markers_fit_their_reserved_breadcrumb_column` test caught this
+      immediately by construction rather than needing manual checking.
+      Both new languages are explicitly flagged in `Lang`'s doc comment
+      and USAGE.md as machine-translated, not yet native-reviewed,
+      unlike English/French — the user said they'd proofread later.
+      Manually verified in tmux: separate scratch vaults with
+      `language = "es"` and `language = "de"`, confirming the welcome
+      note, hint row, pane titles ("Retroenlaces"/"Rückverweise"), and
+      full command-palette popup rendered correctly in each, then
+      `:lang en` from the German session switched live back to English
+      with "language: English (en)" as confirmation. 175 tests
+      (3 new: a `from_code`/`code()` round-trip check, a `mode_line`
+      completeness check across every mode × language, and a
+      config-side "every known code loads" check), clippy clean.
 - [ ] **Attach images/other files to a note, without rendering them**
       (2026-07-12, user-floated, explicitly not scheduled yet — just
       captured for later) — asked "even if we don't display them, what

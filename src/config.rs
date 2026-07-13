@@ -128,7 +128,9 @@ impl Config {
         let language = match raw.language.as_deref() {
             None => Lang::default(),
             Some(code) => Lang::from_code(code).ok_or_else(|| {
-                anyhow::anyhow!("unknown language \"{code}\" in config (expected \"en\" or \"fr\")")
+                anyhow::anyhow!(
+                    "unknown language \"{code}\" in config (expected \"en\", \"fr\", \"es\", or \"de\")"
+                )
             })?,
         };
 
@@ -211,16 +213,17 @@ impl Config {
         write_raw(config_path, &raw)
     }
 
-    /// Persists the TUI language (`:lang <en|fr>`) into `config_path`, so
-    /// a language switched at runtime survives the next launch — a
-    /// language choice is a durable preference, not a per-session focus
-    /// like `:tags limit`. Validates `code` through `Lang::from_code`
-    /// first, so nothing unparseable-by-`load()` can ever be written.
-    /// Same parse-and-rewrite mechanism as `add_vault` above (and the
-    /// same trade-off: hand-added comments in the file don't survive).
+    /// Persists the TUI language (`:lang <en|fr|es|de>`) into
+    /// `config_path`, so a language switched at runtime survives the
+    /// next launch — a language choice is a durable preference, not a
+    /// per-session focus like `:tags limit`. Validates `code` through
+    /// `Lang::from_code` first, so nothing unparseable-by-`load()` can
+    /// ever be written. Same parse-and-rewrite mechanism as `add_vault`
+    /// above (and the same trade-off: hand-added comments in the file
+    /// don't survive).
     pub fn set_language(config_path: &Path, code: &str) -> Result<()> {
         if Lang::from_code(code).is_none() {
-            bail!("unknown language \"{code}\" (expected \"en\" or \"fr\")");
+            bail!("unknown language \"{code}\" (expected \"en\", \"fr\", \"es\", or \"de\")");
         }
 
         let mut raw = read_raw(config_path)?;
@@ -592,7 +595,7 @@ mod tests {
     fn an_unknown_language_code_is_rejected_loudly() {
         let raw = RawConfig {
             vault_path: None,
-            language: Some("de".to_string()),
+            language: Some("it".to_string()),
             vaults: vec![raw_vault("work", "/vaults/work")],
         };
         let err = Config::from_raw(raw, "/home/alice").unwrap_err();
@@ -600,19 +603,29 @@ mod tests {
     }
 
     #[test]
+    fn every_known_language_code_loads_successfully() {
+        for code in ["en", "fr", "es", "de"] {
+            let raw = RawConfig {
+                vault_path: None,
+                language: Some(code.to_string()),
+                vaults: vec![raw_vault("work", "/vaults/work")],
+            };
+            let config = Config::from_raw(raw, "/home/alice").unwrap();
+            assert_eq!(config.language, Lang::from_code(code).unwrap());
+        }
+    }
+
+    #[test]
     fn set_language_writes_the_key_and_preserves_vault_entries() {
         let path = scratch_config_path();
         Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
 
-        Config::set_language(&path, "fr").unwrap();
-
-        let config = config_at(&path);
-        assert_eq!(config.language, Lang::Fr);
-        assert_eq!(config.vaults[0].name, "work");
-
-        // Switching again overwrites rather than duplicating the key.
-        Config::set_language(&path, "en").unwrap();
-        assert_eq!(config_at(&path).language, Lang::En);
+        for code in ["fr", "es", "de", "en"] {
+            Config::set_language(&path, code).unwrap();
+            let config = config_at(&path);
+            assert_eq!(config.language, Lang::from_code(code).unwrap());
+            assert_eq!(config.vaults[0].name, "work");
+        }
 
         std::fs::remove_file(&path).ok();
     }
@@ -623,7 +636,7 @@ mod tests {
         Config::add_vault(&path, "work", PathBuf::from("/vaults/work"), true).unwrap();
         let before = std::fs::read_to_string(&path).unwrap();
 
-        let err = Config::set_language(&path, "de").unwrap_err();
+        let err = Config::set_language(&path, "it").unwrap_err();
         assert!(err.to_string().contains("unknown language"));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
 

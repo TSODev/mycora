@@ -1625,7 +1625,7 @@ impl App {
     ///   selected note. Gated by `require_editable`; a no-op reported
     ///   via `last_message` (not an error) when the tag is already
     ///   there (`add`) or already gone (`del`).
-    /// - `lang <en|fr>` — switches the interface language immediately
+    /// - `lang <en|fr|es|de>` — switches the interface language immediately
     ///   (every string reads `self.lang` live, so the very next frame
     ///   renders in the new language — no refresh mechanism needed) and
     ///   persists it to `config.toml`. Bare `lang` reports the current
@@ -1947,7 +1947,7 @@ impl App {
         });
     }
 
-    /// `:lang <en|fr>` — switches `self.lang` in place (the whole UI
+    /// `:lang <en|fr|es|de>` — switches `self.lang` in place (the whole UI
     /// re-renders from it on the next frame) and writes the choice
     /// through to `config.toml` so it survives restarts (confirmed with
     /// the user: a language is a durable preference, unlike `:tags

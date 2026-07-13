@@ -7,24 +7,32 @@ use crate::app::Mode;
 /// keeping them fixed means every keybinding reference, script, and
 /// muscle memory works regardless of language.
 ///
-/// Both languages are embedded in the binary rather than loaded from
+/// Every language is embedded in the binary rather than loaded from
 /// external language files: every message here is a real `format!` call
 /// checked at compile time, so a missing key or a typo'd placeholder is a
 /// compile error instead of a runtime surprise — and the binary stays
 /// self-contained (no files to install alongside it, nothing to fail to
 /// parse at startup). The cost is that adding a language means
 /// recompiling; an optional override file can be layered on later if
-/// out-of-tree translations ever matter more than that guarantee.
+/// out-of-tree translations ever matter more than that guarantee. Adding
+/// one is mechanical, not risky: the compiler's exhaustiveness check
+/// refuses to build until every `match self { ... }` here has a new arm,
+/// so nothing can be silently left in English.
 ///
 /// Selected by `language = "fr"` in `config.toml` (see `Config`) —
-/// English is the default. TUI-only for now: CLI output (`mycora vault
-/// list`, reindex reports, load warnings) stays English, matching the
-/// language of the on-disk formats and docs it quotes.
+/// English is the default. Spanish (`"es"`) and German (`"de"`) machine-
+/// translated by the assistant that added them (2026-07-13) and flagged
+/// for a native-speaker review — not yet reviewed, unlike English/French.
+/// TUI-only for now: CLI output (`mycora vault list`, reindex reports,
+/// load warnings) stays English, matching the language of the on-disk
+/// formats and docs it quotes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Lang {
     #[default]
     En,
     Fr,
+    Es,
+    De,
 }
 
 impl Lang {
@@ -36,6 +44,8 @@ impl Lang {
         match code {
             "en" => Some(Lang::En),
             "fr" => Some(Lang::Fr),
+            "es" => Some(Lang::Es),
+            "de" => Some(Lang::De),
             _ => None,
         }
     }
@@ -46,6 +56,8 @@ impl Lang {
         match self {
             Lang::En => "en",
             Lang::Fr => "fr",
+            Lang::Es => "es",
+            Lang::De => "de",
         }
     }
 
@@ -82,7 +94,7 @@ impl Lang {
                 ),
                 (":tag add <tag>", "add a tag to the selected note"),
                 (":tag del <tag>", "remove a tag from the selected note"),
-                (":lang <en|fr>", "switch the interface language (persists)"),
+                (":lang <en|fr|es|de>", "switch the interface language (persists)"),
                 (":q, :quit", "quit Mycora"),
             ],
             Lang::Fr => &[
@@ -112,8 +124,68 @@ impl Lang {
                 ),
                 (":tag add <tag>", "ajoute un tag à la note sélectionnée"),
                 (":tag del <tag>", "retire un tag de la note sélectionnée"),
-                (":lang <en|fr>", "change la langue de l'interface (persistant)"),
+                (":lang <en|fr|es|de>", "change la langue de l'interface (persistant)"),
                 (":q, :quit", "quitte Mycora"),
+            ],
+            Lang::Es => &[
+                (":reindex", "reconstruye el índice de búsqueda"),
+                (
+                    ":tags <tag1,tag2,...>",
+                    "lista notas que coincidan con alguna de las etiquetas dadas",
+                ),
+                (":tags list", "lista todas las etiquetas conocidas, elige una para filtrar"),
+                (
+                    ":tags limit <vault-name>",
+                    "restringe :tags/:tags list a un solo vault montado",
+                ),
+                (":tags unlimit", "quita el límite de :tags, vuelve a todos los vaults"),
+                (":panes reset", "restablece los anchos de panel a 40/40/20"),
+                (
+                    ":export <path>",
+                    "aplana el subárbol de la nota seleccionada a un archivo Markdown",
+                ),
+                (
+                    ":config unmount <show|hide>",
+                    "muestra/oculta las filas de vaults no montados en el árbol",
+                ),
+                (
+                    ":config archive <show|hide>",
+                    "muestra/oculta las filas de vaults archivados en el árbol",
+                ),
+                (":tag add <tag>", "añade una etiqueta a la nota seleccionada"),
+                (":tag del <tag>", "elimina una etiqueta de la nota seleccionada"),
+                (":lang <en|fr|es|de>", "cambia el idioma de la interfaz (persistente)"),
+                (":q, :quit", "sale de Mycora"),
+            ],
+            Lang::De => &[
+                (":reindex", "baut den Suchindex neu auf"),
+                (
+                    ":tags <tag1,tag2,...>",
+                    "listet Notizen mit einem der angegebenen Tags",
+                ),
+                (":tags list", "listet alle bekannten Tags, eines zum Filtern wählen"),
+                (
+                    ":tags limit <vault-name>",
+                    "beschränkt :tags/:tags list auf einen gemounteten Vault",
+                ),
+                (":tags unlimit", "hebt die :tags-Beschränkung auf, zurück zu allen Vaults"),
+                (":panes reset", "setzt die Feldbreiten auf 40/40/20 zurück"),
+                (
+                    ":export <path>",
+                    "flacht den Teilbaum der ausgewählten Notiz zu Markdown ab",
+                ),
+                (
+                    ":config unmount <show|hide>",
+                    "zeigt/versteckt Zeilen für nicht gemountete Vaults im Baum",
+                ),
+                (
+                    ":config archive <show|hide>",
+                    "zeigt/versteckt Zeilen für archivierte Vaults im Baum",
+                ),
+                (":tag add <tag>", "fügt der ausgewählten Notiz einen Tag hinzu"),
+                (":tag del <tag>", "entfernt einen Tag von der ausgewählten Notiz"),
+                (":lang <en|fr|es|de>", "wechselt die Oberflächensprache (dauerhaft)"),
+                (":q, :quit", "beendet Mycora"),
             ],
         }
     }
@@ -133,15 +205,39 @@ impl Lang {
                 let plural = if count == 1 { "" } else { "s" };
                 format!("({count} lien{plural})")
             }
+            Lang::Es => {
+                let plural = if count == 1 { "" } else { "s" };
+                format!("({count} enlace{plural})")
+            }
+            Lang::De => {
+                let plural = if count == 1 { "" } else { "s" };
+                format!("({count} Link{plural})")
+            }
         }
     }
 
-    /// The `(3 notes)` count next to a tag in `:tags list`.
+    /// The `(3 notes)` count next to a tag in `:tags list`. German's
+    /// plural ("Notizen") isn't a simple suffix on the singular
+    /// ("Notiz"), unlike the other three languages, hence the noun
+    /// picked whole per-arm rather than shared `plural`-suffix logic.
     pub fn notes_badge(self, count: i64) -> String {
-        let plural = if count == 1 { "" } else { "s" };
         match self {
-            Lang::En => format!("({count} note{plural})"),
-            Lang::Fr => format!("({count} note{plural})"),
+            Lang::En => {
+                let plural = if count == 1 { "" } else { "s" };
+                format!("({count} note{plural})")
+            }
+            Lang::Fr => {
+                let plural = if count == 1 { "" } else { "s" };
+                format!("({count} note{plural})")
+            }
+            Lang::Es => {
+                let plural = if count == 1 { "" } else { "s" };
+                format!("({count} nota{plural})")
+            }
+            Lang::De => {
+                let noun = if count == 1 { "Notiz" } else { "Notizen" };
+                format!("({count} {noun})")
+            }
         }
     }
 
@@ -156,6 +252,12 @@ impl Lang {
             Lang::Fr => format!(
                 "Le vault \"{name}\" n'est pas monté.\n\nChemin : {path}\n\nPour l'activer :\n  mycora vault mount {name}"
             ),
+            Lang::Es => format!(
+                "El vault \"{name}\" no está montado.\n\nRuta: {path}\n\nPara activarlo:\n  mycora vault mount {name}"
+            ),
+            Lang::De => format!(
+                "Vault \"{name}\" ist nicht gemountet.\n\nPfad: {path}\n\nZum Aktivieren:\n  mycora vault mount {name}"
+            ),
         }
     }
 
@@ -168,6 +270,12 @@ impl Lang {
             Lang::Fr => format!(
                 "Le vault \"{name}\" est archivé.\n\nArchive : {archive_path}\n\nPour le restaurer :\n  mycora vault unarchive {name}"
             ),
+            Lang::Es => format!(
+                "El vault \"{name}\" está archivado.\n\nArchivo: {archive_path}\n\nPara restaurarlo:\n  mycora vault unarchive {name}"
+            ),
+            Lang::De => format!(
+                "Vault \"{name}\" ist archiviert.\n\nArchiv: {archive_path}\n\nZum Wiederherstellen:\n  mycora vault unarchive {name}"
+            ),
         }
     }
 
@@ -175,6 +283,8 @@ impl Lang {
         match self {
             Lang::En => "Backlinks",
             Lang::Fr => "Rétroliens",
+            Lang::Es => "Retroenlaces",
+            Lang::De => "Rückverweise",
         }
     }
 
@@ -182,6 +292,8 @@ impl Lang {
         match self {
             Lang::En => format!("Search [{scope}]: {query}"),
             Lang::Fr => format!("Recherche [{scope}] : {query}"),
+            Lang::Es => format!("Búsqueda [{scope}]: {query}"),
+            Lang::De => format!("Suche [{scope}]: {query}"),
         }
     }
 
@@ -189,6 +301,8 @@ impl Lang {
         match self {
             Lang::En => format!("Tag results [{scope}]"),
             Lang::Fr => format!("Résultats tags [{scope}]"),
+            Lang::Es => format!("Resultados de etiquetas [{scope}]"),
+            Lang::De => format!("Tag-Ergebnisse [{scope}]"),
         }
     }
 
@@ -196,6 +310,8 @@ impl Lang {
         match self {
             Lang::En => format!("Tags [{scope}]"),
             Lang::Fr => format!("Tags [{scope}]"),
+            Lang::Es => format!("Etiquetas [{scope}]"),
+            Lang::De => format!("Tags [{scope}]"),
         }
     }
 
@@ -204,6 +320,8 @@ impl Lang {
         match self {
             Lang::En => "all vaults",
             Lang::Fr => "tous les vaults",
+            Lang::Es => "todos los vaults",
+            Lang::De => "alle Vaults",
         }
     }
 
@@ -211,12 +329,14 @@ impl Lang {
         match self {
             Lang::En => "Commands",
             Lang::Fr => "Commandes",
+            Lang::Es => "Comandos",
+            Lang::De => "Befehle",
         }
     }
 
     /// The `y/n` delete confirmation prompt. The `y/n` keys themselves
     /// don't translate (they're keybindings — see the type-level doc
-    /// comment), so the prompt spells them out as-is in both languages.
+    /// comment), so the prompt spells them out as-is in every language.
     pub fn delete_prompt(self, title: &str, descendants: usize) -> String {
         match self {
             Lang::En => {
@@ -233,6 +353,20 @@ impl Lang {
                     format!("Supprimer '{title}' ? y/n")
                 }
             }
+            Lang::Es => {
+                if descendants > 0 {
+                    format!("¿Eliminar '{title}' y sus {descendants} descendiente(s)? y/n")
+                } else {
+                    format!("¿Eliminar '{title}'? y/n")
+                }
+            }
+            Lang::De => {
+                if descendants > 0 {
+                    format!("'{title}' und seine {descendants} Nachfahren löschen? y/n")
+                } else {
+                    format!("'{title}' löschen? y/n")
+                }
+            }
         }
     }
 
@@ -242,6 +376,8 @@ impl Lang {
         match self {
             Lang::En => "this note",
             Lang::Fr => "cette note",
+            Lang::Es => "esta nota",
+            Lang::De => "diese Notiz",
         }
     }
 
@@ -249,6 +385,8 @@ impl Lang {
         match self {
             Lang::En => "Press q again to quit",
             Lang::Fr => "Appuyez encore sur q pour quitter",
+            Lang::Es => "Pulsa q de nuevo para salir",
+            Lang::De => "Erneut q drücken zum Beenden",
         }
     }
 
@@ -257,6 +395,8 @@ impl Lang {
         match self {
             Lang::En => "ERROR",
             Lang::Fr => "ERREUR",
+            Lang::Es => "ERROR",
+            Lang::De => "FEHLER",
         }
     }
 
@@ -281,8 +421,24 @@ impl Lang {
                  /: rechercher  b: rétroliens  [/]: largeur arbre  {/}: largeur rétroliens  \
                  colon: commande  q: quitter",
             ),
+            (Lang::Es, Mode::Normal) => (
+                "NORMAL",
+                "j/k: mover  h/l/space: plegar  a/o: nueva  y: copiar  Tab/S-Tab: mover  \
+                 K/J: reordenar  i: renombrar  e: editar  d: eliminar  u: deshacer  ^R: rehacer  \
+                 /: buscar  b: enlaces  [/]: ancho árbol  {/}: ancho enlaces  \
+                 colon: comando  q: salir",
+            ),
+            (Lang::De, Mode::Normal) => (
+                "NORMAL",
+                "j/k: bewegen  h/l/space: falten  a/o: neu  y: kopieren  Tab/S-Tab: verschieben  \
+                 K/J: umordnen  i: umbenennen  e: bearbeiten  d: löschen  u: rückgängig  ^R: wiederholen  \
+                 /: suchen  b: rückverweise  [/]: Baumbreite  {/}: Verweisbreite  \
+                 colon: Befehl  q: beenden",
+            ),
             (Lang::En, Mode::Insert) => ("INSERT", "Enter: confirm  Esc: cancel"),
             (Lang::Fr, Mode::Insert) => ("INSERTION", "Enter: valider  Esc: annuler"),
+            (Lang::Es, Mode::Insert) => ("INSERTAR", "Enter: confirmar  Esc: cancelar"),
+            (Lang::De, Mode::Insert) => ("EINFÜGEN", "Enter: bestätigen  Esc: abbrechen"),
             (Lang::En, Mode::Search) => (
                 "SEARCH",
                 "type: filter  Up/Down: move  Enter: open  Esc: cancel",
@@ -290,6 +446,14 @@ impl Lang {
             (Lang::Fr, Mode::Search) => (
                 "RECHERCHE",
                 "taper: filtrer  Up/Down: bouger  Enter: ouvrir  Esc: annuler",
+            ),
+            (Lang::Es, Mode::Search) => (
+                "BÚSQUEDA",
+                "escribir: filtrar  Up/Down: mover  Enter: abrir  Esc: cancelar",
+            ),
+            (Lang::De, Mode::Search) => (
+                "SUCHE",
+                "tippen: filtern  Up/Down: bewegen  Enter: öffnen  Esc: abbrechen",
             ),
             (Lang::En, Mode::Backlinks) => (
                 "BACKLINKS",
@@ -299,16 +463,34 @@ impl Lang {
                 "RÉTROLIENS",
                 "j/k: bouger  Enter: sauter  Esc/b: retour à l'arbre",
             ),
+            (Lang::Es, Mode::Backlinks) => (
+                "ENLACES",
+                "j/k: mover  Enter: saltar  Esc/b: volver al árbol",
+            ),
+            (Lang::De, Mode::Backlinks) => (
+                "RÜCKVERWEISE",
+                "j/k: bewegen  Enter: springen  Esc/b: zurück zum Baum",
+            ),
             (Lang::En, Mode::EditBody) => ("EDIT BODY", "Esc: save & exit"),
             (Lang::Fr, Mode::EditBody) => ("ÉDITION", "Esc: sauver & quitter"),
+            (Lang::Es, Mode::EditBody) => ("EDITAR", "Esc: guardar y salir"),
+            (Lang::De, Mode::EditBody) => ("BEARBEITEN", "Esc: speichern & verlassen"),
             (Lang::En, Mode::TagResults) => {
                 ("TAG RESULTS", "j/k: move  Enter: open  Esc: cancel")
             }
             (Lang::Fr, Mode::TagResults) => {
                 ("RÉSULTATS TAGS", "j/k: bouger  Enter: ouvrir  Esc: annuler")
             }
+            (Lang::Es, Mode::TagResults) => {
+                ("RESULTADOS", "j/k: mover  Enter: abrir  Esc: cancelar")
+            }
+            (Lang::De, Mode::TagResults) => {
+                ("TAG-ERGEBNISSE", "j/k: bewegen  Enter: öffnen  Esc: abbrechen")
+            }
             (Lang::En, Mode::TagList) => ("TAGS", "j/k: move  Enter: filter  Esc: cancel"),
             (Lang::Fr, Mode::TagList) => ("TAGS", "j/k: bouger  Enter: filtrer  Esc: annuler"),
+            (Lang::Es, Mode::TagList) => ("TAGS", "j/k: mover  Enter: filtrar  Esc: cancelar"),
+            (Lang::De, Mode::TagList) => ("TAGS", "j/k: bewegen  Enter: filtern  Esc: abbrechen"),
             (_, Mode::ConfirmDelete | Mode::Command) => {
                 unreachable!("ConfirmDelete/Command render their own prompt row, not hints")
             }
@@ -317,12 +499,14 @@ impl Lang {
 
     /// The breadcrumb row's right-aligned status markers, and the fixed
     /// column width reserved for them (widest marker + a space of
-    /// breathing room — per-language, since "LECTURE SEULE" is wider
-    /// than "READ-ONLY").
+    /// breathing room — per-language, since e.g. "LECTURE SEULE" is
+    /// wider than "READ-ONLY").
     pub fn marker_read_only(self) -> &'static str {
         match self {
             Lang::En => "READ-ONLY",
             Lang::Fr => "LECTURE SEULE",
+            Lang::Es => "SOLO LECTURA",
+            Lang::De => "NUR LESEN",
         }
     }
 
@@ -330,6 +514,8 @@ impl Lang {
         match self {
             Lang::En => "UNMOUNTED",
             Lang::Fr => "NON MONTÉ",
+            Lang::Es => "DESMONTADO",
+            Lang::De => "AUSGEHÄNGT",
         }
     }
 
@@ -337,6 +523,8 @@ impl Lang {
         match self {
             Lang::En => "ARCHIVED",
             Lang::Fr => "ARCHIVÉ",
+            Lang::Es => "ARCHIVADO",
+            Lang::De => "ARCHIVIERT",
         }
     }
 
@@ -344,6 +532,8 @@ impl Lang {
         match self {
             Lang::En => 12,
             Lang::Fr => 14,
+            Lang::Es => 14,
+            Lang::De => 12,
         }
     }
 
@@ -358,6 +548,8 @@ impl Lang {
         match self {
             Lang::En => "Welcome to Mycora",
             Lang::Fr => "Bienvenue dans Mycora",
+            Lang::Es => "Bienvenido a Mycora",
+            Lang::De => "Willkommen bei Mycora",
         }
     }
 
@@ -366,6 +558,12 @@ impl Lang {
             Lang::En => "a: child  o: sibling  i: rename  y: copy  d: delete  u: undo  q: quit",
             Lang::Fr => {
                 "a: enfant  o: voisine  i: renommer  y: copier  d: supprimer  u: annuler  q: quitter"
+            }
+            Lang::Es => {
+                "a: hijo  o: hermano  i: renombrar  y: copiar  d: eliminar  u: deshacer  q: salir"
+            }
+            Lang::De => {
+                "a: Kind  o: Geschwister  i: umbenennen  y: kopieren  d: löschen  u: rückgängig  q: beenden"
             }
         }
     }
@@ -376,6 +574,8 @@ impl Lang {
         match self {
             Lang::En => "New note",
             Lang::Fr => "Nouvelle note",
+            Lang::Es => "Nueva nota",
+            Lang::De => "Neue Notiz",
         }
     }
 
@@ -383,6 +583,8 @@ impl Lang {
         match self {
             Lang::En => "this vault is read-only",
             Lang::Fr => "ce vault est en lecture seule",
+            Lang::Es => "este vault es de solo lectura",
+            Lang::De => "dieser Vault ist schreibgeschützt",
         }
     }
 
@@ -390,6 +592,8 @@ impl Lang {
         match self {
             Lang::En => format!("trash failed: {err}"),
             Lang::Fr => format!("échec de la mise à la corbeille : {err}"),
+            Lang::Es => format!("error al mover a la papelera: {err}"),
+            Lang::De => format!("Papierkorb fehlgeschlagen: {err}"),
         }
     }
 
@@ -397,6 +601,8 @@ impl Lang {
         match self {
             Lang::En => format!("save failed: {err}"),
             Lang::Fr => format!("échec de la sauvegarde : {err}"),
+            Lang::Es => format!("error al guardar: {err}"),
+            Lang::De => format!("Speichern fehlgeschlagen: {err}"),
         }
     }
 
@@ -404,6 +610,8 @@ impl Lang {
         match self {
             Lang::En => format!("reindex failed: {err}"),
             Lang::Fr => format!("échec de la réindexation : {err}"),
+            Lang::Es => format!("error al reindexar: {err}"),
+            Lang::De => format!("Reindexierung fehlgeschlagen: {err}"),
         }
     }
 
@@ -411,6 +619,8 @@ impl Lang {
         match self {
             Lang::En => format!("search failed: {err}"),
             Lang::Fr => format!("échec de la recherche : {err}"),
+            Lang::Es => format!("error al buscar: {err}"),
+            Lang::De => format!("Suche fehlgeschlagen: {err}"),
         }
     }
 
@@ -418,6 +628,8 @@ impl Lang {
         match self {
             Lang::En => format!("tag list failed: {err}"),
             Lang::Fr => format!("échec de la liste des tags : {err}"),
+            Lang::Es => format!("error al listar etiquetas: {err}"),
+            Lang::De => format!("Tag-Liste fehlgeschlagen: {err}"),
         }
     }
 
@@ -425,6 +637,8 @@ impl Lang {
         match self {
             Lang::En => format!("tag filter failed: {err}"),
             Lang::Fr => format!("échec du filtre par tags : {err}"),
+            Lang::Es => format!("error al filtrar por etiquetas: {err}"),
+            Lang::De => format!("Tag-Filter fehlgeschlagen: {err}"),
         }
     }
 
@@ -432,6 +646,8 @@ impl Lang {
         match self {
             Lang::En => format!("export failed: {err}"),
             Lang::Fr => format!("échec de l'export : {err}"),
+            Lang::Es => format!("error al exportar: {err}"),
+            Lang::De => format!("Export fehlgeschlagen: {err}"),
         }
     }
 
@@ -439,6 +655,8 @@ impl Lang {
         match self {
             Lang::En => format!("unknown command: {name}"),
             Lang::Fr => format!("commande inconnue : {name}"),
+            Lang::Es => format!("comando desconocido: {name}"),
+            Lang::De => format!("unbekannter Befehl: {name}"),
         }
     }
 
@@ -446,6 +664,8 @@ impl Lang {
         match self {
             Lang::En => format!("reindexed {count} note(s)"),
             Lang::Fr => format!("{count} note(s) réindexée(s)"),
+            Lang::Es => format!("{count} nota(s) reindexada(s)"),
+            Lang::De => format!("{count} Notiz(en) reindexiert"),
         }
     }
 
@@ -462,6 +682,14 @@ impl Lang {
                 "usage : :tags <tag1,tag2,...> ou :tags list ou :tags limit <vault-name> ou \
                  :tags unlimit"
             }
+            Lang::Es => {
+                "uso: :tags <tag1,tag2,...> o :tags list o :tags limit <vault-name> o \
+                 :tags unlimit"
+            }
+            Lang::De => {
+                "Verwendung: :tags <tag1,tag2,...> oder :tags list oder :tags limit <vault-name> \
+                 oder :tags unlimit"
+            }
         }
     }
 
@@ -469,6 +697,8 @@ impl Lang {
         match self {
             Lang::En => "usage: :tags limit <vault-name>",
             Lang::Fr => "usage : :tags limit <vault-name>",
+            Lang::Es => "uso: :tags limit <vault-name>",
+            Lang::De => "Verwendung: :tags limit <vault-name>",
         }
     }
 
@@ -476,6 +706,8 @@ impl Lang {
         match self {
             Lang::En => format!("no mounted vault named \"{name}\""),
             Lang::Fr => format!("aucun vault monté nommé \"{name}\""),
+            Lang::Es => format!("no hay ningún vault montado llamado \"{name}\""),
+            Lang::De => format!("kein gemounteter Vault namens \"{name}\""),
         }
     }
 
@@ -483,6 +715,8 @@ impl Lang {
         match self {
             Lang::En => format!("tags limited to \"{name}\""),
             Lang::Fr => format!("tags limités à \"{name}\""),
+            Lang::Es => format!("etiquetas limitadas a \"{name}\""),
+            Lang::De => format!("Tags beschränkt auf \"{name}\""),
         }
     }
 
@@ -490,6 +724,8 @@ impl Lang {
         match self {
             Lang::En => "tags were not limited",
             Lang::Fr => "les tags n'étaient pas limités",
+            Lang::Es => "las etiquetas no estaban limitadas",
+            Lang::De => "Tags waren nicht beschränkt",
         }
     }
 
@@ -497,6 +733,8 @@ impl Lang {
         match self {
             Lang::En => "tags no longer limited",
             Lang::Fr => "tags non limités désormais",
+            Lang::Es => "etiquetas ya no limitadas",
+            Lang::De => "Tags nicht mehr beschränkt",
         }
     }
 
@@ -504,6 +742,8 @@ impl Lang {
         match self {
             Lang::En => format!("no tags in \"{name}\""),
             Lang::Fr => format!("aucun tag dans \"{name}\""),
+            Lang::Es => format!("no hay etiquetas en \"{name}\""),
+            Lang::De => format!("keine Tags in \"{name}\""),
         }
     }
 
@@ -511,6 +751,8 @@ impl Lang {
         match self {
             Lang::En => "no tags in any mounted vault",
             Lang::Fr => "aucun tag dans aucun vault monté",
+            Lang::Es => "no hay etiquetas en ningún vault montado",
+            Lang::De => "keine Tags in keinem gemounteten Vault",
         }
     }
 
@@ -518,6 +760,8 @@ impl Lang {
         match self {
             Lang::En => format!("no notes tagged {tags} in \"{name}\""),
             Lang::Fr => format!("aucune note taguée {tags} dans \"{name}\""),
+            Lang::Es => format!("no hay notas etiquetadas {tags} en \"{name}\""),
+            Lang::De => format!("keine Notizen mit {tags} in \"{name}\""),
         }
     }
 
@@ -525,6 +769,8 @@ impl Lang {
         match self {
             Lang::En => format!("no notes tagged {tags} in any mounted vault"),
             Lang::Fr => format!("aucune note taguée {tags} dans aucun vault monté"),
+            Lang::Es => format!("no hay notas etiquetadas {tags} en ningún vault montado"),
+            Lang::De => format!("keine Notizen mit {tags} in keinem gemounteten Vault"),
         }
     }
 
@@ -532,6 +778,8 @@ impl Lang {
         match self {
             Lang::En => "usage: :panes reset",
             Lang::Fr => "usage : :panes reset",
+            Lang::Es => "uso: :panes reset",
+            Lang::De => "Verwendung: :panes reset",
         }
     }
 
@@ -539,6 +787,8 @@ impl Lang {
         match self {
             Lang::En => "pane widths reset to default",
             Lang::Fr => "largeurs de panneaux réinitialisées",
+            Lang::Es => "anchos de panel restablecidos",
+            Lang::De => "Feldbreiten zurückgesetzt",
         }
     }
 
@@ -546,6 +796,8 @@ impl Lang {
         match self {
             Lang::En => "usage: :config <unmount|archive> <show|hide>",
             Lang::Fr => "usage : :config <unmount|archive> <show|hide>",
+            Lang::Es => "uso: :config <unmount|archive> <show|hide>",
+            Lang::De => "Verwendung: :config <unmount|archive> <show|hide>",
         }
     }
 
@@ -562,6 +814,16 @@ impl Lang {
                 let verb = if shown { "affichés" } else { "masqués" };
                 format!("vaults {noun} désormais {verb} dans l'arbre")
             }
+            Lang::Es => {
+                let noun = if unmounted { "no montados" } else { "archivados" };
+                let verb = if shown { "mostrados" } else { "ocultos" };
+                format!("vaults {noun} ahora {verb} en el árbol")
+            }
+            Lang::De => {
+                let noun = if unmounted { "Nicht gemountete" } else { "Archivierte" };
+                let verb = if shown { "angezeigt" } else { "ausgeblendet" };
+                format!("{noun} Vaults jetzt im Baum {verb}")
+            }
         }
     }
 
@@ -569,6 +831,8 @@ impl Lang {
         match self {
             Lang::En => "usage: :tag <add|del> <tag>",
             Lang::Fr => "usage : :tag <add|del> <tag>",
+            Lang::Es => "uso: :tag <add|del> <tag>",
+            Lang::De => "Verwendung: :tag <add|del> <tag>",
         }
     }
 
@@ -576,6 +840,8 @@ impl Lang {
         match self {
             Lang::En => "nothing selected to tag",
             Lang::Fr => "aucune note sélectionnée à taguer",
+            Lang::Es => "nada seleccionado para etiquetar",
+            Lang::De => "nichts zum Taggen ausgewählt",
         }
     }
 
@@ -583,6 +849,8 @@ impl Lang {
         match self {
             Lang::En => format!("already tagged \"{tag}\""),
             Lang::Fr => format!("déjà taguée \"{tag}\""),
+            Lang::Es => format!("ya etiquetada \"{tag}\""),
+            Lang::De => format!("bereits getaggt mit \"{tag}\""),
         }
     }
 
@@ -590,6 +858,8 @@ impl Lang {
         match self {
             Lang::En => format!("not tagged \"{tag}\""),
             Lang::Fr => format!("pas taguée \"{tag}\""),
+            Lang::Es => format!("no etiquetada \"{tag}\""),
+            Lang::De => format!("nicht getaggt mit \"{tag}\""),
         }
     }
 
@@ -597,6 +867,8 @@ impl Lang {
         match self {
             Lang::En => format!("tag \"{tag}\" added"),
             Lang::Fr => format!("tag \"{tag}\" ajouté"),
+            Lang::Es => format!("etiqueta \"{tag}\" añadida"),
+            Lang::De => format!("Tag \"{tag}\" hinzugefügt"),
         }
     }
 
@@ -604,13 +876,17 @@ impl Lang {
         match self {
             Lang::En => format!("tag \"{tag}\" removed"),
             Lang::Fr => format!("tag \"{tag}\" retiré"),
+            Lang::Es => format!("etiqueta \"{tag}\" eliminada"),
+            Lang::De => format!("Tag \"{tag}\" entfernt"),
         }
     }
 
     pub fn lang_usage(self) -> &'static str {
         match self {
-            Lang::En => "usage: :lang <en|fr>",
-            Lang::Fr => "usage : :lang <en|fr>",
+            Lang::En => "usage: :lang <en|fr|es|de>",
+            Lang::Fr => "usage : :lang <en|fr|es|de>",
+            Lang::Es => "uso: :lang <en|fr|es|de>",
+            Lang::De => "Verwendung: :lang <en|fr|es|de>",
         }
     }
 
@@ -622,6 +898,8 @@ impl Lang {
         match self {
             Lang::En => "language: English (en)",
             Lang::Fr => "langue : français (fr)",
+            Lang::Es => "idioma: español (es)",
+            Lang::De => "Sprache: Deutsch (de)",
         }
     }
 
@@ -636,6 +914,12 @@ impl Lang {
             Lang::Fr => {
                 format!("langue changée pour cette session, mais l'écriture de config.toml a échoué : {err}")
             }
+            Lang::Es => {
+                format!("idioma cambiado para esta sesión, pero no se pudo guardar en config.toml: {err}")
+            }
+            Lang::De => {
+                format!("Sprache für diese Sitzung gewechselt, aber Speichern in config.toml fehlgeschlagen: {err}")
+            }
         }
     }
 
@@ -643,6 +927,8 @@ impl Lang {
         match self {
             Lang::En => "usage: :export <path>",
             Lang::Fr => "usage : :export <path>",
+            Lang::Es => "uso: :export <path>",
+            Lang::De => "Verwendung: :export <path>",
         }
     }
 
@@ -650,6 +936,8 @@ impl Lang {
         match self {
             Lang::En => "nothing selected to export",
             Lang::Fr => "aucune note sélectionnée à exporter",
+            Lang::Es => "nada seleccionado para exportar",
+            Lang::De => "nichts zum Exportieren ausgewählt",
         }
     }
 
@@ -657,6 +945,8 @@ impl Lang {
         match self {
             Lang::En => format!("{path} already exists"),
             Lang::Fr => format!("{path} existe déjà"),
+            Lang::Es => format!("{path} ya existe"),
+            Lang::De => format!("{path} existiert bereits"),
         }
     }
 
@@ -664,6 +954,8 @@ impl Lang {
         match self {
             Lang::En => format!("exported to {path}"),
             Lang::Fr => format!("exporté vers {path}"),
+            Lang::Es => format!("exportado a {path}"),
+            Lang::De => format!("exportiert nach {path}"),
         }
     }
 }
@@ -672,22 +964,33 @@ impl Lang {
 mod tests {
     use super::*;
 
+    const ALL: [Lang; 4] = [Lang::En, Lang::Fr, Lang::Es, Lang::De];
+
     #[test]
     fn from_code_parses_known_languages_and_rejects_unknown() {
         assert_eq!(Lang::from_code("en"), Some(Lang::En));
         assert_eq!(Lang::from_code("fr"), Some(Lang::Fr));
-        assert_eq!(Lang::from_code("de"), None);
+        assert_eq!(Lang::from_code("es"), Some(Lang::Es));
+        assert_eq!(Lang::from_code("de"), Some(Lang::De));
+        assert_eq!(Lang::from_code("it"), None);
         assert_eq!(Lang::from_code(""), None);
         // Deliberately strict: no case folding or region tags — the
-        // config documents exactly "en"/"fr", and a fuzzy match here
+        // config documents exactly these codes, and a fuzzy match here
         // would just delay the clear startup error to a subtler place.
         assert_eq!(Lang::from_code("EN"), None);
         assert_eq!(Lang::from_code("fr_FR"), None);
     }
 
     #[test]
-    fn parameterized_messages_embed_their_arguments_in_both_languages() {
-        for lang in [Lang::En, Lang::Fr] {
+    fn code_round_trips_through_from_code_for_every_language() {
+        for lang in ALL {
+            assert_eq!(Lang::from_code(lang.code()), Some(lang));
+        }
+    }
+
+    #[test]
+    fn parameterized_messages_embed_their_arguments_in_every_language() {
+        for lang in ALL {
             assert!(lang.unknown_command("frobnicate").contains("frobnicate"));
             assert!(lang.delete_prompt("My Note", 3).contains("My Note"));
             assert!(lang.delete_prompt("My Note", 3).contains('3'));
@@ -701,8 +1004,10 @@ mod tests {
         // Command *syntax* must never diverge between languages — only
         // descriptions translate (see `Lang`'s doc comment).
         let en: Vec<&str> = Lang::En.command_reference().iter().map(|(c, _)| *c).collect();
-        let fr: Vec<&str> = Lang::Fr.command_reference().iter().map(|(c, _)| *c).collect();
-        assert_eq!(en, fr);
+        for lang in ALL {
+            let commands: Vec<&str> = lang.command_reference().iter().map(|(c, _)| *c).collect();
+            assert_eq!(en, commands, "command syntax diverged in {lang:?}");
+        }
     }
 
     #[test]
@@ -721,12 +1026,15 @@ mod tests {
                 .filter_map(|t| t.split_once(": ").map(|(k, _)| k.to_string()))
                 .collect()
         };
-        assert_eq!(keys(Lang::En), keys(Lang::Fr));
+        let en = keys(Lang::En);
+        for lang in ALL {
+            assert_eq!(en, keys(lang), "keys diverged in {lang:?}");
+        }
     }
 
     #[test]
     fn markers_fit_their_reserved_breadcrumb_column() {
-        for lang in [Lang::En, Lang::Fr] {
+        for lang in ALL {
             let width = lang.marker_width() as usize;
             for marker in [
                 lang.marker_read_only(),
@@ -735,8 +1043,31 @@ mod tests {
             ] {
                 assert!(
                     marker.chars().count() <= width,
-                    "{marker:?} overflows the {width}-cell marker column"
+                    "{marker:?} overflows the {width}-cell marker column in {lang:?}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn mode_line_covers_every_mode_for_every_language() {
+        // A regression guard for the match arms above: if a `Mode`
+        // variant is ever added without extending every language's
+        // `mode_line`, this panics via the `unreachable!` rather than
+        // one language silently missing a mode's hints.
+        for lang in ALL {
+            for mode in [
+                Mode::Normal,
+                Mode::Insert,
+                Mode::Search,
+                Mode::Backlinks,
+                Mode::EditBody,
+                Mode::TagResults,
+                Mode::TagList,
+            ] {
+                let (label, hints) = lang.mode_line(mode);
+                assert!(!label.is_empty());
+                assert!(!hints.is_empty());
             }
         }
     }

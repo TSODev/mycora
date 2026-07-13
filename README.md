@@ -12,11 +12,13 @@ otherwise separate trees.
 > backed full-text search, the "mycelial" cross-link layer
 > (`[[wikilink]]`-style references with a backlinks panel), a resizable
 > three-pane layout with a `:` command palette, multi-vault mounting
-> (including archiving a vault to a single compressed file), and Obsidian
-> import / Markdown-or-PDF export are all shipped today (v0.1–v0.9). Two
-> items are deliberately deferred — link autocompletion and configurable
-> keybindings — see [ROADMAP.md](./ROADMAP.md) for what's built vs.
-> still ahead, and [USAGE.md](./USAGE.md) to actually use it.
+> (including archiving a vault to a single compressed file), a
+> multilingual interface (English/French/Spanish/German, switchable
+> live with `:lang`), and Obsidian import / Markdown-or-PDF export are
+> all shipped today (v0.1–v0.9). Two items are deliberately deferred —
+> link autocompletion and configurable keybindings — see
+> [ROADMAP.md](./ROADMAP.md) for what's built vs. still ahead, and
+> [USAGE.md](./USAGE.md) to actually use it.
 
 ![Mycora's three-pane layout: tree on the left (with a second, read-only
 mounted vault below it), a Markdown-rendered body preview with tag
@@ -123,6 +125,12 @@ names the part of the design that's actually differentiating: not the tree
   preview + backlinks panes, a full-pane body editor, a `:` command
   palette, light/dark theming for free via named ANSI colors, and
   session persistence (remembers where you were, per vault).
+- **Multilingual interface**: English (default), French, Spanish, and
+  German — `language = "fr"` in `config.toml`, or `:lang <en|fr|es|de>`
+  to switch live from inside the TUI, persisted for next time.
+  Keybindings and command syntax stay identical in every language, like
+  vim's `:w`; every string is embedded and compile-checked, so a
+  missing translation is a build failure, not a runtime gap.
 - **Import/export**: `mycora import` converts an existing Obsidian vault
   (folder structure becomes tree structure); `:export`/`mycora export`
   flattens a note's subtree to a single Markdown *or* PDF document
@@ -205,7 +213,8 @@ BM25 ranking, tag/date/branch facets) that scales linearly to thousands
 of notes, the `[[wikilink]]` cross-link layer with a backlinks panel,
 multi-vault mounting (including archiving a vault to a single
 compressed file) with a full `mycora vault` CLI, a resizable three-pane
-TUI layout with a `:` command palette, and Obsidian import /
+TUI layout with a `:` command palette, a multilingual interface
+(English/French/Spanish/German), and Obsidian import /
 Markdown-or-PDF export. See [USAGE.md](./USAGE.md) for how to use it
 today, [ROADMAP.md](./ROADMAP.md) for what's still ahead (a stable
 v1.0), and [BENCHMARK.md](./BENCHMARK.md) for how it performs at

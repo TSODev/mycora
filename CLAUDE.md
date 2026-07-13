@@ -12,11 +12,14 @@ backlinks panel and cross-vault resolution). Both halves are implemented and
 shipped, along with SQLite FTS5 search (ranked, with snippets and tag/date/
 branch facets), multi-vault mounting (a registry of vaults, only one of
 which is editable at a time), a resizable three-pane layout (tree + a
-Markdown-rendered body preview + backlinks), a `:` command palette, and
-session persistence. v0.1 through v0.7 are functionally complete except two
-deliberately deferred items — link autocompletion while typing `[[`, and
-arbitrary configurable keybindings — see ROADMAP.md for the full staged
-plan and the reasoning behind every non-obvious decision along the way.
+Markdown-rendered body preview + backlinks), a `:` command palette,
+session persistence, and a multilingual interface (English/French/
+Spanish/German, `config.toml`'s `language` key or `:lang` to switch
+live — see `lang.rs`). v0.1 through v0.9 are functionally complete
+except two deliberately deferred items — link autocompletion while
+typing `[[`, and arbitrary configurable keybindings — see ROADMAP.md
+for the full staged plan and the reasoning behind every non-obvious
+decision along the way.
 `examples/showcase-vault/` is a real, committed Mycora vault documenting
 Mycora itself (philosophy, interface, features, design decisions, as
 interlinked notes) — a good first thing to open when getting oriented, and
@@ -28,7 +31,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (83 tests, all in-crate, no external deps)
+cargo test                # all unit tests (175 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -46,8 +49,9 @@ mycora reindex [--watch]  # CLI subcommand, not a cargo command — rebuilds
 - No `rustfmt.toml`/`clippy.toml`, no CI workflow (`.github/workflows` does
   not exist), no Cursor/Copilot instruction files in this repo.
 - **Tests are all `#[cfg(test)] mod tests` unit tests**, spread across
-  `tree.rs`, `vault.rs`, `config.rs`, `index.rs`, `link.rs`, `markdown.rs`,
-  and `session.rs` — there is no `tests/` integration directory. None of
+  `tree.rs`, `vault.rs`, `config.rs`, `index.rs`, `link.rs`, `lang.rs`,
+  `markdown.rs`, and `session.rs` — there is no `tests/` integration
+  directory. None of
   them need an external service, network, or env var: `vault.rs`/`index.rs`
   tests build a scratch directory under `std::env::temp_dir()` per test
   (unique via a fresh UUID) and clean it up at the end. The only place
@@ -103,7 +107,30 @@ directly and guarantee its synthetic output matches the real on-disk format.
   the sole *editable* vault — every other mounted vault is read-only in the
   TUI (see `app.rs`'s `ReadOnlyVault`). A legacy single `vault_path` key is
   still honored as a fallback when `vaults` is empty, so a pre-registry
-  config keeps working unchanged. Requires `HOME` to be set.
+  config keeps working unchanged. Also holds `language: Lang` (from an
+  optional `language = "fr"` key, see `lang.rs`) — an unrecognized code
+  fails `load()` loudly rather than silently defaulting to English.
+  Requires `HOME` to be set.
+- **`lang.rs` — `Lang`**: the TUI's interface language (`En`/`Fr`/`Es`/
+  `De`, English default) — every label, hint, prompt, and status message
+  in `app.rs`/`ui.rs` routes through a `Lang` method (`unknown_command`,
+  `mode_line`, `command_reference`, ...) rather than a literal string.
+  Every language is embedded as compile-checked `format!` calls, not
+  external language files — a missing translation is a compile error
+  (the `match self { Lang::En => ..., ... }` exhaustiveness check
+  refuses to build otherwise), and adding a language is mechanical
+  rather than risky. Keybindings and command syntax (`:tags limit`,
+  `show`/`hide`, ...) never translate, same as vim's `:w` — only
+  `command_reference`'s *descriptions* differ per language, its
+  `(syntax, ...)` halves are asserted identical in a unit test.
+  Spanish/German are machine-translated and flagged (in this doc
+  comment and USAGE.md) as not yet reviewed by a native speaker, unlike
+  the reviewed English/French pair. `:lang <en|fr|es|de>` (`app.rs`'s
+  `command_lang`) switches `App::lang` live — every string re-reads it
+  on each of `ui.rs`'s ~10fps redraws, so reassigning the field *is*
+  the refresh, no separate mechanism needed — and persists the choice
+  via `Config::set_language` (same parse-and-rewrite plumbing as
+  `add_vault`). CLI output stays English for now; this is TUI-only.
 - **`index.rs` — `Index`**: the disposable SQLite index behind search, tag
   filtering, and links (`~/.local/share/mycora/index.sqlite3`, `rusqlite`
   `bundled`, no system libsqlite3). Schema: `notes`, `tree_edges`, `tags`,
@@ -174,9 +201,10 @@ directly and guarantee its synthetic output matches the real on-disk format.
   belongs to, and `require_editable(id)` is the guard every mutating
   method checks first, refusing with `last_error` rather than silently
   no-oping or acting on the wrong vault if `id` isn't in the active tree.
-  `COMMAND_REFERENCE` (`&[(syntax, description)]`) is the single source
-  both `execute_command`'s dispatch and `ui.rs`'s command-palette help
-  popup read from — keep the two in sync by hand if the command set grows.
+  `Lang::command_reference()` (`&[(syntax, description)]`, in `lang.rs`)
+  is the single source both `execute_command`'s dispatch and `ui.rs`'s
+  command-palette help popup read from — keep the two in sync by hand
+  if the command set grows.
 - **`event.rs`**: crossterm key polling (100ms), dispatches on `app.mode`.
   `Ctrl+C` is handled unconditionally before mode dispatch (raw mode
   disables SIGINT generation, so this is the only way to get an emergency
@@ -196,7 +224,11 @@ directly and guarantee its synthetic output matches the real on-disk format.
   `EditBody`, `TagResults`), which take over the whole area instead.
   `Mode::Command` additionally overlays a small `Clear`-first help popup
   (`draw_command_help`, anchored bottom-center via `popup_rect`) listing
-  `COMMAND_REFERENCE` for as long as the `:` prompt is open. Every color is
+  `Lang::command_reference()` (in `app.lang`'s language) for as long as
+  the `:` prompt is open. Every string rendered here — titles, hints,
+  prompts, markers — reads `app.lang` rather than a literal, which is
+  also the entire mechanism behind `:lang` switching live (see
+  `lang.rs`): nothing here caches or needs invalidating. Every color is
   a named ANSI color, not RGB/indexed, so light/dark theming comes from
   whatever the terminal itself is configured with — no in-app theme
   switch. No state lives here.
