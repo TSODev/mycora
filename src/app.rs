@@ -227,7 +227,13 @@ pub enum TreeRow {
         /// `false` for anything outside the active vault.
         editable: bool,
     },
-    VaultSeparator(String),
+    /// A vault-name header row — one per mounted vault, the active one
+    /// included (unlike before v0.9's polish pass, where only read-only
+    /// vaults got a separator and the active one had none at all).
+    /// `editable` distinguishes the active vault's header from a
+    /// read-only one's for styling, without `ui.rs` having to infer it
+    /// from row order.
+    VaultSeparator { name: String, editable: bool },
     /// A registered vault that isn't currently mounted — nothing is
     /// loaded for it (no `Tree`, no `Vault`), so unlike `Note` it can
     /// never expand, and selecting it sets `App::selected_unmounted_vault`
@@ -556,11 +562,18 @@ impl App {
     /// view with real navigation.
     pub fn visible_rows(&self) -> Vec<TreeRow> {
         let mut out = Vec::new();
+        out.push(TreeRow::VaultSeparator {
+            name: self.vault_id.clone(),
+            editable: true,
+        });
         for &root in self.tree.roots() {
             self.push_visible_row(&self.tree, &self.vault_id, root, 0, true, &mut out);
         }
         for v in &self.other_vaults {
-            out.push(TreeRow::VaultSeparator(v.id.clone()));
+            out.push(TreeRow::VaultSeparator {
+                name: v.id.clone(),
+                editable: false,
+            });
             for &root in v.tree.roots() {
                 self.push_visible_row(&v.tree, &v.id, root, 0, false, &mut out);
             }
@@ -671,7 +684,7 @@ impl App {
             .into_iter()
             .filter_map(|row| match row {
                 TreeRow::Note { id, .. } => Some(Stop::Note(id)),
-                TreeRow::VaultSeparator(_) => None,
+                TreeRow::VaultSeparator { .. } => None,
                 TreeRow::UnmountedVault { name, .. } => Some(Stop::Unmounted(name)),
                 TreeRow::ArchivedVault { name, .. } => Some(Stop::Archived(name)),
             })

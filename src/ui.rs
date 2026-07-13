@@ -20,6 +20,12 @@ use crate::lang::Lang;
 const PANE_TREE_COLOR: Color = Color::Blue;
 const PANE_BODY_COLOR: Color = Color::Magenta;
 
+/// Background for a vault-name header row in the tree pane — reused
+/// from `STATUS_BG` (the status bar's own background) rather than a new
+/// color, so each vault's delimiter reads as part of the same visual
+/// language as the rest of the chrome instead of an arbitrary accent.
+const VAULT_HEADER_BG: Color = STATUS_BG;
+
 /// `Length(2)` status band at the bottom (see `draw_status`) below the
 /// main content — matches Terapi/jsoned's 2-line status bar convention.
 pub fn draw(frame: &mut Frame, app: &App) {
@@ -105,14 +111,26 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
 fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
     let dim = Style::default().add_modifier(Modifier::DIM);
     let mut selected_index = None;
+    // Inner width once the block's left/right borders are subtracted —
+    // used to center vault-name headers and fill their background bar
+    // edge-to-edge rather than only behind the name itself.
+    let inner_width = area.width.saturating_sub(2);
 
     let items: Vec<ListItem> = app
         .visible_rows()
         .into_iter()
         .enumerate()
         .map(|(i, row)| match row {
-            TreeRow::VaultSeparator(name) => {
-                ListItem::new(Line::from(Span::styled(format!("── {name} ──"), dim)))
+            TreeRow::VaultSeparator { name, editable } => {
+                let style = if editable {
+                    Style::default()
+                        .bg(VAULT_HEADER_BG)
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().bg(VAULT_HEADER_BG).fg(Color::DarkGray)
+                };
+                ListItem::new(centered_vault_header(&name, inner_width, style))
             }
             TreeRow::Note {
                 id,
@@ -193,6 +211,26 @@ fn draw_tree(frame: &mut Frame, area: Rect, app: &App) {
     // recomputes the correct scroll offset from `selected_index` alone.
     let mut state = ListState::default().with_selected(selected_index);
     frame.render_stateful_widget(list, area, &mut state);
+}
+
+/// Centers `name` inside a `width`-cell-wide styled span, for the tree
+/// pane's vault-name header rows — padded with spaces on both sides
+/// (an odd leftover cell goes right) so `style`'s background paints the
+/// full row edge-to-edge rather than only behind the name itself. Falls
+/// back to the bare name, unpadded, if it doesn't fit — better an
+/// overflowing name than a panic on the width subtraction.
+fn centered_vault_header(name: &str, width: u16, style: Style) -> Line<'static> {
+    let width = width as usize;
+    let name_len = name.chars().count();
+    let text = match width.checked_sub(name_len) {
+        Some(pad) => {
+            let left = pad / 2;
+            let right = pad - left;
+            format!("{}{name}{}", " ".repeat(left), " ".repeat(right))
+        }
+        None => name.to_string(),
+    };
+    Line::from(Span::styled(text, style))
 }
 
 /// Read-only preview of the selected note's body, rendered as Markdown

@@ -6,7 +6,7 @@ tags:
 - interface
 - layout
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T21:00:00Z
+updated: 2026-07-13T15:00:00Z
 ---
 
 # Layout
@@ -16,10 +16,13 @@ tree, body preview, backlinks, plus search/tag results elsewhere in the
 app — scrolls to keep whatever's selected on screen; see
 [[Every pane actually scrolls now]] for why that needed fixing at all.
 
-- **Tree** (left, blue border) — the indented, collapsible note tree. If
-  other vaults are mounted (see [[Multi-vault mounting]]), their notes
-  appear stacked below it, dimmed and read-only but just as navigable —
-  not roots-only.
+- **Tree** (left, blue border) — the indented, collapsible note tree.
+  Every mounted vault gets its own centered, background-colored name
+  bar — bold cyan for the active one, dim gray for read-only ones — so
+  a registry with several mounted at once still reads as clearly
+  separate sections. If other vaults are mounted (see
+  [[Multi-vault mounting]]), their notes appear stacked below that bar,
+  dimmed and read-only but just as navigable — not roots-only.
 - **Body preview** (middle, magenta border, with a little horizontal
   padding off the border) — the selected note's body, rendered as
   formatted Markdown (headings, bold/italic, code, lists, blockquotes,

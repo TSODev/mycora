@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Colored, centered vault-name headers in the tree pane** — every
+  mounted vault (the active one included, which previously had no
+  header row of its own at all) now gets a full-width, centered name
+  bar instead of the old dim `── name ──` separator, making multiple
+  mounted vaults easier to tell apart at a glance. The active vault's
+  bar is bold cyan; read-only ones are dim gray; both share the status
+  bar's own background color rather than introducing a new one.
+
 ## [0.9.0] — 2026-07-13
 
 ### Added

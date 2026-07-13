@@ -1238,6 +1238,48 @@ Goal: stability before a public release.
       (3 new: a `from_code`/`code()` round-trip check, a `mode_line`
       completeness check across every mode × language, and a
       config-side "every known code loads" check), clippy clean.
+- [x] **Colored, centered vault-name headers in the tree pane**
+      (2026-07-13, user-requested, purely aesthetic) — asked for a
+      background color behind each vault's name in the tree pane to
+      better delimit multiple mounted vaults, and for the name to be
+      centered. `TreeRow::VaultSeparator` (see the "Multiple vaults"
+      open design question below for its original introduction) changed
+      from a bare `String` to `{ name: String, editable: bool }`, and
+      `App::visible_rows()` now pushes one for the *active* vault too,
+      right before its own roots — previously only read-only vaults got
+      a separator row at all; the active one had none, relying solely on
+      the pane's static "Mycora" block title. `ui.rs` gained
+      `centered_vault_header(name, width, style)`: pads `name` with
+      spaces on both sides (using `area.width - 2` for the block's
+      borders, recomputed every frame so `[`/`]` pane-resizing keeps it
+      centered) so the background paints edge-to-edge rather than only
+      behind the text — a `Style`'s `.bg()` only covers the cells a span
+      actually contains, so an unpadded centered string would've left a
+      colored word floating in an otherwise unstyled row rather than a
+      full bar. Background reuses `STATUS_BG` (`Color::Indexed(236)`,
+      the status bar's own) rather than a new color, so the delimiter
+      reads as the same visual language as the rest of the chrome; the
+      active vault's name renders bold cyan (matching the "this is the
+      active/focused thing" cyan already used for the status bar's mode
+      label and the backlinks pane's focus border) and a read-only
+      vault's renders dim gray (matching `UnmountedVault`/`ArchivedVault`
+      rows' existing `Color::DarkGray`). Deliberately scoped to
+      `VaultSeparator` only, not `UnmountedVault`/`ArchivedVault` rows
+      too — those are individually selectable (`REVERSED` on selection)
+      and already have their own `⊘`/`▦` icon distinction, and combining
+      a reversed highlight with a padded, background-colored row seemed
+      likely to render inconsistently across terminals rather than
+      obviously better. Manually verified in tmux (a two-vault scratch
+      setup, active vault named `default` plus the showcase vault
+      mounted read-only): captured raw ANSI escapes to confirm the exact
+      styling landed (`1m` bold + `38;5;6` cyan + `48;5;236` background
+      for `default`, `38;5;8` dark gray + the same background for
+      `showcase`, both correctly space-padded), then grew the tree pane
+      with `]` `]` and confirmed both bars recentered to the new width
+      rather than staying centered on the old one. 175 tests still pass
+      (no behavioral change, `VaultSeparator` stays filtered out of
+      `move_selection`'s navigable stops exactly as before), clippy
+      clean.
 - [ ] **Attach images/other files to a note, without rendering them**
       (2026-07-12, user-floated, explicitly not scheduled yet — just
       captured for later) — asked "even if we don't display them, what
