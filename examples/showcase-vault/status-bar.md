@@ -6,7 +6,7 @@ tags:
 - interface
 - status-bar
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T14:00:00Z
+updated: 2026-07-13T18:00:00Z
 ---
 
 # Status bar
@@ -25,15 +25,23 @@ background.
   [[Multi-vault mounting]] and [[Unmounted vaults are visible too]]).
   Fixed-width so the breadcrumb's own text doesn't shift as the marker
   changes; blank but still painted with the row's background otherwise.
+  When there's room for it alongside the breadcrumb text and the
+  marker, a third segment — the selected note's last-modified time
+  (`modified: YYYY-MM-DD HH:MM`, UTC) — sits centered on the *whole*
+  row, not just tacked on after the breadcrumb; on a narrow terminal
+  it's dropped entirely rather than squeezed in.
 - **Row 2 — hints**: a bold mode label, then keybinding hints tokenized
-  on a `key: label` convention (bold key, dim colon, muted label). In
-  Normal mode with a read-only note selected, the seven hints for
-  actions that would just refuse (`a/o`, `y`, `Tab/S-Tab`, `K/J`, `i`,
-  `e`, `d` — everything [[Guard every mutation against the wrong vault]]
-  covers) dim down to the row's own separator style instead of sitting
-  at full brightness for keys that won't do anything. On an
-  unmounted/archived vault's row, `h/l/space` (fold) dims too, since
-  there's nothing loaded to expand at all. `u`/`^R` (undo/redo) are
+  on a `key: label` convention (bold key, dim colon, muted label).
+  Normal mode's own hints are deliberately a short, curated subset —
+  `j/k`, `a/o`, `e`, `d`, `u`, `/`, `?`, `q` — not the full keybinding
+  set, which grew too long for any real terminal width over several
+  versions; `?` opens a full-pane reference of everything else
+  (dismissed by any keypress). With a read-only note selected, the
+  three shown mutating hints that would just refuse (`a/o`, `e`, `d` —
+  everything [[Guard every mutation against the wrong vault]] covers)
+  dim down to the row's own separator style instead of sitting at full
+  brightness for keys that won't do anything; same for an
+  unmounted/archived vault's placeholder row. `u`/`^R` (undo/redo) are
   never dimmed — they aren't gated the same way, since the undo stack
   can never hold a foreign-vault action in the first place.
 

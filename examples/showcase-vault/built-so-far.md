@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T17:00:00Z
+updated: 2026-07-13T18:00:00Z
 ---
 
 # Built so far
@@ -74,6 +74,11 @@ updated: 2026-07-13T17:00:00Z
   centered, background-colored name header in the tree pane (see
   [[Layout]]); the body editor now offers wikilink autocompletion as you
   type (see [[Cross-links and backlinks]]) — the last of the two
-  long-deferred headline items from early on, open since v0.5; and `f`
+  long-deferred headline items from early on, open since v0.5; `f`
   follows a note's outgoing wikilinks, the backlinks pane's exact mirror
-  image (see [[Cross-links and backlinks]])
+  image (see [[Cross-links and backlinks]]); and the status bar got two
+  fixes at once — Normal mode's hint row, grown to 233 characters over
+  several versions, is now a short curated set plus a `?` full-pane
+  reference for everything else, and the breadcrumb row gained a
+  centered "last modified" timestamp, shown only when there's room
+  (see [[Status bar]])

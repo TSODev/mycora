@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (183 tests, all in-crate, no external deps)
+cargo test                # all unit tests (184 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -182,7 +182,7 @@ directly and guarantee its synthetic output matches the real on-disk format.
   `Tree` + `Vault`, every other mounted-but-read-only vault
   (`ReadOnlyVault { id, tree, vault }`), and the shared `Index`. `Mode` is
   `Normal | Insert | ConfirmDelete | Search | Backlinks | EditBody |
-  Command | TagResults | TagList | Links` — dispatch lives in `event.rs`, rendering in
+  Command | TagResults | TagList | Links | Help` — dispatch lives in `event.rs`, rendering in
   `ui.rs` (see those files' notes on which modes are full-pane overlays vs.
   status-bar-only prompts vs. in-place pane focus). Every mutating method
   (`create_child`, `commit_rename`, `confirm_delete`, `indent_selected`,
@@ -237,6 +237,23 @@ directly and guarantee its synthetic output matches the real on-disk format.
   a named ANSI color, not RGB/indexed, so light/dark theming comes from
   whatever the terminal itself is configured with — no in-app theme
   switch. No state lives here.
+  Normal mode's hint row (`draw_hint_row`) deliberately shows only a
+  short, curated subset of keys (`Lang::mode_line`'s `Normal` arm) — the
+  full set once ran to 233 characters, wider than any real terminal;
+  `?` (`Mode::Help`, `draw_help`) is a full-pane overlay over
+  `Lang::help_reference()` for everything else, dismissed by any
+  keypress rather than requiring `Esc` specifically (there's no
+  selection to navigate, just a static list). `draw_breadcrumb` adds a
+  third, centered segment — the selected note's `updated` timestamp
+  (`format_last_modified`, UTC, plain `OffsetDateTime` field access
+  rather than `time::format_description` to avoid needing the
+  unenabled `macros` Cargo feature) — via `Constraint::Fill(1)` on both
+  sides of the fixed-width label, *not* the breadcrumb's own existing
+  `Min(0)` chunk, so it centers on the *whole* row regardless of
+  breadcrumb length; hidden below `MIN_BREADCRUMB_RESERVE` rather than
+  ever being squeezed. The two `Fill(1)` sides split *remaining* space
+  *equally* — the show/hide guard has to clear each side's own minimum
+  individually (`2 * max(reserve, marker_width)`), not just their sum.
 
 ## Known pitfall (from CHANGELOG)
 

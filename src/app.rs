@@ -84,6 +84,14 @@ pub enum Mode {
     /// focus into, so this is a transient list instead, dismissed on
     /// `Esc` or after `Enter` jumps. See `App::begin_links`.
     Links,
+    /// The full-pane `?` keybinding reference, over `Lang::help_reference`
+    /// — Normal mode's own hint row only shows a short, curated subset
+    /// (see `Lang::mode_line`'s `Normal` arm) since the whole set is far
+    /// too long to fit any real terminal width; this is where the rest
+    /// lives. No navigation of its own: any key dismisses it and returns
+    /// to Normal (see `App::cancel_help`), the same "press anything to
+    /// close" convention most terminal apps' own help screens use.
+    Help,
 }
 
 /// An action that can be pushed onto `undo_stack`/`redo_stack`. Applying one
@@ -1440,6 +1448,18 @@ impl App {
 
     pub fn links_selected(&self) -> usize {
         self.links_selected
+    }
+
+    /// `?` — opens the full keybinding reference (`Mode::Help`).
+    pub fn begin_help(&mut self) {
+        self.mode = Mode::Help;
+    }
+
+    /// Any key while `Mode::Help` is open — see that variant's doc
+    /// comment for why there's no narrower dispatch than "anything
+    /// closes it."
+    pub fn cancel_help(&mut self) {
+        self.mode = Mode::Normal;
     }
 
     /// The selected note, wherever it lives — the active vault or a

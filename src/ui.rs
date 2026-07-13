@@ -79,6 +79,10 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
             draw_links(frame, area, app);
             return;
         }
+        Mode::Help => {
+            draw_help(frame, area, app.lang);
+            return;
+        }
         Mode::Normal | Mode::Insert | Mode::ConfirmDelete | Mode::Backlinks | Mode::Command => {}
     }
 
@@ -509,6 +513,40 @@ fn tags_scope_label(app: &App) -> String {
     }
 }
 
+/// `?`'s full-pane keybinding reference (`Mode::Help`) — every
+/// Normal-mode key (`Lang::help_reference`), not just the short curated
+/// subset the hint row shows day to day (see that row's own doc
+/// comment for why it's short at all). Full-pane rather than a small
+/// popup like `draw_command_help`'s: at ~24 entries this is roughly
+/// twice the command palette's own list, and a popup sized to fit that
+/// comfortably would start to rival the full pane anyway. Dismissed by
+/// any key (see `App::cancel_help`), so there's nothing to move a
+/// selection through — a static list is enough.
+fn draw_help(frame: &mut Frame, area: Rect, lang: Lang) {
+    let key_style = Style::default()
+        .fg(Color::Cyan)
+        .add_modifier(Modifier::BOLD);
+    let desc_style = Style::default();
+
+    let items: Vec<ListItem> = lang
+        .help_reference()
+        .iter()
+        .map(|(key, desc)| {
+            ListItem::new(Line::from(vec![
+                Span::styled(format!("{key:<18}"), key_style),
+                Span::styled(*desc, desc_style),
+            ]))
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(lang.help_title()),
+    );
+    frame.render_widget(list, area);
+}
+
 /// Small reference popup listing every command `App::execute_command`
 /// recognizes (`Lang::command_reference`, in the configured language),
 /// anchored to the bottom of the main area — directly above the status
@@ -686,6 +724,30 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
     draw_hint_row(frame, rows[1], app);
 }
 
+/// `"YYYY-MM-DD HH:MM"`, UTC (notes are timestamped `OffsetDateTime::now_utc()`
+/// throughout the crate — see `note.rs` — so this is "as stored," not a
+/// locally-converted time; the `time` crate's local-offset support has
+/// real soundness caveats in a multi-threaded program, not worth taking
+/// on for a display-only label). Manual field formatting rather than
+/// `time::format_description` — avoids needing the `macros` Cargo
+/// feature (not currently enabled) just for this one fixed layout.
+fn format_last_modified(dt: time::OffsetDateTime) -> String {
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}",
+        dt.year(),
+        u8::from(dt.month()),
+        dt.day(),
+        dt.hour(),
+        dt.minute()
+    )
+}
+
+/// Below this, the centered "last modified" label is skipped entirely
+/// rather than squeezed in — an arbitrary but generous floor so a long
+/// breadcrumb is never fighting a "nice to have" label for space on a
+/// narrow terminal.
+const MIN_BREADCRUMB_RESERVE: u16 = 20;
+
 fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
     let mut text = app.vault_name().to_string();
     for title in app.breadcrumb_titles() {
@@ -693,22 +755,59 @@ fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
         text.push_str(&title);
     }
 
+    let marker_width = app.lang.marker_width();
+    let modified = app
+        .selected_note()
+        .map(|note| app.lang.last_modified_label(&format_last_modified(note.updated)));
+    let modified_width = modified.as_ref().map_or(0, |m| m.chars().count() as u16);
+
+    // The two `Fill(1)` sides below split whatever's left after the
+    // centered label *equally* — so each side clearing its own minimum
+    // (the breadcrumb's reserve on the left, the marker's width on the
+    // right) means the leftover must be at least *twice* the larger of
+    // the two, not just their simple sum.
+    let show_modified = modified_width > 0
+        && area.width >= modified_width + 2 * MIN_BREADCRUMB_RESERVE.max(marker_width);
+
     // The `READ-ONLY`/`UNMOUNTED`/`ARCHIVED` label gets a fixed-width
     // column on the right (per-language — see `Lang::marker_width`) so
     // the breadcrumb's own width doesn't shift as you move in and out of
-    // these vaults. Blank (but still painted with `STATUS_BG`) when the
-    // selection is editable.
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(0),
-            Constraint::Length(app.lang.marker_width()),
-        ])
-        .split(area);
+    // these vaults. When there's room, the selected note's last-modified
+    // time sits centered on the *whole* row — `Fill(1)` on both sides of
+    // a `Length(modified_width)` middle segment, rather than a fixed
+    // column right after the breadcrumb, is what keeps it centered on
+    // the row regardless of how long the breadcrumb text happens to be.
+    let marker_area = if show_modified {
+        let outer = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Fill(1),
+                Constraint::Length(modified_width),
+                Constraint::Fill(1),
+            ])
+            .split(area);
 
-    let breadcrumb =
-        Paragraph::new(text).style(Style::default().bg(STATUS_BG).fg(Color::Gray));
-    frame.render_widget(breadcrumb, chunks[0]);
+        let breadcrumb =
+            Paragraph::new(text).style(Style::default().bg(STATUS_BG).fg(Color::Gray));
+        frame.render_widget(breadcrumb, outer[0]);
+
+        let modified_widget = Paragraph::new(modified.unwrap())
+            .style(Style::default().bg(STATUS_BG).fg(Color::DarkGray));
+        frame.render_widget(modified_widget, outer[1]);
+
+        outer[2]
+    } else {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(0), Constraint::Length(marker_width)])
+            .split(area);
+
+        let breadcrumb =
+            Paragraph::new(text).style(Style::default().bg(STATUS_BG).fg(Color::Gray));
+        frame.render_widget(breadcrumb, chunks[0]);
+
+        chunks[1]
+    };
 
     let marker = if app.selected_is_unmounted_vault() {
         app.lang.marker_unmounted()
@@ -727,7 +826,7 @@ fn draw_breadcrumb(frame: &mut Frame, area: Rect, app: &App) {
                 .add_modifier(Modifier::ITALIC),
         )
         .alignment(ratatui::layout::Alignment::Right);
-    frame.render_widget(marker, chunks[1]);
+    frame.render_widget(marker, marker_area);
 }
 
 fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
@@ -784,21 +883,24 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
     let label_style = bg.fg(Color::Gray);
 
     // In Normal mode with a read-only note selected, every mutating key
-    // dims out (same style as the separators) instead of its usual
-    // bold-key/muted-label styling — it'll still just report "this vault
-    // is read-only" if pressed (see `App::require_editable`), so the hint
-    // row says so before the user tries. An unmounted or archived vault's
-    // placeholder row goes further still: `h/l/space` (fold) dims too,
-    // since there's nothing loaded to expand at all, not just nothing
-    // editable. Every other mode's hints are either non-mutating already
-    // (Search, Backlinks, TagResults, ...) or only ever reachable with an
+    // still shown in the (now curated-short, see `Lang::mode_line`'s
+    // `Normal` arm) hint row dims out (same style as the separators)
+    // instead of its usual bold-key/muted-label styling — it'll still
+    // just report "this vault is read-only" if pressed (see
+    // `App::require_editable`), so the hint row says so before the user
+    // tries. An unmounted or archived vault's placeholder row disables
+    // the exact same set — folding isn't offered inline any more either
+    // (see the full `?` reference for that), so there's nothing further
+    // to add for "nothing loaded to expand" the way there used to be.
+    // Every other mode's hints are either non-mutating already (Search,
+    // Backlinks, TagResults, ...) or only ever reachable with an
     // editable selection to begin with, so no dimming applies there.
     let disabled_keys: &[&str] = if app.mode == Mode::Normal
-        && (app.selected_is_unmounted_vault() || app.selected_is_archived_vault())
+        && (app.selected_is_unmounted_vault()
+            || app.selected_is_archived_vault()
+            || app.selected_is_read_only())
     {
-        &["h/l/space", "a/o", "y", "Tab/S-Tab", "K/J", "i", "e", "d"]
-    } else if app.mode == Mode::Normal && app.selected_is_read_only() {
-        &["a/o", "y", "Tab/S-Tab", "K/J", "i", "e", "d"]
+        &["a/o", "e", "d"]
     } else {
         &[]
     };

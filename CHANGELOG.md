@@ -8,6 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`?` — full keybinding reference** — opens a full-pane list of every
+  Normal-mode key, dismissed by pressing anything. Exists because
+  Normal mode's hint row itself was cut down to a short, curated subset
+  (see below) — `?` is where the rest lives.
+- **A centered "last modified" timestamp on the breadcrumb row** — shown
+  for the selected note when there's enough terminal width for it
+  alongside the breadcrumb text and the read-only/unmounted/archived
+  marker; hidden entirely rather than squeezed in on a narrow terminal.
+  UTC, `YYYY-MM-DD HH:MM`.
 - **`f` — follow the selected note's outgoing `[[wikilinks]]`** —
   `Backlinks`' mirror image: opens a full-pane list of the notes the
   selected note links *to* (rather than who links to it), spanning
@@ -35,6 +44,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   mounted vaults easier to tell apart at a glance. The active vault's
   bar is bold cyan; read-only ones are dim gray; both share the status
   bar's own background color rather than introducing a new one.
+
+### Changed
+- **Normal mode's hint row is much shorter** — it used to list every
+  single Normal-mode key (233 characters, wider than any real
+  terminal), silently clipped past the edge on anything but a very wide
+  one. Now shows only the handful reached for constantly (`j/k`, `a/o`,
+  `e`, `d`, `u`, `/`, `q`) plus the new `?: help`, which opens the full
+  reference (see Added above) instead.
 
 ## [0.9.0] — 2026-07-13
 

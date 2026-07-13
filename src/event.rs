@@ -45,6 +45,7 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::TagResults => handle_tag_results(app, key.code),
             Mode::TagList => handle_tag_list(app, key.code),
             Mode::Links => handle_links(app, key.code),
+            Mode::Help => app.cancel_help(),
         }
     }
 
@@ -89,6 +90,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Char('/') => app.begin_search(),
         KeyCode::Char('b') => app.focus_backlinks(),
         KeyCode::Char('f') => app.begin_links(),
+        KeyCode::Char('?') => app.begin_help(),
         KeyCode::Char('e') => app.begin_edit_body(),
         KeyCode::Char('[') => app.shrink_tree_pane(),
         KeyCode::Char(']') => app.grow_tree_pane(),

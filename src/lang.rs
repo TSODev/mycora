@@ -190,6 +190,122 @@ impl Lang {
         }
     }
 
+    /// `(key, description)` pairs for `?`'s full-pane keybinding
+    /// reference (`Mode::Help`, see `ui.rs`'s `draw_help`) — every Normal
+    /// mode key, not just the short curated subset `mode_line`'s own
+    /// `Normal` hint string shows. Key *syntax* is identical across
+    /// languages, same reasoning as `command_reference`; kept in sync
+    /// with `event.rs`'s `handle_normal` by hand, same as
+    /// `command_reference` is with `execute_command`.
+    pub fn help_reference(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            Lang::En => &[
+                ("j/k, ↑/↓", "move selection"),
+                ("l, →, Enter", "expand / open"),
+                ("h, ←", "collapse"),
+                ("space", "toggle expand"),
+                ("a", "new child note"),
+                ("o", "new sibling note"),
+                ("y", "duplicate subtree"),
+                ("i", "rename"),
+                ("e", "edit body"),
+                ("d", "delete (asks to confirm)"),
+                ("Tab / Shift+Tab", "indent / outdent"),
+                ("K / J", "reorder up / down among siblings"),
+                ("u", "undo"),
+                ("Ctrl+R", "redo"),
+                ("/", "search"),
+                ("b", "backlinks (notes linking here)"),
+                ("f", "follow outgoing links"),
+                ("[ / ]", "shrink / grow tree pane"),
+                ("{ / }", "shrink / grow backlinks pane"),
+                ("Ctrl+D / Ctrl+U", "scroll body preview down / up"),
+                (":", "command palette"),
+                ("?", "this help"),
+                ("q q", "quit (press twice)"),
+                ("Ctrl+C", "quit immediately"),
+            ],
+            Lang::Fr => &[
+                ("j/k, ↑/↓", "déplacer la sélection"),
+                ("l, →, Enter", "déplier / ouvrir"),
+                ("h, ←", "plier"),
+                ("space", "basculer le pli"),
+                ("a", "nouvelle note enfant"),
+                ("o", "nouvelle note voisine"),
+                ("y", "dupliquer le sous-arbre"),
+                ("i", "renommer"),
+                ("e", "éditer le corps"),
+                ("d", "supprimer (demande confirmation)"),
+                ("Tab / Shift+Tab", "indenter / désindenter"),
+                ("K / J", "réordonner parmi les voisines"),
+                ("u", "annuler"),
+                ("Ctrl+R", "rétablir"),
+                ("/", "rechercher"),
+                ("b", "rétroliens (notes qui pointent ici)"),
+                ("f", "suivre les liens sortants"),
+                ("[ / ]", "réduire / agrandir le panneau arbre"),
+                ("{ / }", "réduire / agrandir le panneau rétroliens"),
+                ("Ctrl+D / Ctrl+U", "faire défiler l'aperçu du corps"),
+                (":", "palette de commandes"),
+                ("?", "cette aide"),
+                ("q q", "quitter (appuyer deux fois)"),
+                ("Ctrl+C", "quitter immédiatement"),
+            ],
+            Lang::Es => &[
+                ("j/k, ↑/↓", "mover la selección"),
+                ("l, →, Enter", "desplegar / abrir"),
+                ("h, ←", "plegar"),
+                ("space", "alternar plegado"),
+                ("a", "nueva nota hija"),
+                ("o", "nueva nota hermana"),
+                ("y", "duplicar subárbol"),
+                ("i", "renombrar"),
+                ("e", "editar cuerpo"),
+                ("d", "eliminar (pide confirmación)"),
+                ("Tab / Shift+Tab", "sangrar / desangrar"),
+                ("K / J", "reordenar entre hermanas"),
+                ("u", "deshacer"),
+                ("Ctrl+R", "rehacer"),
+                ("/", "buscar"),
+                ("b", "retroenlaces (notas que enlazan aquí)"),
+                ("f", "seguir enlaces salientes"),
+                ("[ / ]", "encoger / agrandar el panel del árbol"),
+                ("{ / }", "encoger / agrandar el panel de retroenlaces"),
+                ("Ctrl+D / Ctrl+U", "desplazar la vista previa arriba/abajo"),
+                (":", "paleta de comandos"),
+                ("?", "esta ayuda"),
+                ("q q", "salir (pulsar dos veces)"),
+                ("Ctrl+C", "salir de inmediato"),
+            ],
+            Lang::De => &[
+                ("j/k, ↑/↓", "Auswahl bewegen"),
+                ("l, →, Enter", "aufklappen / öffnen"),
+                ("h, ←", "einklappen"),
+                ("space", "Klappzustand umschalten"),
+                ("a", "neue Kind-Notiz"),
+                ("o", "neue Geschwister-Notiz"),
+                ("y", "Teilbaum duplizieren"),
+                ("i", "umbenennen"),
+                ("e", "Inhalt bearbeiten"),
+                ("d", "löschen (fragt nach Bestätigung)"),
+                ("Tab / Shift+Tab", "einrücken / ausrücken"),
+                ("K / J", "unter Geschwistern umordnen"),
+                ("u", "rückgängig"),
+                ("Ctrl+R", "wiederholen"),
+                ("/", "suchen"),
+                ("b", "Rückverweise (Notizen, die hierher verlinken)"),
+                ("f", "ausgehenden Links folgen"),
+                ("[ / ]", "Baumbereich verkleinern / vergrößern"),
+                ("{ / }", "Rückverweisbereich verkleinern / vergrößern"),
+                ("Ctrl+D / Ctrl+U", "Vorschau runter-/hochscrollen"),
+                (":", "Befehlspalette"),
+                ("?", "diese Hilfe"),
+                ("q q", "beenden (zweimal drücken)"),
+                ("Ctrl+C", "sofort beenden"),
+            ],
+        }
+    }
+
     // ------------------------------------------------------------------
     // ui.rs — pane titles, badges, prompts, hint rows
     // ------------------------------------------------------------------
@@ -345,6 +461,16 @@ impl Lang {
         }
     }
 
+    /// Title of `?`'s full-pane keybinding reference (`Mode::Help`).
+    pub fn help_title(self) -> &'static str {
+        match self {
+            Lang::En => "Keybindings",
+            Lang::Fr => "Raccourcis",
+            Lang::Es => "Atajos de teclado",
+            Lang::De => "Tastenkürzel",
+        }
+    }
+
     /// Title of the `[[wikilink]]` autocomplete popup in the body editor.
     pub fn link_popup_title(self) -> &'static str {
         match self {
@@ -428,33 +554,31 @@ impl Lang {
     /// and it names real keys); only the labels translate.
     pub fn mode_line(self, mode: Mode) -> (&'static str, &'static str) {
         match (self, mode) {
+            // Deliberately short — the full set (this used to list every
+            // Normal-mode key here) ran to 233 characters, wider than any
+            // realistic terminal. `?` opens the complete reference
+            // (`Lang::help_reference`, `Mode::Help`) instead; this row
+            // only keeps the handful reached for constantly, so it stays
+            // short even as more keys are added later.
             (Lang::En, Mode::Normal) => (
                 "NORMAL",
-                "j/k: move  h/l/space: fold  a/o: new  y: copy  Tab/S-Tab: move  \
-                 K/J: reorder  i: rename  e: edit  d: delete  u: undo  ^R: redo  \
-                 /: search  b: backlinks  f: links  [/]: tree width  {/}: backlinks width  \
-                 colon: command  q: quit",
+                "j/k: move  a/o: new  e: edit  d: delete  u: undo  \
+                 /: search  ?: help  q: quit",
             ),
             (Lang::Fr, Mode::Normal) => (
                 "NORMAL",
-                "j/k: bouger  h/l/space: plier  a/o: nouvelle  y: copier  Tab/S-Tab: déplacer  \
-                 K/J: réordonner  i: renommer  e: éditer  d: supprimer  u: annuler  ^R: rétablir  \
-                 /: rechercher  b: rétroliens  f: liens  [/]: largeur arbre  {/}: largeur rétroliens  \
-                 colon: commande  q: quitter",
+                "j/k: bouger  a/o: nouvelle  e: éditer  d: supprimer  u: annuler  \
+                 /: rechercher  ?: aide  q: quitter",
             ),
             (Lang::Es, Mode::Normal) => (
                 "NORMAL",
-                "j/k: mover  h/l/space: plegar  a/o: nueva  y: copiar  Tab/S-Tab: mover  \
-                 K/J: reordenar  i: renombrar  e: editar  d: eliminar  u: deshacer  ^R: rehacer  \
-                 /: buscar  b: enlaces  f: enlaces salientes  [/]: ancho árbol  {/}: ancho enlaces  \
-                 colon: comando  q: salir",
+                "j/k: mover  a/o: nueva  e: editar  d: eliminar  u: deshacer  \
+                 /: buscar  ?: ayuda  q: salir",
             ),
             (Lang::De, Mode::Normal) => (
                 "NORMAL",
-                "j/k: bewegen  h/l/space: falten  a/o: neu  y: kopieren  Tab/S-Tab: verschieben  \
-                 K/J: umordnen  i: umbenennen  e: bearbeiten  d: löschen  u: rückgängig  ^R: wiederholen  \
-                 /: suchen  b: rückverweise  f: links  [/]: Baumbreite  {/}: Verweisbreite  \
-                 colon: Befehl  q: beenden",
+                "j/k: bewegen  a/o: neu  e: bearbeiten  d: löschen  u: rückgängig  \
+                 /: suchen  ?: Hilfe  q: beenden",
             ),
             (Lang::En, Mode::Insert) => ("INSERT", "Enter: confirm  Esc: cancel"),
             (Lang::Fr, Mode::Insert) => ("INSERTION", "Enter: valider  Esc: annuler"),
@@ -516,6 +640,10 @@ impl Lang {
             (Lang::Fr, Mode::Links) => ("LIENS", "j/k: bouger  Enter: sauter  Esc: annuler"),
             (Lang::Es, Mode::Links) => ("ENLACES", "j/k: mover  Enter: saltar  Esc: cancelar"),
             (Lang::De, Mode::Links) => ("LINKS", "j/k: bewegen  Enter: springen  Esc: abbrechen"),
+            (Lang::En, Mode::Help) => ("HELP", "any key: close"),
+            (Lang::Fr, Mode::Help) => ("AIDE", "n'importe quelle touche : fermer"),
+            (Lang::Es, Mode::Help) => ("AYUDA", "cualquier tecla: cerrar"),
+            (Lang::De, Mode::Help) => ("HILFE", "beliebige Taste: schließen"),
             (_, Mode::ConfirmDelete | Mode::Command) => {
                 unreachable!("ConfirmDelete/Command render their own prompt row, not hints")
             }
@@ -559,6 +687,18 @@ impl Lang {
             Lang::Fr => 14,
             Lang::Es => 14,
             Lang::De => 12,
+        }
+    }
+
+    /// The breadcrumb row's centered "last modified" label — `formatted`
+    /// is already a plain `"YYYY-MM-DD HH:MM"` string (see `ui.rs`'s
+    /// `format_last_modified`); this just prepends the translated word.
+    pub fn last_modified_label(self, formatted: &str) -> String {
+        match self {
+            Lang::En => format!("modified: {formatted}"),
+            Lang::Fr => format!("modifié : {formatted}"),
+            Lang::Es => format!("modificado: {formatted}"),
+            Lang::De => format!("geändert: {formatted}"),
         }
     }
 
@@ -1056,6 +1196,17 @@ mod tests {
     }
 
     #[test]
+    fn help_reference_has_the_same_keys_in_every_language() {
+        // Same invariant as `command_reference` above, for `?`'s full
+        // keybinding reference — the key column is real keys, not prose.
+        let en: Vec<&str> = Lang::En.help_reference().iter().map(|(k, _)| *k).collect();
+        for lang in ALL {
+            let keys: Vec<&str> = lang.help_reference().iter().map(|(k, _)| *k).collect();
+            assert_eq!(en, keys, "help key syntax diverged in {lang:?}");
+        }
+    }
+
+    #[test]
     fn normal_mode_hint_keys_are_identical_across_languages() {
         // `disabled_keys` matching in `ui.rs` depends on the key half of
         // each `key: label` token being byte-identical across languages —
@@ -1110,6 +1261,7 @@ mod tests {
                 Mode::TagResults,
                 Mode::TagList,
                 Mode::Links,
+                Mode::Help,
             ] {
                 let (label, hints) = lang.mode_line(mode);
                 assert!(!label.is_empty());

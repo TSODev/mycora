@@ -145,8 +145,9 @@ archived = "/path/to/backup-2024.tar.gz"   # compressed; path above doesn't exis
 The entry named `default` is the one you actually work in — it's the only
 vault you can create/rename/move/delete notes in today. Every other
 mounted vault is fully browsable (not just displayed) but read-only,
-stacked below it with a `── name ──` separator (see [Layout](#layout));
-if none is named `default`, the first mounted entry becomes the editable
+stacked below it behind its own centered, background-colored name
+header (see [Layout](#layout)); if none is named `default`, the first
+mounted entry becomes the editable
 one instead. `mounted` defaults to `true` when omitted, so a vault only
 becomes registry-only-but-inactive if you explicitly set
 `mounted = false`. `archived`, present only on a vault `mycora vault
@@ -436,24 +437,31 @@ Three columns, plus a 2-line status bar at the bottom: the top row is a
 breadcrumb (`vault › branch › note`) for the selected note, with a
 `READ-ONLY` marker on the right whenever that selection is in a
 read-only mounted vault (`UNMOUNTED`/`ARCHIVED` instead for those
-vaults' placeholder rows); the bottom row shows the current mode and the
-relevant keybinding hints (`key: label`, key in bold) — while a
-read-only note is selected, the hints for actions that would refuse
-anyway (`a`/`o`, `y`, `Tab`/`Shift+Tab`, `K`/`J`, `i`, `e`, `d`) dim out
-rather than sitting at full brightness for keys that won't do anything;
-on an unmounted or archived vault's row, `h`/`l`/`Space` (fold) dims
-too, since there's nothing loaded to expand. A prompt — the delete
-confirmation, the quit-confirm notice, or an error — replaces the bottom
-row only, leaving the breadcrumb above it in place.
+vaults' placeholder rows), and — centered, shown only when there's
+enough terminal width for it alongside the breadcrumb and the marker,
+hidden entirely rather than squeezed in otherwise — the selected note's
+last-modified time (`modified: YYYY-MM-DD HH:MM`, UTC). The bottom row
+shows the current mode and a short set of the most-reached-for
+keybinding hints (`key: label`, key in bold) — not every Normal-mode
+key, which no longer fits any real terminal width; press `?` for the
+full reference (see [Keybinding reference](#keybinding-reference)).
+While a read-only note is selected, the hints for actions that would
+refuse anyway (`a`/`o`, `e`, `d`) dim out rather than sitting at full
+brightness for keys that won't do anything; same for an unmounted or
+archived vault's placeholder row. A prompt — the delete confirmation,
+the quit-confirm notice, or an error — replaces the bottom row only,
+leaving the breadcrumb above it in place.
 
 - **Tree** (left, blue border) — the indented, collapsible note tree, same
-  as before. If other vaults are mounted alongside the default one (see
-  [Configuration](#configuration)), their notes appear stacked below it,
-  each vault preceded by a dimmed `── name ──` separator. `j`/`k` and
-  `l`/`h`/`Space` navigate and expand/collapse into these vaults just
-  like the default one — dimmed rows to mark them read-only, but fully
-  browsable, not roots-only. Their link-count badges work the same as
-  the default vault's, just computed against that vault's own notes.
+  as before. Every mounted vault gets its own centered, background-colored
+  name header — bold cyan for the active one, dim gray for read-only
+  ones. If other vaults are mounted alongside the default one (see
+  [Configuration](#configuration)), their notes appear stacked below
+  that header. `j`/`k` and `l`/`h`/`Space` navigate and expand/collapse
+  into these vaults just like the default one — dimmed rows to mark
+  them read-only, but fully browsable, not roots-only. Their
+  link-count badges work the same as the default vault's, just computed
+  against that vault's own notes.
   Below all of that, every *unmounted* registered vault gets its own
   single `⊘ name` row and every *archived* one a `▦ name` row
   (`Color::DarkGray`, no fold marker — see [Configuration](#configuration));
@@ -818,8 +826,14 @@ changes, for the rest of the session. Not persisted across restarts.
 | `[` / `]` | Shrink / grow the tree pane (see [Layout](#layout)) |
 | `{` / `}` | Shrink / grow the backlinks pane |
 | `:` | Open the command palette (see [Command palette](#command-palette)) |
+| `?` | Open this reference (any key closes it) |
 | `q` `q` | Quit (press twice — any other key cancels) |
 | `Ctrl+C` | Quit immediately — bypasses any prompt or confirmation |
+
+This table is the same reference `?` opens in the TUI itself — Normal
+mode's own status-bar hint row only shows a short, curated subset of
+the keys above (see [Layout](#layout)), since the full set is too long
+to fit on a real terminal.
 
 ### Naming / renaming
 

@@ -1463,6 +1463,63 @@ Goal: stability before a public release.
       `outgoing_links` finding every target / being empty for a
       linkless note / resolving a target in a different mounted vault),
       clippy clean.
+- [x] **Trim the Normal-mode hint row, add a `?` reference, add a
+      "last modified" timestamp** (2026-07-13, user-requested) — two
+      status-bar complaints raised together: the hint row (Normal mode)
+      had grown to 233 characters over several versions of "add a key,
+      append it to the hint string" — wider than any real terminal, not
+      just 80-column ones, silently clipped by `ratatui::Paragraph`'s
+      default no-wrap behavior with no indication anything was missing;
+      and could a "last modified" marker be added to the breadcrumb row,
+      centered if there's room. Confirmed the fix direction for the
+      first one via `AskUserQuestion` before touching anything (the
+      two alternatives — truncate silently and call it acceptable, or
+      grow the status band to a second hint row permanently — were both
+      judged worse): **curate the always-visible hint row down to a
+      short, stable subset** (`j/k`, `a/o`, `e`, `d`, `u`, `/`, `q`, plus
+      the new `?`) **and add `?` as a new full-pane keybinding
+      reference** (`Mode::Help`, `Lang::help_reference` — 24 entries ×
+      4 languages, mirroring `COMMAND_REFERENCE`'s "kept in sync by
+      hand" convention) for everything else. Dismissed by *any* key
+      (`App::cancel_help`) rather than requiring `Esc` specifically —
+      the simplest possible interaction for a static reference with no
+      selection to navigate. One real i18n slip caught by
+      `help_reference_has_the_same_keys_in_every_language` (a new test
+      mirroring `command_reference`'s own consistency check): `space`
+      got translated to `espace`/`espacio`/`Leertaste` in the key
+      column, when it's a literal key name like `Enter`/`Esc`/`Ctrl` —
+      those never translate anywhere else in the app (see `Lang`'s own
+      doc comment) and this was just an inconsistent one-off; fixed
+      before it shipped.
+      For the timestamp: `note.updated` (bumped by rename/body edits/
+      tag changes, not move/reorder — see `vault.rs`) formatted as
+      `YYYY-MM-DD HH:MM` via plain `OffsetDateTime` field access
+      (`ui.rs`'s `format_last_modified`) rather than
+      `time::format_description` — avoids enabling the `macros` Cargo
+      feature (not currently on) just for one fixed layout. Deliberately
+      UTC, not locally converted: `time`'s local-offset support has real
+      soundness caveats in a multi-threaded program, not worth taking on
+      for a display-only label — flagged in the doc comment rather than
+      silently picked. True centering *on the whole row*, not just
+      appended after the breadcrumb text, needed `Constraint::Fill(1)`
+      on both sides of the fixed-width timestamp segment rather than the
+      breadcrumb row's existing `Min(0)`-then-`Length` split; hidden
+      entirely (not squeezed) below a `MIN_BREADCRUMB_RESERVE` width
+      floor. Caught and fixed a real math bug in my own first-draft
+      guard condition before it shipped: two `Fill(1)` regions split
+      *remaining* space *equally*, so the room needed on each side must
+      individually clear its own minimum — the correct check is
+      `area.width >= timestamp_width + 2 * max(breadcrumb_reserve,
+      marker_width)`, not the simple sum of all three I'd written first
+      (which passed for some widths where the right-hand `Fill` region
+      would actually have come out narrower than the marker itself).
+      Manually verified in tmux: at 90 columns, both the short hint row
+      and a correctly-centered `modified: 2026-07-13 12:31` label
+      rendered together; `?` opened all 24 entries readably; any
+      keypress closed it; at 50 columns the timestamp disappeared
+      cleanly with no overlap or truncation, only the breadcrumb and
+      hint row remaining. 184 tests (1 new: the help-reference
+      cross-language key-consistency check), clippy clean.
 
 ---
 
