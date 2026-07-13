@@ -826,7 +826,7 @@ changes, for the rest of the session. Not persisted across restarts.
 | `[` / `]` | Shrink / grow the tree pane (see [Layout](#layout)) |
 | `{` / `}` | Shrink / grow the backlinks pane |
 | `:` | Open the command palette (see [Command palette](#command-palette)) |
-| `?` | Open this reference (any key closes it) |
+| `?` | Open this reference — any key closes it, and if that key does something in Normal mode, it does it too (e.g. `?` then `f` opens outgoing links in one step) |
 | `q` `q` | Quit (press twice — any other key cancels) |
 | `Ctrl+C` | Quit immediately — bypasses any prompt or confirmation |
 

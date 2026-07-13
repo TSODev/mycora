@@ -1520,6 +1520,24 @@ Goal: stability before a public release.
       cleanly with no overlap or truncation, only the breadcrumb and
       hint row remaining. 184 tests (1 new: the help-reference
       cross-language key-consistency check), clippy clean.
+      **Since extended** (2026-07-13, user-requested): asked whether a
+      key pressed to dismiss `?`'s reference could also *do* what that
+      key does, rather than needing it pressed a second time (their own
+      examples: `f`, `:`). `event.rs`'s `Mode::Help` dispatch changed
+      from a bare `app.cancel_help()` to `app.cancel_help()` followed by
+      replaying the same `KeyEvent` straight into `handle_normal` — the
+      exact function Normal mode itself dispatches through, so nothing
+      about `f`'s or `:`'s own behavior needed touching, and a key with
+      no Normal-mode binding still just closes the reference, since
+      `handle_normal`'s catch-all is already a no-op. Manually verified
+      in tmux: `?` then `f` closed the reference *and* opened outgoing
+      links (correctly reporting "this note has no outgoing links" for
+      the welcome note); `?` then `:` closed it and opened the command
+      prompt; `?` then an unbound key (`x`) just closed it with no other
+      effect, back to a plain Normal-mode hint row. 184 tests still
+      pass (no new test — this is `event.rs` dispatch wiring, already
+      covered behaviorally by every existing `handle_normal`-reachable
+      action's own tests), clippy clean.
 
 ---
 

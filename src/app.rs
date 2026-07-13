@@ -90,7 +90,11 @@ pub enum Mode {
     /// too long to fit any real terminal width; this is where the rest
     /// lives. No navigation of its own: any key dismisses it and returns
     /// to Normal (see `App::cancel_help`), the same "press anything to
-    /// close" convention most terminal apps' own help screens use.
+    /// close" convention most terminal apps' own help screens use — and
+    /// unlike most of those, the dismissing key isn't just swallowed:
+    /// `event.rs` replays it straight into `handle_normal` afterward, so
+    /// a key that does something (`f`, `:`, ...) both closes the
+    /// reference and performs it, rather than needing pressing twice.
     Help,
 }
 
@@ -1455,9 +1459,11 @@ impl App {
         self.mode = Mode::Help;
     }
 
-    /// Any key while `Mode::Help` is open — see that variant's doc
-    /// comment for why there's no narrower dispatch than "anything
-    /// closes it."
+    /// Any key while `Mode::Help` is open closes it — `event.rs`'s
+    /// dispatch calls this and then replays the same keypress into
+    /// `handle_normal`, so a key that's actually bound to something
+    /// (`f`, `:`, ...) both closes the reference and performs it in one
+    /// press, rather than needing the same key twice.
     pub fn cancel_help(&mut self) {
         self.mode = Mode::Normal;
     }

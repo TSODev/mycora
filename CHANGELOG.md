@@ -11,7 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`?` — full keybinding reference** — opens a full-pane list of every
   Normal-mode key, dismissed by pressing anything. Exists because
   Normal mode's hint row itself was cut down to a short, curated subset
-  (see below) — `?` is where the rest lives.
+  (see below) — `?` is where the rest lives. The dismissing keypress
+  isn't just swallowed: if it's bound to something in Normal mode (`f`,
+  `:`, ...), that runs too, so closing the reference and acting on what
+  you just looked up is one keypress, not two.
 - **A centered "last modified" timestamp on the breadcrumb row** — shown
   for the selected note when there's enough terminal width for it
   alongside the breadcrumb text and the read-only/unmounted/archived

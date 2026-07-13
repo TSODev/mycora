@@ -45,7 +45,17 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::TagResults => handle_tag_results(app, key.code),
             Mode::TagList => handle_tag_list(app, key.code),
             Mode::Links => handle_links(app, key.code),
-            Mode::Help => app.cancel_help(),
+            // Any key closes the reference, same as before — but rather
+            // than just swallowing that keypress, it's replayed straight
+            // into `handle_normal` afterward: pressing `f` (say) while
+            // the reference happens to be open both closes it *and*
+            // opens outgoing links, instead of requiring the same key
+            // twice. A key with no Normal-mode binding still just closes
+            // it, since `handle_normal`'s own catch-all is a no-op.
+            Mode::Help => {
+                app.cancel_help();
+                handle_normal(app, key);
+            }
         }
     }
 

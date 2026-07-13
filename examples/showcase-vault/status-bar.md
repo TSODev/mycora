@@ -6,7 +6,7 @@ tags:
 - interface
 - status-bar
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T18:00:00Z
+updated: 2026-07-13T19:00:00Z
 ---
 
 # Status bar
@@ -35,8 +35,11 @@ background.
   Normal mode's own hints are deliberately a short, curated subset —
   `j/k`, `a/o`, `e`, `d`, `u`, `/`, `?`, `q` — not the full keybinding
   set, which grew too long for any real terminal width over several
-  versions; `?` opens a full-pane reference of everything else
-  (dismissed by any keypress). With a read-only note selected, the
+  versions; `?` opens a full-pane reference of everything else. Any key
+  dismisses it, and — rather than that keypress just being swallowed —
+  it's replayed into Normal mode afterward, so a key that does
+  something (`f`, `:`, ...) both closes the reference and performs it,
+  not two separate presses. With a read-only note selected, the
   three shown mutating hints that would just refuse (`a/o`, `e`, `d` —
   everything [[Guard every mutation against the wrong vault]] covers)
   dim down to the row's own separator style instead of sitting at full
