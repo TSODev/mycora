@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T20:00:00Z
+updated: 2026-07-13T21:00:00Z
 ---
 
 # Built so far
@@ -87,4 +87,6 @@ updated: 2026-07-13T20:00:00Z
   file too, instead of leaving it stuck with whatever name it got on
   first save (often "New note"); `mycora vault sync-filenames <name>`
   retroactively fixes notes that already drifted before this existed
-  (see [[Markdown as source of truth]])
+  (see [[Markdown as source of truth]]); and the SQLite index opens in
+  WAL mode with a real busy timeout, a cheap step toward the still-open
+  concurrent-write-safety question (see [[Disposable SQLite index]])

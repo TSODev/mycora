@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (187 tests, all in-crate, no external deps)
+cargo test                # all unit tests (188 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -162,7 +162,15 @@ directly and guarantee its synthetic output matches the real on-disk format.
   visible markup. An old on-disk schema shape (e.g. `links` before the
   cross-vault column split) is detected and dropped/recreated on open
   rather than migrated — "the index is disposable" extends to its own
-  schema, not just its data.
+  schema, not just its data. `open()` sets WAL journal mode and a 5s
+  `busy_timeout` unconditionally (both core `rusqlite` methods, no
+  extra Cargo feature) — readers don't block behind an in-progress
+  writer, and a second process racing a reindex waits and retries
+  instead of an instant "database is locked". Not the same thing as
+  concurrent-write *safety*: two processes can still each believe they
+  won a write to the same row; see ROADMAP.md's "Concurrent-write
+  safety" entry for the (still open) bigger picture and the two other
+  options weighed against this one.
 - **`link.rs`**: `extract_wikilink_titles` is a hand-rolled `[[title]]`
   bracket scanner, no `regex` dependency and no `[[Title|alias]]` syntax.
   It's naive: once it sees an unclosed `[[`, it scans forward to the *next*

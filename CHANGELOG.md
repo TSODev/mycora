@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- **The SQLite index now uses WAL journal mode and a 5-second busy
+  timeout**, instead of SQLite's own defaults (rollback journal,
+  `busy_timeout` 0). Readers no longer block behind an in-progress
+  writer's transaction, and a second process racing a reindex now
+  waits and retries instead of failing instantly with "database is
+  locked". This does not make concurrent *writes* to the same vault
+  safe — that's a bigger, separate piece of work — just a strictly
+  better default for the index than before.
+
 ## [0.10.1] — 2026-07-13
 
 ### Fixed

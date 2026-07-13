@@ -94,6 +94,14 @@ impl Index {
         PathBuf::from(home).join(".local/share/mycora/index.sqlite3")
     }
 
+    /// How long a write waits on a `SQLITE_BUSY` lock (another process
+    /// mid-transaction) before giving up — SQLite's own default is `0`,
+    /// meaning an immediate error rather than any wait at all. Generous
+    /// but still finite: this index is disposable (see the type's own
+    /// doc comment), so a caller that genuinely deadlocked is better off
+    /// erroring out and letting the user retry than hanging indefinitely.
+    const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
@@ -101,6 +109,19 @@ impl Index {
         }
         let conn = Connection::open(path)
             .with_context(|| format!("opening index at {}", path.display()))?;
+        // Neither of these makes concurrent writers safe from each other
+        // — two processes can still each think they "won" a write, same
+        // as the vault's own Markdown files (see ROADMAP.md's
+        // "Concurrent-write safety" entry) — but both are strict
+        // improvements over the previous defaults at effectively zero
+        // cost: WAL lets readers proceed during a writer's transaction
+        // instead of blocking on it, and a real timeout means a second
+        // process racing a reindex waits and retries instead of failing
+        // instantly with "database is locked".
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .context("enabling WAL journal mode")?;
+        conn.busy_timeout(Self::BUSY_TIMEOUT)
+            .context("setting busy timeout")?;
         Self::migrate(&conn)?;
         Ok(Self { conn })
     }
@@ -709,6 +730,26 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mycora-index-vault-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn open_enables_wal_mode_and_a_nonzero_busy_timeout() {
+        let db_path = scratch_db_path();
+        let index = Index::open(&db_path).unwrap();
+
+        let journal_mode: String = index
+            .conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(journal_mode.to_lowercase(), "wal");
+
+        let busy_timeout_ms: i64 = index
+            .conn
+            .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(busy_timeout_ms, Index::BUSY_TIMEOUT.as_millis() as i64);
+
+        std::fs::remove_file(&db_path).ok();
     }
 
     #[test]

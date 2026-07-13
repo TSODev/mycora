@@ -1424,6 +1424,35 @@ Goal: stability before a public release.
       regardless of which of the first two is chosen, since that part is
       cheap and strictly better than today's zero-timeout default either
       way.
+      **Since extended** (2026-07-13, user-requested): asked the actual
+      cost of each of the three options above before committing to any
+      of them. Answered concretely — WAL + `busy_timeout` a few lines
+      with no new dependency and no UX decision to make; a file lock a
+      small, scoped addition with one real open question (hard-refuse a
+      second instance vs. degrade it to read-only); optimistic
+      mtime/hash conflict detection the real undertaking, needing a new
+      confirmation mode and a genuine "what happens on conflict?" UX
+      call — and asked to do the cheapest one now. `Index::open` gained
+      `conn.pragma_update(None, "journal_mode", "WAL")` and
+      `conn.busy_timeout(Duration::from_secs(5))`, both unconditional
+      and neither gated behind a new Cargo feature (`busy_timeout`/
+      `pragma_update` are core `rusqlite` methods, not behind a feature
+      flag — checked the vendored crate source directly rather than
+      assuming). Explicitly still **not** concurrent-write-*safe*: two
+      processes can still each believe they "won" a write to the same
+      row, same as the vault's own Markdown files above — what changes
+      is that a reader is no longer blocked behind an in-progress
+      writer's transaction (WAL), and a second process racing a
+      reindex now waits up to 5s and retries instead of failing
+      instantly with "database is locked" (real `busy_timeout` instead
+      of SQLite's own default of `0`). The file-lock and optimistic-
+      conflict-detection options above remain open, unstarted. New
+      `open_enables_wal_mode_and_a_nonzero_busy_timeout` test queries
+      `PRAGMA journal_mode`/`PRAGMA busy_timeout` back after `open()` to
+      confirm both actually took effect, rather than trusting the calls
+      merely not erroring. Manually verified: reindexing a scratch
+      vault end-to-end still completed cleanly with both pragmas active.
+      188 tests, clippy clean.
 - [x] **`f` — follow a note's outgoing `[[wikilinks]]`** (2026-07-13,
       user-requested) — asked how to follow a wikilink "the other way":
       `b` already showed who links *to* the selected note, but nothing
