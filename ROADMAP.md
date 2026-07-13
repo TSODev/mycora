@@ -1260,6 +1260,48 @@ Goal: stability before a public release.
       `vault.rs` for a first non-note file operation, and raises a
       follow-on question of whether `:export`'s subtree flatten should
       then also copy along any attachments a copied note references).
+- [ ] **Concurrent-write safety for a shared vault directory**
+      (2026-07-13, user-asked, explicitly not scheduled yet — just
+      captured for later) — asked whether a vault on a shared directory
+      (network share, or two Mycora instances on the same machine) would
+      have its concurrent writes handled safely. Checked the actual code
+      before answering: **no, there's currently zero concurrency control**.
+      `vault.rs`'s `write_note_file` writes to a `.md.tmp` file and
+      `fs::rename`s it into place — real crash-safety (never a half-written
+      file on disk), but that's a single-writer guarantee, not a
+      multi-writer one: `save_note` never re-reads or compares the file's
+      current on-disk state before overwriting, so two instances editing
+      the same vault silently last-writer-wins, with no conflict
+      detection and no merge. No file locking anywhere (no `flock`/
+      `fslock`, not a dependency). `index.rs`'s `Connection::open` sets
+      neither `journal_mode = WAL` nor a `busy_timeout`, so SQLite's
+      default (`busy_timeout` 0) means a second process's `reindex`
+      racing an in-progress write transaction fails immediately with
+      "database is locked" rather than waiting — survivable given the
+      "index is disposable" philosophy (see [[Search and indexing]] in
+      the showcase vault), but real friction. Each running instance also
+      loads its `Tree` once at startup and never re-syncs it against
+      concurrent on-disk changes, so staleness isn't limited to the
+      write path — a second instance's *view* goes stale the moment the
+      first one changes anything, whether or not a write collision ever
+      actually happens. Noted too: a real network filesystem (NFS/SMB)
+      may not honor POSIX atomic-rename semantics the crash-safety
+      above assumes, and a sync tool (Dropbox/OneDrive/iCloud) isn't a
+      real-time filesystem at all — it can silently overwrite a local
+      edit during a sync pass, or spawn a "conflicted copy" file outside
+      Mycora's own knowledge, independent of anything Mycora does right.
+      **Current supported model, stated plainly rather than left
+      implicit: one Mycora process editing a given vault at a time.**
+      If this becomes a real fix, the options worth weighing when it's
+      picked up: a file lock (`fslock` or similar) held for the process's
+      lifetime, refusing a second instance outright; an optimistic check
+      (compare the on-disk file's mtime/hash against what was last read
+      before overwriting, refuse or prompt on mismatch) which allows
+      concurrent *reads* and only flags actual write collisions; or
+      `journal_mode = WAL` + a real `busy_timeout` on the SQLite side
+      regardless of which of the first two is chosen, since that part is
+      cheap and strictly better than today's zero-timeout default either
+      way.
 
 ---
 

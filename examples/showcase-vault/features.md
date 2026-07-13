@@ -5,7 +5,7 @@ order: 2
 tags:
 - features
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T13:00:00Z
+updated: 2026-07-13T14:00:00Z
 ---
 
 # Features
@@ -22,5 +22,7 @@ What's actually built, grouped by area:
 - [[Exporting a subtree]] — flatten a note and its subtree to Markdown
   or PDF
 - [[Importing an Obsidian vault]] — folders become tree structure
+- [[The interface speaks four languages]] — English, French, Spanish,
+  German, switchable live with `:lang`
 
 See [[Roadmap]] for what's still ahead.

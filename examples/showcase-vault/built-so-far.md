@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T21:00:00Z
+updated: 2026-07-13T14:00:00Z
 ---
 
 # Built so far
@@ -65,3 +65,9 @@ updated: 2026-07-12T21:00:00Z
   audit checked USAGE.md against the actual code rather than assuming it
   was current (see [[Roadmap]]), and found (and fixed) several places it
   had quietly gone stale
+- **Since v0.9** — every line break typed in the body editor now renders
+  as its own line in the preview, even without a blank line between them
+  (see [[Layout]]'s body-preview note); the interface itself went
+  multilingual — English, French, Spanish, German, switchable live with
+  `:lang <en|fr|es|de>` and persisted to `config.toml` (see
+  [[The interface speaks four languages]])
