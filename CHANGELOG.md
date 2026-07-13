@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-07-13
+
 ### Fixed
 - **Renaming a note never renamed its file** — a note created via `a`/`o`
   gets its filename slugified from whatever title it had at that exact

@@ -1,6 +1,6 @@
 [package]
 name = "mycora"
-version = "0.10.0"
+version = "0.10.1"
 edition = "2024"
 description = "A tree-native, mycelium-linked note-taking TUI"
 license = "MIT OR Apache-2.0"
