@@ -8,7 +8,7 @@ tags:
 - backlinks
 - v0.5
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T16:00:00Z
+updated: 2026-07-13T17:00:00Z
 ---
 
 # Cross-links and backlinks
@@ -30,6 +30,10 @@ double-square-bracket title, independent of tree position.
 - **Backlinks panel** — the right-hand pane in [[Layout]] always shows
   notes linking to the selected one, live; `b` moves keyboard focus into
   it to jump to one.
+- **Following links** — `f` is backlinks turned around: a full-pane list
+  of the notes the selected note's own wikilinks resolve *to*, across
+  every mounted vault. Reindexes first (unlike `b`), so a link just
+  added is immediately followable.
 - **Link-count badges** — a collapsed branch shows an aggregate link
   count across its subtree, e.g. `▸ Research (12 links)`.
 - **Autocompletion** — typing an opening double bracket in the body

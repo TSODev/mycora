@@ -75,6 +75,10 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
             draw_tag_list(frame, area, app);
             return;
         }
+        Mode::Links => {
+            draw_links(frame, area, app);
+            return;
+        }
         Mode::Normal | Mode::Insert | Mode::ConfirmDelete | Mode::Backlinks | Mode::Command => {}
     }
 
@@ -434,6 +438,39 @@ fn draw_tag_results(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
+/// Notes the note selected when `f` was pressed links *to* — `Backlinks`'
+/// mirror image, full-pane like `draw_tag_results` rather than an
+/// in-place focus shift (see `Mode::Links`'s doc comment for why).
+/// `scope` in the title is the *source* note's own vault (`app.vault_name()`
+/// — stable for as long as this overlay is open, since tree navigation
+/// is disabled outside `Mode::Normal`), matching `search_title`'s
+/// convention; each row still names its own vault too, since a target
+/// can resolve to a *different* mounted vault than the source.
+fn draw_links(frame: &mut Frame, area: Rect, app: &App) {
+    let items: Vec<ListItem> = app
+        .links_results()
+        .iter()
+        .enumerate()
+        .map(|(i, hit)| {
+            let base = if i == app.links_selected() {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            let line = Line::from(vec![
+                Span::styled(format!("[{}] ", hit.vault_id), base.add_modifier(Modifier::DIM)),
+                Span::styled(hit.title.clone(), base),
+            ]);
+            ListItem::new(line)
+        })
+        .collect();
+
+    let title = app.lang.links_title(app.vault_name());
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
+    let mut state = ListState::default().with_selected(Some(app.links_selected()));
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
 /// Every distinct tag across every mounted vault (`:tags list`), each
 /// with its total note count summed across all of them — or, if `:tags
 /// limit <name>` narrowed it, just that one vault (the title names
@@ -521,6 +558,12 @@ fn draw_command_help(frame: &mut Frame, area: Rect, lang: Lang) {
     frame.render_widget(paragraph, popup);
 }
 
+/// Rows visible at once in the `[[wikilink]]` autocomplete popup before
+/// it scrolls — independent of how many candidates `App::wikilink_candidates`
+/// actually found, so the popup stays a fixed, predictable size instead
+/// of growing to match a long result set.
+const LINK_POPUP_VISIBLE_ROWS: usize = 10;
+
 /// The `[[wikilink]]` autocomplete popup, shown over the full-pane body
 /// editor whenever `App::link_autocomplete` is `Some` — see
 /// `App::refresh_link_autocomplete`'s doc comment for when that is.
@@ -532,7 +575,11 @@ fn draw_command_help(frame: &mut Frame, area: Rect, lang: Lang) {
 /// it. `j: down k: up` aren't offered here (unlike the tree/search/tag
 /// lists) since `j`/`k` are themselves valid characters to type in a
 /// title — only `Up`/`Down` move the selection, matching `event.rs`'s
-/// `handle_edit_body` interception.
+/// `handle_edit_body` interception. Scrolls via `ListState` exactly like
+/// the tree/search/tag-results panes already do — `with_selected` is
+/// what makes ratatui compute the right scroll offset to keep the
+/// highlighted entry on screen once there are more candidates than
+/// `LINK_POPUP_VISIBLE_ROWS` fit at once.
 fn draw_link_autocomplete(frame: &mut Frame, area: Rect, lang: Lang, matches: &[String], selected: usize) {
     let width = matches
         .iter()
@@ -541,7 +588,7 @@ fn draw_link_autocomplete(frame: &mut Frame, area: Rect, lang: Lang, matches: &[
         .unwrap_or(10) as u16
         + 2 // borders
         + 2; // horizontal padding either side of the widest title
-    let height = matches.len() as u16 + 2; // borders
+    let height = matches.len().min(LINK_POPUP_VISIBLE_ROWS) as u16 + 2; // borders
 
     let popup = popup_rect(area, width, height);
     frame.render_widget(Clear, popup);
@@ -565,7 +612,13 @@ fn draw_link_autocomplete(frame: &mut Frame, area: Rect, lang: Lang, matches: &[
             .border_style(Style::default().fg(Color::Cyan))
             .title(lang.link_popup_title()),
     );
-    frame.render_widget(list, popup);
+    // Stateful purely so ratatui scrolls the popup to keep the selected
+    // row on screen once there are more candidates than
+    // `LINK_POPUP_VISIBLE_ROWS` fit — same reasoning as the tree pane's
+    // own `ListState` use (see `draw_tree`'s comment); no `highlight_style`
+    // here either, the per-item styling above already covers it.
+    let mut state = ListState::default().with_selected(Some(selected));
+    frame.render_stateful_widget(list, popup, &mut state);
 }
 
 /// A `width`x`height` rect anchored to the bottom-center of `area`,

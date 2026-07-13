@@ -8,8 +8,9 @@ Mycora is a terminal application (Rust, `ratatui` + `crossterm`) for
 hierarchical, Markdown-backed note-taking: every note has exactly one parent
 (a strict tree, navigated vim-style), plus a "mycelial" cross-link layer on
 top (`[[wikilink]]`-style references, independent of tree position, with a
-backlinks panel, cross-vault resolution, and autocompletion while typing —
-see `link.rs`'s `unclosed_wikilink_start`). Both halves are implemented and
+backlinks panel (`b`) and its mirror, an outgoing-links jump (`f`), plus
+cross-vault resolution and autocompletion while typing — see `link.rs`'s
+`unclosed_wikilink_start`). Both halves are implemented and
 shipped, along with SQLite FTS5 search (ranked, with snippets and tag/date/
 branch facets), multi-vault mounting (a registry of vaults, only one of
 which is editable at a time), a resizable three-pane layout (tree + a
@@ -31,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (180 tests, all in-crate, no external deps)
+cargo test                # all unit tests (183 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -181,7 +182,7 @@ directly and guarantee its synthetic output matches the real on-disk format.
   `Tree` + `Vault`, every other mounted-but-read-only vault
   (`ReadOnlyVault { id, tree, vault }`), and the shared `Index`. `Mode` is
   `Normal | Insert | ConfirmDelete | Search | Backlinks | EditBody |
-  Command | TagResults` — dispatch lives in `event.rs`, rendering in
+  Command | TagResults | TagList | Links` — dispatch lives in `event.rs`, rendering in
   `ui.rs` (see those files' notes on which modes are full-pane overlays vs.
   status-bar-only prompts vs. in-place pane focus). Every mutating method
   (`create_child`, `commit_rename`, `confirm_delete`, `indent_selected`,

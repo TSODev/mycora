@@ -76,6 +76,14 @@ pub enum Mode {
     /// you can pick a tag to filter by without having to already know and
     /// type its exact spelling.
     TagList,
+    /// Browsing the notes the note selected when `f` was pressed links
+    /// *to* — `Backlinks`' mirror image (who this note points at, rather
+    /// than who points at it), same full-pane shape as `TagResults`
+    /// rather than `Backlinks`' in-place focus shift: there's no
+    /// persistent "outgoing links" pane in the split layout to shift
+    /// focus into, so this is a transient list instead, dismissed on
+    /// `Esc` or after `Enter` jumps. See `App::begin_links`.
+    Links,
 }
 
 /// An action that can be pushed onto `undo_stack`/`redo_stack`. Applying one
@@ -216,6 +224,10 @@ pub struct App {
     /// keystroke rather than incrementally tracked, so it can never
     /// drift out of sync with what's actually in the textarea.
     link_autocomplete: Option<LinkAutocomplete>,
+    /// Notes the selected note links to, while `mode == Mode::Links` —
+    /// see `App::begin_links`.
+    links_results: Vec<IndexedNote>,
+    links_selected: usize,
 }
 
 /// See `App::link_autocomplete`'s doc comment.
@@ -466,6 +478,8 @@ impl App {
             tag_list_selected: 0,
             body_scroll: 0,
             link_autocomplete: None,
+            links_results: Vec::new(),
+            links_selected: 0,
         };
 
         Ok((app, warnings))
@@ -1325,7 +1339,8 @@ impl App {
     /// Reindexes the primary vault together with every read-only mounted
     /// vault, so cross-vault wikilinks stay resolved against each other —
     /// same reasoning as `App::new()`'s startup reindex. Called from `/`
-    /// and `b`, the only two places that need fresh results mid-session.
+    /// and `f`, the two places that need fresh results mid-session (`b`
+    /// deliberately doesn't — see `focus_backlinks`'s doc comment).
     /// Errors fold into `last_error` rather than propagating, since these
     /// are UI-triggered entry points that can't fail the whole app.
     /// Returns the total note count across every mounted vault on success,
@@ -1356,6 +1371,75 @@ impl App {
             return Vec::new();
         };
         self.index.backlinks(vault_id, id).unwrap_or_default()
+    }
+
+    /// `f` — opens a full-pane list of the notes the selected note links
+    /// *to* (`Mode::Links`), the reverse of `b`'s backlinks. No-op if
+    /// nothing's selected (a placeholder row, or truly nothing). Reindexes
+    /// first, unlike `focus_backlinks` — deliberately: this is meant to
+    /// let you immediately follow a `[[wikilink]]` just added (e.g. via
+    /// the body editor's autocomplete popup), and a stale index would
+    /// silently hide it until a manual `:reindex`, the exact confusion
+    /// this command exists to resolve. An empty result reports through
+    /// `last_message` rather than opening an empty overlay.
+    pub fn begin_links(&mut self) {
+        let Some(id) = self.selected else { return };
+        if let Err(err) = self.reindex_mounted() {
+            self.last_error = Some(self.lang.reindex_failed(&err));
+            return;
+        }
+        let Some((_, vault_id)) = self.resolve(id) else {
+            return;
+        };
+        match self.index.outgoing_links(vault_id, id) {
+            Ok(hits) if hits.is_empty() => {
+                self.last_error = None;
+                self.last_message = Some(self.lang.no_outgoing_links().to_string());
+            }
+            Ok(hits) => {
+                self.last_error = None;
+                self.last_message = None;
+                self.links_results = hits;
+                self.links_selected = 0;
+                self.mode = Mode::Links;
+            }
+            Err(err) => {
+                self.last_message = None;
+                self.last_error = Some(self.lang.links_failed(&err));
+            }
+        }
+    }
+
+    pub fn move_links_selection(&mut self, delta: isize) {
+        if self.links_results.is_empty() {
+            return;
+        }
+        let len = self.links_results.len() as isize;
+        let new_pos = (self.links_selected as isize + delta).rem_euclid(len) as usize;
+        self.links_selected = new_pos;
+    }
+
+    /// Jumps to the selected outgoing link (expanding its ancestors so
+    /// it's visible) and returns to Normal mode.
+    pub fn confirm_links(&mut self) {
+        if let Some(hit) = self.links_results.get(self.links_selected) {
+            let id = hit.note_id;
+            self.reveal(id);
+            self.set_selected(Some(id));
+        }
+        self.mode = Mode::Normal;
+    }
+
+    pub fn cancel_links(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    pub fn links_results(&self) -> &[IndexedNote] {
+        &self.links_results
+    }
+
+    pub fn links_selected(&self) -> usize {
+        self.links_selected
     }
 
     /// The selected note, wherever it lives — the active vault or a
@@ -1600,10 +1684,19 @@ impl App {
     /// shares a title is exactly the existing fan-out-ambiguous-titles
     /// behavior already resolves at reindex time, not something this
     /// popup needs to disambiguate up front. Sorted alphabetically and
-    /// capped at 8 so the popup stays small; an empty `query` (right
-    /// after typing `[[`) matches every title, i.e. browse-as-you-type
-    /// rather than requiring at least one character first.
+    /// capped at `MAX_LINK_CANDIDATES` — generous enough that the cap
+    /// itself is never really the limiting factor in practice, just a
+    /// backstop against scanning every title in a very large vault on
+    /// every keystroke; `ui.rs`'s popup only ever shows a handful at
+    /// once anyway and scrolls to reach the rest (see
+    /// `draw_link_autocomplete`). An empty `query` (right after typing
+    /// `[[`) matches every title, i.e. browse-as-you-type rather than
+    /// requiring at least one character first — typing further always
+    /// re-filters from every title again, not just narrowing whatever
+    /// happened to be in the previous, possibly-capped result set.
     fn wikilink_candidates(&self, query: &str) -> Vec<String> {
+        const MAX_LINK_CANDIDATES: usize = 50;
+
         let query = query.to_lowercase();
         let mut titles: std::collections::BTreeSet<String> = self
             .tree
@@ -1619,7 +1712,7 @@ impl App {
                     .filter(|title| title.to_lowercase().starts_with(&query)),
             );
         }
-        titles.into_iter().take(8).collect()
+        titles.into_iter().take(MAX_LINK_CANDIDATES).collect()
     }
 
     /// Accepts the selected suggestion: removes what's been typed since

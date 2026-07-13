@@ -616,6 +616,43 @@ impl Index {
         Ok(hits)
     }
 
+    /// Notes (in any mounted vault) that `source` in `vault_id` links to —
+    /// `backlinks`' mirror image, for following a `[[wikilink]]` forward
+    /// instead of seeing who points back. Ordered by title; a title that
+    /// fans out to more than one note (see `write_links`'s doc comment)
+    /// lists each one separately, same as `backlinks` would for the
+    /// reverse direction. Broken links (title matches no note) and
+    /// self-links are already absent from `links` by construction — see
+    /// `write_links` — so neither needs filtering out here.
+    pub fn outgoing_links(&self, vault_id: &str, source: NoteId) -> Result<Vec<IndexedNote>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT n.id, n.title, n.vault_id
+             FROM links l
+             JOIN notes n ON n.vault_id = l.target_vault AND n.id = l.target
+             WHERE l.source_vault = ?1 AND l.source = ?2
+             ORDER BY n.title",
+        )?;
+        let rows = stmt.query_map(params![vault_id, source.0.to_string()], |row| {
+            let note_id: String = row.get(0)?;
+            let title: String = row.get(1)?;
+            let vault_id: String = row.get(2)?;
+            Ok((note_id, title, vault_id))
+        })?;
+
+        let mut hits = Vec::new();
+        for row in rows {
+            let (note_id, title, vault_id) = row?;
+            let uuid = Uuid::parse_str(&note_id)
+                .with_context(|| format!("indexed note id {note_id} is not a valid UUID"))?;
+            hits.push(IndexedNote {
+                note_id: NoteId(uuid),
+                title,
+                vault_id,
+            });
+        }
+        Ok(hits)
+    }
+
     /// Total distinct `links` rows touching any note in `subtree` (source
     /// or target, counted once even for a link between two notes both
     /// inside the subtree) — the aggregate badge for a collapsed tree
@@ -1632,6 +1669,80 @@ mod tests {
         let hits = index.backlinks("b", target).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].note_id, source);
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_a_dir).ok();
+        std::fs::remove_dir_all(&vault_b_dir).ok();
+    }
+
+    #[test]
+    fn outgoing_links_returns_every_note_a_source_links_to() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let source = tree.create_note("Source Note", None);
+        tree.set_body(source, "See [[Target A]] and also [[Target B]].");
+        let target_a = tree.create_note("Target A", None);
+        let target_b = tree.create_note("Target B", None);
+        let unrelated = tree.create_note("Unrelated", None);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        let hits = index.outgoing_links("default", source).unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].note_id, target_a);
+        assert_eq!(hits[1].note_id, target_b);
+        assert!(!hits.iter().any(|h| h.note_id == unrelated));
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn outgoing_links_is_empty_for_a_note_with_no_links() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree = Tree::new();
+        let lonely = tree.create_note("Lonely Note", None);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        index.reindex("default", &tree, &vault).unwrap();
+
+        assert!(index.outgoing_links("default", lonely).unwrap().is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn outgoing_links_finds_a_target_note_in_a_different_vault() {
+        let db_path = scratch_db_path();
+        let mut index = Index::open(&db_path).unwrap();
+
+        let mut tree_a = Tree::new();
+        let source = tree_a.create_note("Source", None);
+        tree_a.set_body(source, "See [[Target]].");
+        let vault_a_dir = temp_vault_dir();
+        let vault_a = Vault::open(vault_a_dir.clone()).unwrap();
+
+        let mut tree_b = Tree::new();
+        let target = tree_b.create_note("Target", None);
+        let vault_b_dir = temp_vault_dir();
+        let vault_b = Vault::open(vault_b_dir.clone()).unwrap();
+
+        index
+            .reindex_mounted(&[("a", &tree_a, &vault_a), ("b", &tree_b, &vault_b)])
+            .unwrap();
+
+        let hits = index.outgoing_links("a", source).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].note_id, target);
+        assert_eq!(hits[0].vault_id, "b");
 
         std::fs::remove_file(&db_path).ok();
         std::fs::remove_dir_all(&vault_a_dir).ok();

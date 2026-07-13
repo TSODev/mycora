@@ -8,15 +8,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`f` — follow the selected note's outgoing `[[wikilinks]]`** —
+  `Backlinks`' mirror image: opens a full-pane list of the notes the
+  selected note links *to* (rather than who links to it), spanning
+  every mounted vault. `j`/`k`/`Up`/`Down` move, `Enter` jumps, `Esc`
+  cancels. Reindexes first (unlike `b`'s passive backlinks pane), so a
+  `[[wikilink]]` just added — e.g. via the autocomplete popup above —
+  is immediately followable rather than waiting on a manual `:reindex`.
+  Reports "this note has no outgoing links" rather than opening an
+  empty overlay when there's nothing to show.
 - **`[[wikilink]]` autocompletion in the body editor** — typing `[[`
   opens a popup listing matching note titles (case-insensitive prefix
-  match, every title when nothing's typed yet, capped at 8), spanning
-  the active vault and every read-only mounted one. `Up`/`Down` move
-  the selection, `Tab` or `Enter` accepts (replacing the partial text
-  with the full title and a closing `]]`), `Esc` dismisses just the
-  popup without exiting the whole edit session. The last of the two
-  headline items deferred since early versions — configurable
-  keybindings remains the only one still open.
+  match, every title when nothing's typed yet), spanning the active
+  vault and every read-only mounted one. `Up`/`Down` move the
+  selection and scroll the popup once there are more matches than fit
+  at once (10 rows visible, up to 50 candidates kept), `Tab` or `Enter`
+  accepts (replacing the partial text with the full title and a
+  closing `]]`), `Esc` dismisses just the popup without exiting the
+  whole edit session. The last of the two headline items deferred
+  since early versions — configurable keybindings remains the only one
+  still open.
 - **Colored, centered vault-name headers in the tree pane** — every
   mounted vault (the active one included, which previously had no
   header row of its own at all) now gets a full-width, centered name

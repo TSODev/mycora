@@ -306,6 +306,17 @@ impl Lang {
         }
     }
 
+    /// Title of the `f` (outgoing links) full-pane overlay — `scope` is
+    /// the *source* note's vault, matching `search_title`'s convention.
+    pub fn links_title(self, scope: &str) -> String {
+        match self {
+            Lang::En => format!("Links [{scope}]"),
+            Lang::Fr => format!("Liens [{scope}]"),
+            Lang::Es => format!("Enlaces [{scope}]"),
+            Lang::De => format!("Links [{scope}]"),
+        }
+    }
+
     pub fn tag_list_title(self, scope: &str) -> String {
         match self {
             Lang::En => format!("Tags [{scope}]"),
@@ -421,28 +432,28 @@ impl Lang {
                 "NORMAL",
                 "j/k: move  h/l/space: fold  a/o: new  y: copy  Tab/S-Tab: move  \
                  K/J: reorder  i: rename  e: edit  d: delete  u: undo  ^R: redo  \
-                 /: search  b: backlinks  [/]: tree width  {/}: backlinks width  \
+                 /: search  b: backlinks  f: links  [/]: tree width  {/}: backlinks width  \
                  colon: command  q: quit",
             ),
             (Lang::Fr, Mode::Normal) => (
                 "NORMAL",
                 "j/k: bouger  h/l/space: plier  a/o: nouvelle  y: copier  Tab/S-Tab: déplacer  \
                  K/J: réordonner  i: renommer  e: éditer  d: supprimer  u: annuler  ^R: rétablir  \
-                 /: rechercher  b: rétroliens  [/]: largeur arbre  {/}: largeur rétroliens  \
+                 /: rechercher  b: rétroliens  f: liens  [/]: largeur arbre  {/}: largeur rétroliens  \
                  colon: commande  q: quitter",
             ),
             (Lang::Es, Mode::Normal) => (
                 "NORMAL",
                 "j/k: mover  h/l/space: plegar  a/o: nueva  y: copiar  Tab/S-Tab: mover  \
                  K/J: reordenar  i: renombrar  e: editar  d: eliminar  u: deshacer  ^R: rehacer  \
-                 /: buscar  b: enlaces  [/]: ancho árbol  {/}: ancho enlaces  \
+                 /: buscar  b: enlaces  f: enlaces salientes  [/]: ancho árbol  {/}: ancho enlaces  \
                  colon: comando  q: salir",
             ),
             (Lang::De, Mode::Normal) => (
                 "NORMAL",
                 "j/k: bewegen  h/l/space: falten  a/o: neu  y: kopieren  Tab/S-Tab: verschieben  \
                  K/J: umordnen  i: umbenennen  e: bearbeiten  d: löschen  u: rückgängig  ^R: wiederholen  \
-                 /: suchen  b: rückverweise  [/]: Baumbreite  {/}: Verweisbreite  \
+                 /: suchen  b: rückverweise  f: links  [/]: Baumbreite  {/}: Verweisbreite  \
                  colon: Befehl  q: beenden",
             ),
             (Lang::En, Mode::Insert) => ("INSERT", "Enter: confirm  Esc: cancel"),
@@ -501,6 +512,10 @@ impl Lang {
             (Lang::Fr, Mode::TagList) => ("TAGS", "j/k: bouger  Enter: filtrer  Esc: annuler"),
             (Lang::Es, Mode::TagList) => ("TAGS", "j/k: mover  Enter: filtrar  Esc: cancelar"),
             (Lang::De, Mode::TagList) => ("TAGS", "j/k: bewegen  Enter: filtern  Esc: abbrechen"),
+            (Lang::En, Mode::Links) => ("LINKS", "j/k: move  Enter: jump  Esc: cancel"),
+            (Lang::Fr, Mode::Links) => ("LIENS", "j/k: bouger  Enter: sauter  Esc: annuler"),
+            (Lang::Es, Mode::Links) => ("ENLACES", "j/k: mover  Enter: saltar  Esc: cancelar"),
+            (Lang::De, Mode::Links) => ("LINKS", "j/k: bewegen  Enter: springen  Esc: abbrechen"),
             (_, Mode::ConfirmDelete | Mode::Command) => {
                 unreachable!("ConfirmDelete/Command render their own prompt row, not hints")
             }
@@ -649,6 +664,26 @@ impl Lang {
             Lang::Fr => format!("échec du filtre par tags : {err}"),
             Lang::Es => format!("error al filtrar por etiquetas: {err}"),
             Lang::De => format!("Tag-Filter fehlgeschlagen: {err}"),
+        }
+    }
+
+    /// `f`'s empty-result message — this note's body has no `[[wikilink]]`
+    /// that resolves to another note.
+    pub fn no_outgoing_links(self) -> &'static str {
+        match self {
+            Lang::En => "this note has no outgoing links",
+            Lang::Fr => "cette note n'a aucun lien sortant",
+            Lang::Es => "esta nota no tiene enlaces salientes",
+            Lang::De => "diese Notiz hat keine ausgehenden Links",
+        }
+    }
+
+    pub fn links_failed(self, err: &impl std::fmt::Display) -> String {
+        match self {
+            Lang::En => format!("links failed: {err}"),
+            Lang::Fr => format!("échec de la liste des liens : {err}"),
+            Lang::Es => format!("error al listar enlaces: {err}"),
+            Lang::De => format!("Link-Liste fehlgeschlagen: {err}"),
         }
     }
 
@@ -1074,6 +1109,7 @@ mod tests {
                 Mode::EditBody,
                 Mode::TagResults,
                 Mode::TagList,
+                Mode::Links,
             ] {
                 let (label, hints) = lang.mode_line(mode);
                 assert!(!label.is_empty());

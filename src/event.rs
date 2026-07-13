@@ -44,6 +44,7 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::Command => handle_command(app, key.code),
             Mode::TagResults => handle_tag_results(app, key.code),
             Mode::TagList => handle_tag_list(app, key.code),
+            Mode::Links => handle_links(app, key.code),
         }
     }
 
@@ -87,6 +88,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Char('u') => app.undo(),
         KeyCode::Char('/') => app.begin_search(),
         KeyCode::Char('b') => app.focus_backlinks(),
+        KeyCode::Char('f') => app.begin_links(),
         KeyCode::Char('e') => app.begin_edit_body(),
         KeyCode::Char('[') => app.shrink_tree_pane(),
         KeyCode::Char(']') => app.grow_tree_pane(),
@@ -209,6 +211,16 @@ fn handle_tag_list(app: &mut App, code: KeyCode) {
         KeyCode::Esc => app.cancel_tag_list(),
         KeyCode::Char('j') | KeyCode::Down => app.move_tag_list_selection(1),
         KeyCode::Char('k') | KeyCode::Up => app.move_tag_list_selection(-1),
+        _ => {}
+    }
+}
+
+fn handle_links(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Enter => app.confirm_links(),
+        KeyCode::Esc => app.cancel_links(),
+        KeyCode::Char('j') | KeyCode::Down => app.move_links_selection(1),
+        KeyCode::Char('k') | KeyCode::Up => app.move_links_selection(-1),
         _ => {}
     }
 }

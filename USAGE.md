@@ -7,12 +7,13 @@
 > thousands of notes, multi-vault mounting (read-only secondary vaults,
 > unmounted and archived vaults both visible as their own tree rows),
 > `[[wikilink]]` cross-links (including cross-vault ones) with a
-> backlinks panel, link-count badges, and autocompletion while typing, a
-> full-pane note-body editor, a resizable three-pane layout (tree,
-> rendered-Markdown body preview, backlinks) with light/dark-aware
-> colors, a multilingual interface (English/French/Spanish/German), and
-> a `:` command palette (`:reindex`, `:tags`, `:tag`, `:lang`, `:panes`,
-> `:export`, `:config`, `:q`). No configurable keybindings yet — see
+> backlinks panel, an outgoing-links jump, link-count badges, and
+> autocompletion while typing, a full-pane note-body editor, a resizable
+> three-pane layout (tree, rendered-Markdown body preview, backlinks)
+> with light/dark-aware colors, a multilingual interface
+> (English/French/Spanish/German), and a `:` command palette
+> (`:reindex`, `:tags`, `:tag`, `:lang`, `:panes`, `:export`, `:config`,
+> `:q`). No configurable keybindings yet — see
 > [ROADMAP.md](./ROADMAP.md) for what's still ahead.
 
 ## Table of Contents
@@ -543,6 +544,26 @@ Unlike search, focusing the backlinks pane doesn't reindex first — it
 reads whatever the last reindex resolved, same as the pane's live view
 does when it's not focused (and same as the link-count badges).
 
+## Following links
+
+`b`'s backlinks pane shows who links *to* the selected note. `f` is its
+mirror: a full-pane overlay listing the notes the selected note's own
+`[[wikilinks]]` resolve *to*, across every mounted vault, each entry
+labeled with its own vault (a target can live in a different one than
+the source).
+
+- `j` / `k` (or `↑` / `↓`) — move between entries
+- `Enter` — jump to the selected entry: expands its ancestors so it's
+  visible, selects it in the tree, and returns to Normal mode
+- `Esc` — cancels back to Normal without changing your selection
+
+Unlike `b`, `f` *does* reindex first (same as `/` search) — so a
+`[[wikilink]]` you just added, e.g. via [autocompletion](#link-autocompletion),
+is immediately followable rather than waiting on a manual `:reindex`.
+If the note has no outgoing links, the status bar says so instead of
+opening an empty list. Works on a read-only mounted vault's note just as
+well as the active vault's, since following a link only reads.
+
 ## Command palette
 
 `:` in Normal mode opens a command prompt — vim/helix-style, replacing
@@ -714,7 +735,8 @@ vault if nothing's typed yet, narrowed to a case-insensitive prefix match
 as you keep typing, spanning the active vault and every read-only
 mounted one (the same scope `[[wikilinks]]` already resolve across).
 
-- `Up`/`Down` — move the popup's selection
+- `Up`/`Down` — move the popup's selection, scrolling once there are
+  more matches than fit in the visible list at once
 - `Tab` or `Enter` — accepts the selected title, replacing whatever
   you'd typed so far with the full title and a closing `]]`
 - `Esc` — dismisses just the popup, leaving the rest of the edit session
@@ -791,6 +813,7 @@ changes, for the rest of the session. Not persisted across restarts.
 | `Ctrl+R` | Redo |
 | `/` | Open search (see [Searching](#searching)) |
 | `b` | Focus the backlinks pane (see [Backlinks](#backlinks)) |
+| `f` | Follow the selected note's outgoing links (see [Following links](#following-links)) |
 | `Ctrl+d` / `Ctrl+u` | Scroll the body preview down / up |
 | `[` / `]` | Shrink / grow the tree pane (see [Layout](#layout)) |
 | `{` / `}` | Shrink / grow the backlinks pane |
@@ -846,6 +869,14 @@ apply to the popup instead of the rows above:
 | `j` / `k` / `↑` / `↓` | Move between entries |
 | `Enter` | Jump to the focused entry (see [Backlinks](#backlinks)) |
 | `Esc` / `b` | Return focus to the tree, keeping the current selection |
+
+### Links
+
+| Key | Action |
+|---|---|
+| `j` / `k` / `↑` / `↓` | Move between entries |
+| `Enter` | Jump to the selected entry (see [Following links](#following-links)) |
+| `Esc` | Cancel, keeping the current selection |
 
 ### Command
 

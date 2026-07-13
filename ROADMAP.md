@@ -305,6 +305,32 @@ Goal: notes can reference each other outside the tree.
       new, all in `link.rs`, covering `unclosed_wikilink_start`'s open/
       closed/no-brackets/cursor-scoping/most-recent-wins cases), clippy
       clean.
+      **Since extended** (2026-07-13, user-reported): the popup was
+      capped at 8 candidates *and* rendered with a plain, non-scrolling
+      `render_widget` — together, a vault with more than 8 matches for a
+      given prefix made the rest permanently unreachable, not just
+      hidden until you typed further. Two independent fixes: the cap in
+      `App::wikilink_candidates` raised 8 → 50 (a backstop against
+      scanning every title on every keystroke in a very large vault, not
+      a UI-visible limit anymore), and `draw_link_autocomplete` switched
+      from `render_widget` to `render_stateful_widget` with a real
+      `ListState` — the same scrolling mechanism `draw_tree`/
+      `draw_search`/`draw_tag_results` already use elsewhere in `ui.rs` —
+      with the popup's rendered height fixed at a new
+      `LINK_POPUP_VISIBLE_ROWS = 10` regardless of match count, so
+      scrolling actually has something to do instead of the popup just
+      growing to fit everything. Re-verified the "keep typing to narrow
+      further" behavior was never actually broken (each keystroke
+      recomputes candidates from every title again, not from whatever
+      subset happened to be capped the frame before) while fixing this,
+      since the report described both as one problem. Manually verified
+      in tmux with 16 notes in one vault: typing `[[` showed exactly 10
+      rows (`Note 01`–`Note 10`); 12 `Down` presses scrolled the popup
+      and moved the highlight correctly onto `Note 13` (confirmed via
+      captured ANSI escapes); typing `Note 1` afterward correctly
+      narrowed to all six matches (`Note 10`–`Note 15`) rather than
+      staying stuck inside whatever the first 10 alphabetical titles had
+      been.
 - [x] Handle broken links (target renamed/deleted) gracefully — `reindex`
       now returns a `ReindexReport { note_count, broken_links }` instead of
       a bare count; each unresolved `[[title]]` becomes a `BrokenLink {
@@ -1398,6 +1424,45 @@ Goal: stability before a public release.
       regardless of which of the first two is chosen, since that part is
       cheap and strictly better than today's zero-timeout default either
       way.
+- [x] **`f` — follow a note's outgoing `[[wikilinks]]`** (2026-07-13,
+      user-requested) — asked how to follow a wikilink "the other way":
+      `b` already showed who links *to* the selected note, but nothing
+      showed where the selected note's own `[[wikilinks]]` actually
+      *go*, short of `/`-searching each title by hand. `Backlinks`'
+      exact mirror image, at the storage layer for free: the `links`
+      table already stores both `source` and `target` for every
+      resolved link (see `index.rs`'s schema note above), so the new
+      `Index::outgoing_links(vault_id, source)` is `backlinks`' query
+      with the join flipped, not a new concept. Chose a full-pane
+      overlay (`Mode::Links`, modeled on `TagResults`) over `Backlinks`'
+      in-place focus-shift-onto-an-existing-pane approach — there's no
+      persistent "outgoing links" pane in the split layout to shift
+      focus into, only a transient thing to show and dismiss. Bound to
+      `f` (mnemonic "follow"; `g`/`L` considered, `f` read as the
+      clearest single-letter English mnemonic and doesn't collide with
+      anything). Deliberately reindexes before querying, unlike `b`
+      (see `focus_backlinks`'s doc comment for why *it* doesn't) — this
+      was a direct fix for the confusion one turn earlier in this same
+      session, where a just-added second wikilink didn't show up in
+      backlinks yet because nothing had reindexed since it was typed;
+      `f` existing specifically to jump to a link just added would have
+      hit the exact same trap if it didn't force a fresh index first.
+      An empty result reports "this note has no outgoing links" via
+      `last_message` rather than opening an empty overlay, mirroring
+      `show_tag_results`' empty-case convention. Works identically on a
+      read-only mounted vault's note (not gated by `require_editable`,
+      same as `/` and `b` already aren't — this is a read, not a
+      mutation). Manually verified in tmux: a "Hub Note" with two
+      wikilinks (both inserted via the autocomplete popup above,
+      accepted with `Tab` and `Enter` respectively) showed both targets
+      in `Links [default]` immediately, `Enter` jumped to the first and
+      its own `Backlinks` pane correctly showed "Hub Note" back,
+      confirming both directions agree; `f` on a target note with no
+      links of its own reported the empty-case message instead of an
+      empty popup. 183 tests (3 new, all in `index.rs`:
+      `outgoing_links` finding every target / being empty for a
+      linkless note / resolving a target in a different mounted vault),
+      clippy clean.
 
 ---
 
