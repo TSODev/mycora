@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-07-13
+
 ### Added
 - **`?` — full keybinding reference** — opens a full-pane list of every
   Normal-mode key, dismissed by pressing anything. Exists because
