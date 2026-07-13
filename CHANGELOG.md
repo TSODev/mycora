@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-07-13
+
 ### Added
 - **Multilingual interface (English/French/Spanish/German)** —
   `language = "fr"` in `config.toml` switches every TUI label, hint,
@@ -43,8 +45,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   misleadingly merge lines the user clearly separated. The file on disk
   was never affected — only `markdown.rs`'s rendering now treats every
   single newline as a real line break, matching what was typed.
-
-## [0.9.0] — 2026-07-14
 
 ### Added
 - **`:tags limit <vault-name>` / `:tags unlimit`** — narrows the now-global
