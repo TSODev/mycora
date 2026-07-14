@@ -221,6 +221,27 @@ today, [ROADMAP.md](./ROADMAP.md) for what's still ahead (a stable
 v1.0), and [BENCHMARK.md](./BENCHMARK.md) for how it performs at
 thousands of notes.
 
+## Showcase vaults
+
+`examples/` ships real, committed Mycora vaults you can mount and browse
+rather than just read about — a working example of the on-disk file
+format, and a better tour of the tree-plus-links model than any
+screenshot:
+
+- **`showcase-vault/`** — Mycora documenting itself: philosophy,
+  interface, features, and the specific design decisions behind them,
+  as interlinked notes.
+- **`showcase-jsoned/`**, **`showcase-rowdy/`**, **`showcase-terapi/`** —
+  the same treatment applied to the sibling projects below, built from
+  each one's own docs (not filler content), and a good demonstration of
+  cross-vault linking and read-only secondary vaults at once.
+
+Mount any of them alongside your own vault with, e.g.:
+
+```sh
+mycora vault add jsoned ./examples/showcase-jsoned
+```
+
 ## License
 
 Dual-licensed under [MIT](./LICENSE-MIT) or [Apache-2.0](./LICENSE-APACHE),
@@ -228,7 +249,8 @@ at your option.
 
 ## Other projects
 
-Other terminal tools from the same author:
+Other terminal tools from the same author (see their own showcase vault
+above for a deeper look at each):
 
 - **[rowdy](https://github.com/TSODev/rowdy)** — a fast, modern TUI
   database management tool (`ratatui` + `sqlx`), for inspecting,
