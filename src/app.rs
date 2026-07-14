@@ -123,6 +123,14 @@ enum UndoAction {
     SetTags { id: NoteId, tags: Vec<String> },
 }
 
+/// A note/subtree marked by `x`/`c`, awaiting a `p` on the destination to
+/// complete the move or copy — see `App::pending_clipboard`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingClipboard {
+    Move(NoteId),
+    Copy(NoteId),
+}
+
 pub struct App {
     pub tree: Tree,
     pub vault: Vault,
@@ -240,6 +248,14 @@ pub struct App {
     /// see `App::begin_links`.
     links_results: Vec<IndexedNote>,
     links_selected: usize,
+    /// A note/subtree marked by `x` (move) or `c` (copy), awaiting a `p`
+    /// on some destination note to complete it — see
+    /// `mark_pending_move`/`mark_pending_copy`/`paste_pending`. `None`
+    /// means no cut/copy is in flight. Cleared by `Esc`
+    /// (`clear_pending_clipboard`), by marking a new one (only one can be
+    /// pending at a time), or by `paste_pending` itself, whether or not
+    /// the paste actually succeeds.
+    pending_clipboard: Option<PendingClipboard>,
 }
 
 /// See `App::link_autocomplete`'s doc comment.
@@ -492,6 +508,7 @@ impl App {
             link_autocomplete: None,
             links_results: Vec::new(),
             links_selected: 0,
+            pending_clipboard: None,
         };
 
         Ok((app, warnings))
@@ -845,6 +862,118 @@ impl App {
         self.record(UndoAction::Remove {
             root_id: new_root,
         });
+    }
+
+    /// Marks the selected note/subtree as pending a move (`x`), completed
+    /// by a later `p` on the destination note (`paste_pending`). The
+    /// source must be in the active (editable) vault — completing a move
+    /// means deleting it from wherever it came from, and mutation is only
+    /// ever allowed there, same `require_editable` gate as `d`/`i`.
+    /// Replaces any previously pending mark (only one can be in flight).
+    pub fn mark_pending_move(&mut self) {
+        let Some(id) = self.selected else { return };
+        if !self.require_editable(id) {
+            return;
+        }
+        self.pending_clipboard = Some(PendingClipboard::Move(id));
+    }
+
+    /// Marks the selected note/subtree as pending a copy (`c`), completed
+    /// by a later `p` on the destination note. Unlike `mark_pending_move`,
+    /// the source can be in *any* mounted vault, read-only included —
+    /// copying only ever reads it; `require_editable` only ever gates the
+    /// paste *target*, in `paste_pending`.
+    pub fn mark_pending_copy(&mut self) {
+        let Some(id) = self.selected else { return };
+        self.pending_clipboard = Some(PendingClipboard::Copy(id));
+    }
+
+    /// Cancels whichever move/copy is pending (`Esc`), if any.
+    pub fn clear_pending_clipboard(&mut self) {
+        self.pending_clipboard = None;
+    }
+
+    /// A status line describing the pending move/copy, for as long as one
+    /// is active — `ui.rs`'s hint row shows this in place of the usual
+    /// mode hints (see `draw_hint_row`), the same "never an invisible
+    /// mode" treatment `Mode::ConfirmDelete`'s prompt already gets.
+    pub fn pending_clipboard_status(&self) -> Option<String> {
+        let (id, moving) = match self.pending_clipboard? {
+            PendingClipboard::Move(id) => (id, true),
+            PendingClipboard::Copy(id) => (id, false),
+        };
+        let title = self
+            .resolve(id)
+            .and_then(|(tree, _)| tree.get(id))
+            .map(|note| note.title.as_str())
+            .unwrap_or("");
+        Some(if moving {
+            self.lang.pending_move_status(title)
+        } else {
+            self.lang.pending_copy_status(title)
+        })
+    }
+
+    /// Completes whichever move/copy is pending (`x`/`c`) onto the
+    /// selected note as the destination, inserting as the destination's
+    /// *last child* (mirroring `a`'s own "child" semantics — the simplest
+    /// predictable landing spot; a `P` for "paste as sibling after,"
+    /// mirroring `o`, is a plausible fast-follow but deliberately not in
+    /// this first cut). The pending mark is always cleared, whether or
+    /// not the paste actually goes through — same confirm-or-cancel-
+    /// clears-it shape as `confirm_delete`/`cancel_delete`, so a refused
+    /// paste (read-only target, or a move that would create a cycle)
+    /// never leaves a stale mark the user has to separately notice and
+    /// clear.
+    pub fn paste_pending(&mut self) {
+        let Some(pending) = self.pending_clipboard.take() else {
+            return;
+        };
+        let Some(target) = self.selected else {
+            self.last_message = None;
+            self.last_error = Some(self.lang.no_paste_target().to_string());
+            return;
+        };
+        if !self.require_editable(target) {
+            return;
+        }
+
+        match pending {
+            PendingClipboard::Move(id) => {
+                if self.tree.get(id).is_none() {
+                    return;
+                }
+                let previous_parent = self.tree.get(id).and_then(|note| note.parent);
+                if self.tree.move_note(id, Some(target)).is_err() {
+                    return;
+                }
+                self.expanded.insert(target);
+                self.persist(id);
+                self.set_selected(Some(id));
+                self.record(UndoAction::Move {
+                    id,
+                    parent: previous_parent,
+                });
+            }
+            PendingClipboard::Copy(id) => {
+                let new_root = if self.tree.get(id).is_some() {
+                    self.tree.deep_copy(id, Some(target))
+                } else if let Some(source) =
+                    self.other_vaults.iter().find(|v| v.tree.get(id).is_some())
+                {
+                    self.tree.deep_copy_from(&source.tree, id, Some(target))
+                } else {
+                    None
+                };
+                let Some(new_root) = new_root else { return };
+                self.expanded.insert(target);
+                for copied_id in self.tree.subtree_ids(new_root) {
+                    self.persist(copied_id);
+                }
+                self.set_selected(Some(new_root));
+                self.record(UndoAction::Remove { root_id: new_root });
+            }
+        }
     }
 
     /// Indents the selected note: reparents it under its immediately

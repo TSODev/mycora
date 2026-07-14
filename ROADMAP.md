@@ -1143,20 +1143,21 @@ Goal: stability before a public release.
 
 ## v1.1 — Post-0.9 backlog (cut/paste, attachments, i18n, ...)
 
-- [ ] **Cut/paste and cross-vault copy** (2026-07-12, user-requested) —
+- [x] **Cut/paste and cross-vault copy** (2026-07-12, user-requested;
+      implemented 2026-07-14 exactly per the proposed design below, no
+      changes) —
       raised as "can we cut-and-paste tree branches, and between vaults?"
-      Current state: `y` deep-copies the selected subtree as the very
+      Previous state: `y` deep-copies the selected subtree as the very
       next sibling (immediate, no target picking); `Tab`/`BackTab`
       reparent only relative to the current position (previous sibling /
-      grandparent). Nothing lets you pick an arbitrary destination, and
-      nothing crosses a vault boundary — every mutating `App` method is
+      grandparent). Nothing let you pick an arbitrary destination, and
+      nothing crossed a vault boundary — every mutating `App` method is
       gated by `require_editable`, which refuses anything outside the
       one active/editable vault (see this file's "Multiple vaults" open
       design question above — every other mounted vault is read-only by
       design, not by oversight).
 
-      **Proposed design** (not yet implemented — keybindings and the
-      cross-vault split below need a confirmation pass before coding):
+      **Design** (implemented as proposed):
       - `x` marks the selected note/subtree as *pending move*. Guarded
         by `require_editable` on the source, same as `d`/`i` today — a
         note in a read-only vault can't be marked for a real cut, since
@@ -1205,6 +1206,72 @@ Goal: stability before a public release.
         already flagged and deferred in the "Multiple vaults" open
         design question below. Cross-vault stays copy-only until that
         bigger lift is separately scoped.
+
+      Built exactly to the design above: `Tree::deep_copy_from` (new,
+      `tree.rs`) mirrors `deep_copy` but reads the source note/subtree
+      from a different `&Tree`, two new unit tests
+      (`deep_copy_from_duplicates_a_subtree_from_another_tree`,
+      `deep_copy_from_missing_note_returns_none`). `App` gained a single
+      `pending_clipboard: Option<PendingClipboard>` field
+      (`Move(NoteId)` / `Copy(NoteId)`) and four methods:
+      `mark_pending_move`/`mark_pending_copy` (the `x`/`c` handlers,
+      wired in `event.rs`'s Normal-mode dispatch alongside a new
+      `KeyCode::Esc => clear_pending_clipboard()`, previously unbound in
+      Normal mode), `paste_pending` (`p`), and
+      `pending_clipboard_status()` for the status line. `paste_pending`
+      dispatches on the pending variant: `Move` is a plain
+      `tree.move_note` (silently no-ops on a cycle, same convention
+      `indent_selected`/`outdent_selected` already use rather than
+      inventing a new error message); `Copy` tries `self.tree.get(id)`
+      first (same-tree copy via the existing `deep_copy`) and falls back
+      to scanning `other_vaults` for whichever read-only tree holds `id`,
+      then `deep_copy_from`. Both branches persist every copied/moved id
+      and record one undo step (`UndoAction::Move`/`UndoAction::Remove`,
+      both pre-existing variants — no new undo variant needed). No unit
+      tests in `app.rs` for this (consistent with the rest of the file —
+      see CLAUDE.md's test-file list — `App` needs a full `Config`/
+      `Vault` to construct, so `App`-level features are verified
+      manually in tmux instead, same as the multilingual/vault-header
+      work above). `ui.rs`'s `draw_hint_row` gained a
+      `pending_clipboard_status()` branch, checked after
+      `last_error`/`last_message` (so a fresh refusal, e.g. pasting into
+      a read-only vault, still wins for the one frame it's set) but
+      before the default mode-line hints — same "persists across
+      keypresses, not just one frame" treatment
+      `Mode::ConfirmDelete`'s prompt already gets, since `clear_
+      transient_status` (called once per keypress) never touches
+      `pending_clipboard`. `x`/`c`/`p` deliberately did *not* get added
+      to Normal mode's curated hint-row string (`Lang::mode_line`,
+      already at its self-imposed length budget — see that method's own
+      doc comment) — they're documented in the full `?` reference
+      instead (`Lang::help_reference`, all four languages, new
+      `pending_move_status`/`pending_copy_status` messages likewise
+      translated in all four). Manually verified in tmux with a scratch
+      two-vault setup (`default` editable + `other` mounted read-only):
+      `x` on a note then `p` on a different root moved it and updated
+      the breadcrumb, `u` undid the move back to its original parent;
+      `c` on the read-only vault's note (allowed, unlike `x`) then `p`
+      onto a note in `default` deep-copied it across the vault boundary
+      with its body intact, `u` removed the whole copy; `Esc` after `x`
+      cleared the pending mark (hint row reverted to the normal mode
+      line); attempting `p` with a pending mark while a read-only note
+      was selected as the target correctly refused with "this vault is
+      read-only" and cleared the stale mark rather than leaving it
+      stuck. 190 tests, clippy clean.
+      **Follow-up fix** (2026-07-14, found in a post-implementation
+      refusal audit): `p` with a pending mark while an unmounted/
+      archived vault's *placeholder* row was selected (not a real note,
+      so `self.selected` is `None`) used to silently drop the pending
+      mark with zero feedback — the one refusal path that didn't match
+      the design's "same UX as every other guarded mutation" promise.
+      Fixed by checking `self.selected` before proceeding and reporting
+      a new `Lang::no_paste_target` ("select a note to paste onto", all
+      four languages) through `last_error`, same channel every other
+      guarded paste refusal already uses. Verified in tmux with an
+      unmounted `parked` vault entry: `c` on a real note, moving onto
+      `parked`'s placeholder row, `p` now shows the error and clears the
+      mark (confirmed a second `p` back on the real note is a no-op, not
+      a leftover paste).
 - [x] **Multilingual interface — English/French via embedded language
       tables** (2026-07-13, user-requested) — proposed as "language files
       used to display the UI, keybindings staying the same." Keybindings

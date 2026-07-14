@@ -207,6 +207,9 @@ impl Lang {
                 ("a", "new child note"),
                 ("o", "new sibling note"),
                 ("y", "duplicate subtree"),
+                ("x", "mark for move"),
+                ("c", "mark for copy"),
+                ("p", "paste (move/copy) as last child"),
                 ("i", "rename"),
                 ("e", "edit body"),
                 ("d", "delete (asks to confirm)"),
@@ -233,6 +236,9 @@ impl Lang {
                 ("a", "nouvelle note enfant"),
                 ("o", "nouvelle note voisine"),
                 ("y", "dupliquer le sous-arbre"),
+                ("x", "marquer pour déplacer"),
+                ("c", "marquer pour copier"),
+                ("p", "coller (déplacer/copier) comme dernier enfant"),
                 ("i", "renommer"),
                 ("e", "éditer le corps"),
                 ("d", "supprimer (demande confirmation)"),
@@ -259,6 +265,9 @@ impl Lang {
                 ("a", "nueva nota hija"),
                 ("o", "nueva nota hermana"),
                 ("y", "duplicar subárbol"),
+                ("x", "marcar para mover"),
+                ("c", "marcar para copiar"),
+                ("p", "pegar (mover/copiar) como última hija"),
                 ("i", "renombrar"),
                 ("e", "editar cuerpo"),
                 ("d", "eliminar (pide confirmación)"),
@@ -285,6 +294,9 @@ impl Lang {
                 ("a", "neue Kind-Notiz"),
                 ("o", "neue Geschwister-Notiz"),
                 ("y", "Teilbaum duplizieren"),
+                ("x", "zum Verschieben markieren"),
+                ("c", "zum Kopieren markieren"),
+                ("p", "einfügen (verschieben/kopieren) als letztes Kind"),
                 ("i", "umbenennen"),
                 ("e", "Inhalt bearbeiten"),
                 ("d", "löschen (fragt nach Bestätigung)"),
@@ -528,6 +540,28 @@ impl Lang {
         }
     }
 
+    /// The hint row's status line while a move (`x`) is pending — see
+    /// `App::pending_clipboard_status`.
+    pub fn pending_move_status(self, title: &str) -> String {
+        match self {
+            Lang::En => format!("Moving '{title}' — p to drop here, Esc to cancel"),
+            Lang::Fr => format!("Déplacement de '{title}' — p pour déposer, Esc pour annuler"),
+            Lang::Es => format!("Moviendo '{title}' — p para soltar aquí, Esc para cancelar"),
+            Lang::De => format!("Verschiebe '{title}' — p zum Ablegen, Esc zum Abbrechen"),
+        }
+    }
+
+    /// The hint row's status line while a copy (`c`) is pending — see
+    /// `App::pending_clipboard_status`.
+    pub fn pending_copy_status(self, title: &str) -> String {
+        match self {
+            Lang::En => format!("Copying '{title}' — p to drop here, Esc to cancel"),
+            Lang::Fr => format!("Copie de '{title}' — p pour déposer, Esc pour annuler"),
+            Lang::Es => format!("Copiando '{title}' — p para soltar aquí, Esc para cancelar"),
+            Lang::De => format!("Kopiere '{title}' — p zum Ablegen, Esc zum Abbrechen"),
+        }
+    }
+
     pub fn press_q_again(self) -> &'static str {
         match self {
             Lang::En => "Press q again to quit",
@@ -750,6 +784,18 @@ impl Lang {
             Lang::Fr => "ce vault est en lecture seule",
             Lang::Es => "este vault es de solo lectura",
             Lang::De => "dieser Vault ist schreibgeschützt",
+        }
+    }
+
+    /// `p` pressed with a pending move/copy while the selected row isn't a
+    /// real note (an unmounted/archived vault's placeholder) — there's no
+    /// destination to paste onto. See `App::paste_pending`.
+    pub fn no_paste_target(self) -> &'static str {
+        match self {
+            Lang::En => "select a note to paste onto",
+            Lang::Fr => "sélectionnez une note pour y coller",
+            Lang::Es => "selecciona una nota para pegar en ella",
+            Lang::De => "wähle eine Notiz zum Einfügen aus",
         }
     }
 

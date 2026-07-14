@@ -316,6 +316,38 @@ impl Tree {
         Some(new_id)
     }
 
+    /// Deep-copies `id` and its subtree from a *different* tree (`source`)
+    /// into `self`, under `new_parent` — the cross-vault counterpart of
+    /// `deep_copy`, which can only copy within its own tree (a read-only
+    /// mounted vault's `Tree` and the active one are separate `Tree`
+    /// instances, so a single-tree method can't reach across). Same fresh-
+    /// ids/timestamps behavior as `deep_copy`. Returns the new subtree
+    /// root's id, or `None` if `id` doesn't exist in `source`.
+    pub fn deep_copy_from(
+        &mut self,
+        source: &Tree,
+        id: NoteId,
+        new_parent: Option<NoteId>,
+    ) -> Option<NoteId> {
+        let note = source.notes.get(&id)?;
+        let title = note.title.clone();
+        let body = note.body.clone();
+        let tags = note.tags.clone();
+        let children = note.children.clone();
+
+        let new_id = self.create_note(title, new_parent);
+        if let Some(new_note) = self.notes.get_mut(&new_id) {
+            new_note.body = body;
+            new_note.tags = tags;
+        }
+
+        for child in children {
+            self.deep_copy_from(source, child, Some(new_id));
+        }
+
+        Some(new_id)
+    }
+
     /// Removes `id` and its entire subtree, returning the full data of every
     /// removed note (root first, depth-first) so a caller can undo by
     /// reinserting it, or persist the removal (e.g. move to trash). O(size
@@ -692,6 +724,39 @@ mod tests {
         let copy = tree.get(copy_id).unwrap();
         assert_ne!(copy.created, ancient);
         assert_ne!(copy.updated, ancient);
+    }
+
+    #[test]
+    fn deep_copy_from_duplicates_a_subtree_from_another_tree() {
+        let mut source = Tree::new();
+        let root = source.create_note("Root", None);
+        let child = source.create_note("Child", Some(root));
+        source.set_body(child, "child body");
+
+        let mut dest = Tree::new();
+        let dest_parent = dest.create_note("Destination", None);
+
+        let copy_root = dest.deep_copy_from(&source, root, Some(dest_parent)).unwrap();
+
+        assert_ne!(copy_root, root);
+        assert_eq!(dest.get(copy_root).unwrap().title, "Root");
+        assert_eq!(dest.get(copy_root).unwrap().parent, Some(dest_parent));
+        let copy_children = dest.children(copy_root);
+        assert_eq!(copy_children.len(), 1);
+        assert_ne!(copy_children[0], child);
+        assert_eq!(dest.get(copy_children[0]).unwrap().title, "Child");
+        assert_eq!(dest.get(copy_children[0]).unwrap().body, "child body");
+
+        // source untouched, and the copy never appears in it
+        assert_eq!(source.children(root), &[child]);
+        assert!(source.get(copy_root).is_none());
+    }
+
+    #[test]
+    fn deep_copy_from_missing_note_returns_none() {
+        let source = Tree::new();
+        let mut dest = Tree::new();
+        assert!(dest.deep_copy_from(&source, NoteId::new(), None).is_none());
     }
 
     #[test]

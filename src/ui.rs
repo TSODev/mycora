@@ -873,6 +873,17 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
+    // Checked after last_error/last_message (a fresh one, e.g. from a
+    // refused paste, should still win for the one frame it's set) but
+    // before the default mode hints — a pending move/copy is a standing
+    // state, not a one-off outcome, so it persists across keypresses the
+    // same way `Mode::ConfirmDelete`'s prompt does.
+    if let Some(status) = app.pending_clipboard_status() {
+        let paragraph = Paragraph::new(status).style(bg.fg(Color::Yellow));
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
     // ConfirmDelete/Command never reach here (both return above), so
     // `Lang::mode_line`'s own unreachable arm for them never fires.
     let (mode_label, hints) = app.lang.mode_line(app.mode);

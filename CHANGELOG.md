@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Cut/paste and cross-vault copy**: `x` marks the selected note/subtree
+  to move, `c` marks it to copy (copying alone works from a read-only
+  mounted vault too), and `p` on a destination note completes whichever
+  is pending, inserting as its last child. `Esc` cancels a pending mark.
+  Undo/redo supported. The status bar shows the pending mark for as long
+  as it's active.
+
 ### Changed
 - **The SQLite index now uses WAL journal mode and a 5-second busy
   timeout**, instead of SQLite's own defaults (rollback journal,
