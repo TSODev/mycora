@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Three more showcase vaults**: `examples/showcase-jsoned/`,
+  `examples/showcase-rowdy/`, and `examples/showcase-terapi/` document
+  those sibling TSODev projects as interlinked Mycora notes, the same
+  way `examples/showcase-vault/` documents Mycora itself — built from
+  each project's own docs, not filler content.
+
 ## [0.11.0] — 2026-07-14
 
 ### Added
