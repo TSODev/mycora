@@ -1615,6 +1615,58 @@ Goal: stability before a public release.
       for — running an unrequested operation against real data, even
       a beneficial and non-destructive one, isn't something to gloss
       over. 187 tests, clippy clean.
+- [ ] **Windows support** (2026-07-13, user-asked, explicitly not
+      scheduled yet — just captured for later) — asked what it would
+      take to easily install and use Mycora on Windows. Checked the
+      actual code before answering rather than guessing generically
+      about Rust portability:
+      - **Already fine**: every dependency that matters for this
+        (`crossterm`, `notify`, `rusqlite` `bundled`, `tar`/`flate2`)
+        already supports Windows natively, and nothing in Mycora's own
+        code calls a Unix-only OS API (`std::os::unix`, `libc`, ... —
+        none appear anywhere in `src/`). `vault.rs`'s atomic
+        temp-file-then-`rename` write should already work correctly:
+        Rust's `std::fs::rename` passes `MOVEFILE_REPLACE_EXISTING` on
+        Windows internally specifically so this cross-platform pattern
+        behaves like POSIX `rename()` — likely fine, but worth an
+        actual Windows test rather than trusting that from memory.
+      - **The one real blocker**: `HOME` is read literally via
+        `std::env::var("HOME")` in **8 places** (`config.rs`,
+        `index.rs`, `session.rs`, `main.rs` ×5, all the
+        `~/.config`/`~/.local/share` path-building call sites), and
+        bails outright if unset. Native Windows (`cmd.exe`, plain
+        PowerShell) doesn't guarantee `HOME` is set — only
+        POSIX-compatibility layers (Git Bash, WSL) reliably define it,
+        so Mycora may already partially work there today without any
+        change, but a native console user would hit "HOME environment
+        variable is not set" immediately.
+      - **Friction, not a code problem**: `rusqlite`'s `bundled`
+        feature compiles SQLite from C source via the `cc` crate, which
+        needs a working C toolchain (MSVC or MinGW) present to
+        `cargo install` from source on a fresh Windows machine — not
+        unusual for Rust crates with bundled C dependencies, but a real
+        prerequisite Linux/macOS users often already have and Windows
+        users often don't.
+      - **The fix, when it's picked up**: swap the 8 literal `HOME`
+        reads for the small `dirs` crate (`dirs::home_dir()`/
+        `config_dir()`/`data_dir()`, no heavy transitive dependencies)
+        rather than hand-rolled Windows fallback logic. One real design
+        fork to resolve first, not yet decided: keep the current
+        XDG-shaped layout (`~/.config/mycora/...`,
+        `~/.local/share/mycora/...`) with `USERPROFILE` standing in for
+        `~` on Windows, for identical behavior across platforms — or
+        adopt native-per-platform conventions via `dirs::config_dir()`/
+        `dirs::data_dir()` directly (`%APPDATA%\mycora\` on Windows),
+        which reads as more "expected" to a Windows user who's never
+        heard of XDG but changes the actual directory Mycora's files
+        end up in.
+      - **Separate from code portability entirely**: "easy install"
+        beyond "possible to build" would want prebuilt Windows binaries
+        (e.g. `cargo-dist` or a GitHub Actions cross-compile to
+        `x86_64-pc-windows-msvc`) published as GitHub Releases, so a
+        user doesn't need Rust/Cargo/a C toolchain installed at all —
+        a packaging/CI question, not something this repo's own source
+        needs to change for.
 
 ---
 

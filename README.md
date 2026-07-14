@@ -157,9 +157,9 @@ behind every non-obvious decision along the way.
 ├─────────────────────────────┤
 │      Mycora core (Rust)     │   ← tree ops, link graph, undo/redo
 ├──────────────┬──────────────┤
-│  Markdown +   │   SQLite     │   ← source of truth │ derived, disposable
-│  frontmatter  │   (FTS5)     │     index
-│  files        │              │
+│  Markdown +  │   SQLite     │   ← source of truth │ derived, disposable
+│  frontmatter │   (FTS5)     │     index
+│  files       │              │
 └──────────────┴──────────────┘
 ```
 
