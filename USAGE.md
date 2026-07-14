@@ -114,6 +114,20 @@ registry entry at it (see [Configuration](#configuration)) to explore
 search, backlinks, and the command palette against real content instead
 of an empty vault.
 
+Three more showcase vaults ship the same way, one per sibling TSODev
+project — [`examples/showcase-jsoned/`](./examples/showcase-jsoned/),
+[`examples/showcase-rowdy/`](./examples/showcase-rowdy/), and
+[`examples/showcase-terapi/`](./examples/showcase-terapi/) — each built
+from that project's own documentation rather than filler content. Mount
+several at once (they're all read-only except your `"default"` vault) to
+see cross-vault wikilinks and the multi-vault tree layout in practice:
+
+```sh
+mycora vault add jsoned ./examples/showcase-jsoned
+mycora vault add rowdy ./examples/showcase-rowdy
+mycora vault add terapi ./examples/showcase-terapi
+```
+
 ## Configuration
 
 Config file at `~/.config/mycora/config.toml`. Mycora keeps a registry of
