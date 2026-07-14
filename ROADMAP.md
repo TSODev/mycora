@@ -1135,8 +1135,17 @@ Goal: stability before a public release.
 
 ## v1.0 — Public release
 
-- [ ] Publish to crates.io
-- [ ] `PUBLISH.md` / release checklist (mirroring the Terapi process)
+- [x] Publish to crates.io — done 2026-07-14 with 0.9.0, since followed
+      by 0.10.0/0.10.1/0.11.0.
+- [x] `PUBLISH.md` / release checklist (2026-07-14) — the intent was to
+      mirror Terapi's own release checklist, but that document turned
+      out to never have been committed there (likely `.gitignore`d) and
+      was lost in a machine change, so nothing to mirror. Written from
+      scratch instead, directly from the actual steps used for 0.9.0
+      through 0.11.0 (version-bump rule tied to `CHANGELOG.md`'s
+      `Added`-vs-`Fixed` content, promote the changelog, `cargo test`/
+      `clippy`, `cargo package`/`publish --dry-run`, commit, the real
+      `cargo publish` only on explicit go-ahead, tag, push).
 - [ ] Announce, gather feedback, triage into a v1.x backlog
 
 ---
