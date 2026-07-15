@@ -20,6 +20,8 @@ mounted vault below it), a Markdown-rendered body preview with tag
 badges in the middle, and backlinks on the
 right](./docs/screenshot.png)
 
+[![Watch a live demo on asciinema](https://asciinema.org/a/b099xhCdPFX3dCJ2.svg)](https://asciinema.org/a/b099xhCdPFX3dCJ2)
+
 ---
 
 ## The problem
