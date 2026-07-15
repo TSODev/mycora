@@ -1,20 +1,20 @@
 # Mycora — Usage Guide
 
-> Reflects what's actually implemented today (v0.1–v0.9): an in-memory
-> tree with Markdown persistence and atomic writes throughout, full
-> structural operations with undo/redo, tag management, SQLite-backed
-> search (with snippets and faceted filters) that scales linearly to
-> thousands of notes, multi-vault mounting (read-only secondary vaults,
-> unmounted and archived vaults both visible as their own tree rows),
-> `[[wikilink]]` cross-links (including cross-vault ones) with a
-> backlinks panel, an outgoing-links jump, link-count badges, and
-> autocompletion while typing, a full-pane note-body editor, a resizable
-> three-pane layout (tree, rendered-Markdown body preview, backlinks)
-> with light/dark-aware colors, a multilingual interface
-> (English/French/Spanish/German), and a `:` command palette
-> (`:reindex`, `:tags`, `:tag`, `:lang`, `:panes`, `:export`, `:config`,
-> `:q`). No configurable keybindings yet — see
-> [ROADMAP.md](./ROADMAP.md) for what's still ahead.
+> Reflects what's actually implemented: an in-memory tree with Markdown
+> persistence and atomic writes throughout, full structural operations
+> (including cut/paste and cross-vault copy) with undo/redo, tag
+> management, SQLite-backed search (with snippets and faceted filters)
+> that scales linearly to thousands of notes, multi-vault mounting
+> (read-only secondary vaults, unmounted and archived vaults both
+> visible as their own tree rows), `[[wikilink]]` cross-links (including
+> cross-vault ones) with a backlinks panel, an outgoing-links jump,
+> link-count badges, and autocompletion while typing, file attachments,
+> a full-pane note-body editor, a resizable three-pane layout (tree,
+> rendered-Markdown body preview, backlinks) with light/dark-aware
+> colors, a multilingual interface (English/French/Spanish/German), and
+> a `:` command palette (`:reindex`, `:tags`, `:tag`, `:lang`, `:panes`,
+> `:export`, `:config`, `:q`). No configurable keybindings yet —
+> deliberately out of scope until real friction shows up in practice.
 
 ## Table of Contents
 
@@ -35,6 +35,7 @@
 - [Moving notes](#moving-notes)
 - [Reordering siblings](#reordering-siblings)
 - [Copying notes](#copying-notes)
+- [Cut, paste, and cross-vault copy](#cut-paste-and-cross-vault-copy)
 - [Deleting notes and the trash](#deleting-notes-and-the-trash)
 - [Undo and redo](#undo-and-redo)
 - [Keybinding reference](#keybinding-reference)
@@ -766,11 +767,10 @@ all of them at once (see
 - An edit session that changes nothing doesn't write to disk or create an
   undo entry
 
-Still a full-pane overlay rather than editing in place alongside the tree
-— true split-pane editing is a separate, still-open item (see
-[ROADMAP.md](./ROADMAP.md)). This is also what unblocks writing
-`[[wikilinks]]` from inside the TUI instead of editing the file by hand
-(see [The search index](#the-search-index)).
+A full-pane overlay rather than editing in place alongside the tree —
+this is also what unblocks writing `[[wikilinks]]` from inside the TUI
+instead of editing the file by hand (see
+[The search index](#the-search-index)).
 
 ### Link autocompletion
 
@@ -817,10 +817,8 @@ your system.
 - `Shift+Tab` — outdent: reparents the selected note as a sibling of its
   current parent
 
-Reparenting to an arbitrary note (not just a neighbor) needs a note
-picker. The [search overlay](#searching) it depends on now exists, but
-the picker itself — reusing search to choose a reparent target rather
-than just jump to a note — isn't built yet.
+Reparenting to an arbitrary note (not just a neighbor) is `x` then `p`
+— see [Cut, paste, and cross-vault copy](#cut-paste-and-cross-vault-copy).
 
 ## Reordering siblings
 
@@ -831,8 +829,28 @@ than just jump to a note — isn't built yet.
 
 - `y` — deep-copies the selected note and its whole subtree as a new
   sibling right after it, with fresh ids and timestamps. This is always a
-  real duplicate, never a live reference to the original — see
-  ROADMAP.md's now-resolved copy-semantics question.
+  real duplicate, never a live reference to the original.
+
+For copying (or moving) to an arbitrary destination instead — including
+across a vault boundary — see
+[Cut, paste, and cross-vault copy](#cut-paste-and-cross-vault-copy).
+
+## Cut, paste, and cross-vault copy
+
+- `x` — marks the selected note/subtree as pending a *move*
+- `c` — marks it as pending a *copy* instead (works even when the
+  selected note is in a read-only mounted vault — copying only reads it)
+- `p`, pressed on any other note — completes whichever is pending,
+  inserting it as that note's last child
+- `Esc` — cancels a pending mark without touching anything
+
+The status bar shows the pending mark ("Moving '...' — p to drop here,
+Esc to cancel") for as long as it's active. Moving is restricted to the
+active (editable) vault — completing a cut means deleting the note from
+wherever it came from, and Mycora never writes to a read-only mounted
+vault; copying has no such restriction, so a note from any mounted
+vault can be pasted into the active one. Each completed paste is one
+step on the [undo/redo](#undo-and-redo) stack.
 
 ## Deleting notes and the trash
 
@@ -865,6 +883,9 @@ changes, for the rest of the session. Not persisted across restarts.
 | `i` | Rename selected note |
 | `e` | Edit body (see [Editing a note's body](#editing-a-notes-body)) |
 | `y` | Copy selected note (deep-copy) |
+| `x` | Mark for move (see [Cut, paste, and cross-vault copy](#cut-paste-and-cross-vault-copy)) |
+| `c` | Mark for copy |
+| `p` | Paste (move/copy) as the selected note's last child |
 | `Tab` | Indent (reparent under previous sibling) |
 | `Shift+Tab` | Outdent (reparent as sibling of parent) |
 | `K` | Move up among siblings |
