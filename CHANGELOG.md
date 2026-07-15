@@ -14,7 +14,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `INSTALL-WINDOWS.md` covers installing a prebuilt binary or building
   from source; a new GitHub Actions workflow builds and attaches a
   Windows `.zip` to every tagged release. Not yet verified on an actual
-  Windows machine — please report issues.
+  Windows machine — please report issues. The showcase vaults
+  (`examples/showcase-*`) deliberately aren't updated for this yet;
+  that's held until Windows behavior is actually confirmed working.
 
 ### Changed
 - **`Config`/`Session`/`Index`'s `default_path()`** no longer take a

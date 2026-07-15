@@ -126,7 +126,11 @@ directly and guarantee its synthetic output matches the real on-disk format.
   Config/session/index paths and the default vault's location are all
   resolved via the `dirs` crate (`config_dir()`/`data_dir()`/`home_dir()`)
   rather than a literal `$HOME` read, so they land in the right
-  platform-native location on Linux, macOS, and Windows alike.
+  platform-native location on Linux, macOS, and Windows alike (see
+  `INSTALL-WINDOWS.md`). Windows behavior is reasoned through, not yet
+  confirmed on a real Windows machine — `examples/showcase-*` stays
+  Windows-silent until that's verified, deliberately, rather than
+  documenting a platform nobody's actually run this on yet.
 - **`lang.rs` — `Lang`**: the TUI's interface language (`En`/`Fr`/`Es`/
   `De`, English default) — every label, hint, prompt, and status message
   in `app.rs`/`ui.rs` routes through a `Lang` method (`unknown_command`,
