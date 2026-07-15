@@ -25,15 +25,17 @@ fn reveal_ancestors(tree: &Tree, expanded: &mut HashSet<NoteId>, id: NoteId) {
     }
 }
 
-/// Expands a leading `~/` to `$HOME`, for a path typed into the attach
-/// prompt (see `App::confirm_attach`) — left untouched if `HOME` isn't set
-/// or the path doesn't start with `~/`. Not a full shell-style expansion
-/// (no `~user/...`), just the common case of one's own home directory.
+/// Expands a leading `~/` to the home directory, for a path typed into the
+/// attach prompt (see `App::confirm_attach`) — left untouched if the home
+/// directory can't be determined or the path doesn't start with `~/`. Not a
+/// full shell-style expansion (no `~user/...`), just the common case of
+/// one's own home directory. Uses the `dirs` crate rather than a literal
+/// `$HOME` read, so `~/` also resolves correctly on Windows.
 fn expand_home(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/")
-        && let Ok(home) = std::env::var("HOME")
+        && let Some(home) = dirs::home_dir()
     {
-        return PathBuf::from(home).join(rest);
+        return home.join(rest);
     }
     PathBuf::from(path)
 }
@@ -412,8 +414,8 @@ impl App {
         // or the vault changed since) are dropped rather than kept
         // dangling. Falls back to the defaults just computed above when
         // nothing was saved, or when the saved selection no longer exists.
-        let session_path = Session::default_path(&config.home);
-        let config_path = Config::default_path(&config.home);
+        let session_path = Session::default_path()?;
+        let config_path = Config::default_path()?;
         let session = Session::load(&session_path);
         if let Some((saved_selected, saved_expanded)) = session.for_vault(&active.name) {
             expanded = saved_expanded
@@ -442,7 +444,7 @@ impl App {
         let show_unmounted = session.show_unmounted().unwrap_or(true);
         let show_archived = session.show_archived().unwrap_or(true);
 
-        let index_path = Index::default_path(&config.home);
+        let index_path = Index::default_path()?;
         let mut index = Index::open(&index_path)?;
         // Reindex every mounted vault together at startup, so search and
         // cross-vault links reflect them as loaded without requiring

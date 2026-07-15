@@ -61,9 +61,6 @@ pub struct Config {
     /// a single `"default"` entry at `~/mycora` (or `vault_path`, see above)
     /// when the config declares none.
     pub vaults: Vec<VaultEntry>,
-    /// The resolved `$HOME`, kept around so callers that need an XDG-style
-    /// path (e.g. `Index::default_path`) don't each re-read the env var.
-    pub home: String,
     /// TUI interface language (`language = "fr"` in `config.toml`),
     /// defaulting to English. An unrecognized code fails `load()` loudly
     /// rather than silently falling back — see `Lang::from_code`.
@@ -71,17 +68,24 @@ pub struct Config {
 }
 
 impl Config {
-    /// `~/.config/mycora/config.toml` — kept as its own method (mirroring
+    /// `<config dir>/mycora/config.toml` — kept as its own method (mirroring
     /// `Session::default_path`/`Index::default_path`) so callers that need
     /// the path without loading a full `Config` (e.g. `add_vault`, and its
-    /// own tests) don't have to duplicate the join.
-    pub fn default_path(home: &str) -> PathBuf {
-        PathBuf::from(home).join(".config/mycora/config.toml")
+    /// own tests) don't have to duplicate the join. Resolved via the `dirs`
+    /// crate rather than a literal `$HOME`-based join, so this lands in the
+    /// platform-native location — `~/.config` (or `$XDG_CONFIG_HOME`) on
+    /// Linux, `~/Library/Application Support` on macOS, `%APPDATA%` on
+    /// Windows — instead of assuming a Unix-shaped home directory.
+    pub fn default_path() -> Result<PathBuf> {
+        let config_dir = dirs::config_dir()
+            .context("could not determine this platform's config directory")?;
+        Ok(config_dir.join("mycora/config.toml"))
     }
 
     pub fn load() -> Result<Self> {
-        let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-        let config_path = Self::default_path(&home);
+        let home = dirs::home_dir()
+            .context("could not determine this platform's home directory")?;
+        let config_path = Self::default_path()?;
 
         let raw: RawConfig = if config_path.exists() {
             let text = std::fs::read_to_string(&config_path)
@@ -92,7 +96,7 @@ impl Config {
             RawConfig::default()
         };
 
-        Self::from_raw(raw, &home)
+        Self::from_raw(raw, &home.to_string_lossy())
     }
 
     fn from_raw(raw: RawConfig, home: &str) -> Result<Self> {
@@ -134,11 +138,7 @@ impl Config {
             })?,
         };
 
-        Ok(Self {
-            vaults,
-            home: home.to_string(),
-            language,
-        })
+        Ok(Self { vaults, language })
     }
 
     /// Every vault flagged `mounted` in the registry — what `App` and the

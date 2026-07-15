@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Windows support**: config, session, and the search index now resolve
+  via the `dirs` crate (`%APPDATA%\mycora\...`) instead of a literal
+  `$HOME` read, which previously failed outright on native Windows.
+  `INSTALL-WINDOWS.md` covers installing a prebuilt binary or building
+  from source; a new GitHub Actions workflow builds and attaches a
+  Windows `.zip` to every tagged release. Not yet verified on an actual
+  Windows machine — please report issues.
+
+### Changed
+- **`Config`/`Session`/`Index`'s `default_path()`** no longer take a
+  `home: &str` parameter — each resolves its own platform-appropriate
+  directory directly and returns `Result`. `Config` dropped its
+  `pub home: String` field, unused once callers stopped deriving paths
+  from it.
+
 ## [0.12.1] — 2026-07-15
 
 ### Changed

@@ -1731,11 +1731,10 @@ Goal: stability before a public release.
       for — running an unrequested operation against real data, even
       a beneficial and non-destructive one, isn't something to gloss
       over. 187 tests, clippy clean.
-- [ ] **Windows support** (2026-07-13, user-asked, explicitly not
-      scheduled yet — just captured for later) — asked what it would
-      take to easily install and use Mycora on Windows. Checked the
-      actual code before answering rather than guessing generically
-      about Rust portability:
+- [x] **Windows support** (2026-07-13, user-asked; implemented
+      2026-07-15) — asked what it would take to easily install and use
+      Mycora on Windows. Checked the actual code before answering
+      rather than guessing generically about Rust portability:
       - **Already fine**: every dependency that matters for this
         (`crossterm`, `notify`, `rusqlite` `bundled`, `tar`/`flate2`)
         already supports Windows natively, and nothing in Mycora's own
@@ -1783,6 +1782,53 @@ Goal: stability before a public release.
         user doesn't need Rust/Cargo/a C toolchain installed at all —
         a packaging/CI question, not something this repo's own source
         needs to change for.
+
+      **Resolved, both halves.** The design fork above was settled
+      toward native-per-platform conventions, not the XDG-everywhere
+      option: config/session/index now resolve via the `dirs` crate
+      (`dirs::config_dir()`/`data_dir()`/`home_dir()`), landing at
+      `%APPDATA%\mycora\...` on Windows and the same `~/.config`/
+      `~/.local/share` paths as before on Linux (unchanged behavior
+      there, verified). The 9 literal `HOME` reads (one more turned up
+      than the original 8-site count above) collapsed to zero — three
+      `default_path()` methods (`Config`/`Session`/`Index`) went from
+      taking a `home: &str` parameter to resolving their own directory
+      internally and returning `Result`, which let `Config` drop its
+      `pub home: String` field entirely (nothing needed it once
+      `default_path` callers stopped deriving paths from a shared home
+      string). `app.rs`'s `expand_home` (the attach-file prompt's `~/`
+      expansion) moved to `dirs::home_dir()` the same way. `dirs` itself
+      is pure Rust (`dirs-sys` included), no C bindings, fitting the
+      bundled/pure-Rust dependency preference already established for
+      `rusqlite`/`tar`/`flate2`.
+
+      For the packaging half: a new `.github/workflows/windows-release.yml`
+      (this repo's first CI of any kind) builds natively on
+      `windows-latest` — not a Linux→Windows cross-compile — specifically
+      so `rusqlite`'s `bundled` C compilation has a real MSVC toolchain
+      already present, rather than needing one set up for a
+      cross-compile target. Triggers on every `v*` tag push (the last
+      step of this repo's own release flow, see PUBLISH.md) or manually
+      via `workflow_dispatch`; zips `mycora.exe` alongside `README.md`/
+      `USAGE.md` and attaches it to the matching GitHub Release.
+      `INSTALL-WINDOWS.md` documents both install paths (the prebuilt
+      `.zip`, and `cargo install` with its Visual Studio Build Tools
+      prerequisite for the same C-toolchain reason), where things land
+      on disk, and a terminal recommendation (Windows Terminal over
+      legacy `cmd.exe`, for the box-drawing/Unicode glyphs the tree pane
+      uses) — linked from both README.md and USAGE.md's Installation
+      section.
+
+      **Honestly flagged, not verified**: none of the above has been
+      exercised on a real Windows machine — this session had no Windows
+      environment available, only a Linux sandbox. The `dirs`-based path
+      resolution is reasoned through carefully and the Linux behavior
+      was confirmed unchanged, but the actual Windows-native code paths,
+      and the GitHub Actions workflow itself, only get their first real
+      test the next time a tag is pushed (for the workflow) and the next
+      time someone actually runs `mycora.exe` on Windows (for
+      everything else). 193 tests, clippy clean, on the platform this
+      was actually tested on.
 
 ---
 

@@ -15,6 +15,9 @@ cargo install mycora
 mycora
 ```
 
+On Windows, grab a prebuilt binary instead — see
+[INSTALL-WINDOWS.md](./INSTALL-WINDOWS.md).
+
 ![Mycora's three-pane layout: tree on the left (with a second, read-only
 mounted vault below it), a Markdown-rendered body preview with tag
 badges in the middle, and backlinks on the

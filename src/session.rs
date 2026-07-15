@@ -55,11 +55,13 @@ pub struct Session {
 }
 
 impl Session {
-    /// `~/.local/share/mycora/session.toml` — XDG data dir alongside the
-    /// SQLite index, since this is generated state, not user-authored
-    /// config.
-    pub fn default_path(home: &str) -> PathBuf {
-        PathBuf::from(home).join(".local/share/mycora/session.toml")
+    /// `<data dir>/mycora/session.toml` — platform-native data dir
+    /// alongside the SQLite index (see `Index::default_path`), since this
+    /// is generated state, not user-authored config.
+    pub fn default_path() -> anyhow::Result<PathBuf> {
+        let data_dir = dirs::data_dir()
+            .ok_or_else(|| anyhow::anyhow!("could not determine this platform's data directory"))?;
+        Ok(data_dir.join("mycora/session.toml"))
     }
 
     /// Missing or unparseable files are treated the same as an empty

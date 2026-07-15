@@ -87,11 +87,14 @@ pub struct Index {
 }
 
 impl Index {
-    /// `~/.local/share/mycora/index.sqlite3` — XDG data dir, not
-    /// `~/.config`, since this file is generated and disposable rather than
-    /// user-authored.
-    pub fn default_path(home: &str) -> PathBuf {
-        PathBuf::from(home).join(".local/share/mycora/index.sqlite3")
+    /// `<data dir>/mycora/index.sqlite3` — platform-native data dir, not
+    /// the config dir, since this file is generated and disposable rather
+    /// than user-authored (`~/.local/share` on Linux, `%APPDATA%` on
+    /// Windows, via the `dirs` crate).
+    pub fn default_path() -> Result<PathBuf> {
+        let data_dir =
+            dirs::data_dir().context("could not determine this platform's data directory")?;
+        Ok(data_dir.join("mycora/index.sqlite3"))
     }
 
     /// How long a write waits on a `SQLITE_BUSY` lock (another process

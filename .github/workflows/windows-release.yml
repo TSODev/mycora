@@ -1,0 +1,49 @@
+name: Windows release binary
+
+# Builds a native Windows binary on every version tag push (the last step
+# of this repo's own release flow, see PUBLISH.md) and attaches it to the
+# matching GitHub Release. Runs on windows-latest rather than cross-
+# compiling from Linux, specifically so rusqlite's `bundled` feature (which
+# compiles SQLite from C source) has a real MSVC toolchain to build
+# against, without asking a contributor to set one up locally.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup update stable --no-self-update
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          if ($version -eq "") { $version = "dev" }
+          $name = "mycora-$version-x86_64-pc-windows-msvc"
+          New-Item -ItemType Directory -Path $name | Out-Null
+          Copy-Item target/release/mycora.exe "$name/"
+          Copy-Item README.md "$name/"
+          Copy-Item USAGE.md "$name/"
+          Compress-Archive -Path "$name/*" -DestinationPath "$name.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: "mycora-*.zip"
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "mycora-*.zip"

@@ -111,7 +111,9 @@ directly and guarantee its synthetic output matches the real on-disk format.
   sync-filenames <name>` (`main.rs`) is the retroactive fixer for notes
   that already drifted before this existed — just every note re-saved
   through the same path.
-- **`config.rs` — `Config`**: reads `~/.config/mycora/config.toml`. Holds a
+- **`config.rs` — `Config`**: reads `<config dir>/mycora/config.toml`
+  (`~/.config/mycora/config.toml` on Linux, `%APPDATA%\mycora\config.toml`
+  on Windows). Holds a
   registry of named vaults (`VaultEntry { name, path, mounted }`);
   `mounted_vaults()` filters to what should load at startup, `active_vault()`
   picks the entry named `"default"` (or the first mounted one if none is) as
@@ -121,7 +123,10 @@ directly and guarantee its synthetic output matches the real on-disk format.
   config keeps working unchanged. Also holds `language: Lang` (from an
   optional `language = "fr"` key, see `lang.rs`) — an unrecognized code
   fails `load()` loudly rather than silently defaulting to English.
-  Requires `HOME` to be set.
+  Config/session/index paths and the default vault's location are all
+  resolved via the `dirs` crate (`config_dir()`/`data_dir()`/`home_dir()`)
+  rather than a literal `$HOME` read, so they land in the right
+  platform-native location on Linux, macOS, and Windows alike.
 - **`lang.rs` — `Lang`**: the TUI's interface language (`En`/`Fr`/`Es`/
   `De`, English default) — every label, hint, prompt, and status message
   in `app.rs`/`ui.rs` routes through a `Lang` method (`unknown_command`,
@@ -143,8 +148,9 @@ directly and guarantee its synthetic output matches the real on-disk format.
   via `Config::set_language` (same parse-and-rewrite plumbing as
   `add_vault`). CLI output stays English for now; this is TUI-only.
 - **`index.rs` — `Index`**: the disposable SQLite index behind search, tag
-  filtering, and links (`~/.local/share/mycora/index.sqlite3`, `rusqlite`
-  `bundled`, no system libsqlite3). Schema: `notes`, `tree_edges`, `tags`,
+  filtering, and links (`<data dir>/mycora/index.sqlite3` —
+  `~/.local/share` on Linux, `%APPDATA%` on Windows, via `dirs`;
+  `rusqlite` `bundled`, no system libsqlite3). Schema: `notes`, `tree_edges`, `tags`,
   `notes_fts` (FTS5 over title/body/tags), and `links`
   (`source_vault`/`source`/`target_vault`/`target` — a single `vault_id`
   column can't express an edge whose two ends live in different vaults).
@@ -189,7 +195,7 @@ directly and guarantee its synthetic output matches the real on-disk format.
   markdown-widget crate). Used by `ui.rs`'s body preview pane; read-only
   and not interactive — links and `[[wikilinks]]` render as plain text.
 - **`session.rs` — `Session`**: reads/writes
-  `~/.local/share/mycora/session.toml`, keyed by vault name
+  `<data dir>/mycora/session.toml`, keyed by vault name
   (`selected`/`expanded` per vault, so switching which vault is `"default"`
   doesn't clobber another vault's remembered position). Saved once at
   shutdown (`App::save_session`, called from `main.rs` right after `run()`

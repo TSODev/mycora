@@ -87,6 +87,9 @@ version:
 cargo install mycora
 ```
 
+On Windows, see [INSTALL-WINDOWS.md](./INSTALL-WINDOWS.md) for a
+prebuilt binary that doesn't need a Rust toolchain or C compiler.
+
 ## Launching Mycora
 
 ```sh
@@ -131,9 +134,11 @@ mycora vault add terapi ./examples/showcase-terapi
 
 ## Configuration
 
-Config file at `~/.config/mycora/config.toml`. Mycora keeps a registry of
-named vaults, every one of which is *mounted* (loaded) at startup unless
-you opt it out:
+Config file at `~/.config/mycora/config.toml` (on Windows,
+`%APPDATA%\mycora\config.toml` — every path below follows the same
+platform-native convention, resolved via the `dirs` crate rather than a
+literal `$HOME`). Mycora keeps a registry of named vaults, every one of
+which is *mounted* (loaded) at startup unless you opt it out:
 
 ```toml
 language = "fr"   # optional TUI language: "en" (default), "fr", "es", or "de"

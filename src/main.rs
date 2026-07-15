@@ -269,13 +269,13 @@ fn main() -> anyhow::Result<()> {
     result
 }
 
-/// Resolves `HOME` and delegates to `Config::add_vault` — the CLI side of
-/// `mycora vault add`. Prints a one-line confirmation on success; errors
-/// (HOME unset, config.toml unparseable, duplicate name) propagate as
-/// `main`'s own `Result` does for every other subcommand.
+/// Resolves the config path and delegates to `Config::add_vault` — the CLI
+/// side of `mycora vault add`. Prints a one-line confirmation on success;
+/// errors (config dir undeterminable, config.toml unparseable, duplicate
+/// name) propagate as `main`'s own `Result` does for every other
+/// subcommand.
 fn vault_add(name: &str, path: PathBuf, mounted: bool) -> anyhow::Result<()> {
-    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-    let config_path = Config::default_path(&home);
+    let config_path = Config::default_path()?;
     Config::add_vault(&config_path, name, path.clone(), mounted)?;
     let mount_note = if mounted { "" } else { " (not mounted)" };
     println!(
@@ -299,8 +299,7 @@ fn vault_add(name: &str, path: PathBuf, mounted: bool) -> anyhow::Result<()> {
 fn vault_init(name: &str, path: PathBuf) -> anyhow::Result<()> {
     Vault::open(path.clone())?;
 
-    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-    let config_path = Config::default_path(&home);
+    let config_path = Config::default_path()?;
     Config::add_vault(&config_path, name, path.clone(), true)?;
 
     let config = Config::load()?;
@@ -323,8 +322,7 @@ fn vault_init(name: &str, path: PathBuf) -> anyhow::Result<()> {
 }
 
 fn vault_rename(old_name: &str, new_name: &str) -> anyhow::Result<()> {
-    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-    let config_path = Config::default_path(&home);
+    let config_path = Config::default_path()?;
     Config::rename_vault(&config_path, old_name, new_name)?;
     println!(
         "mycora: renamed vault \"{old_name}\" to \"{new_name}\" in {}",
@@ -334,8 +332,7 @@ fn vault_rename(old_name: &str, new_name: &str) -> anyhow::Result<()> {
 }
 
 fn vault_promote(name: &str) -> anyhow::Result<()> {
-    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-    let config_path = Config::default_path(&home);
+    let config_path = Config::default_path()?;
     Config::promote_vault(&config_path, name)?;
     println!(
         "mycora: \"{name}\" is now the active (read-write) vault in {}",
@@ -345,8 +342,7 @@ fn vault_promote(name: &str) -> anyhow::Result<()> {
 }
 
 fn vault_set_mounted(name: &str, mounted: bool) -> anyhow::Result<()> {
-    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-    let config_path = Config::default_path(&home);
+    let config_path = Config::default_path()?;
     if mounted {
         Config::mount_vault(&config_path, name)?;
     } else {
@@ -361,8 +357,7 @@ fn vault_set_mounted(name: &str, mounted: bool) -> anyhow::Result<()> {
 }
 
 fn vault_remove(name: &str) -> anyhow::Result<()> {
-    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-    let config_path = Config::default_path(&home);
+    let config_path = Config::default_path()?;
     Config::remove_vault(&config_path, name)?;
     println!(
         "mycora: removed vault \"{name}\" from {} (its files on disk were not touched)",
@@ -445,7 +440,7 @@ fn vault_archive(name: &str, output: Option<PathBuf>) -> anyhow::Result<()> {
     std::fs::remove_dir_all(&entry.path)
         .with_context(|| format!("removing {}", entry.path.display()))?;
 
-    let config_path = Config::default_path(&config.home);
+    let config_path = Config::default_path()?;
     Config::archive_vault(&config_path, name, output.clone())?;
 
     println!(
@@ -488,7 +483,7 @@ fn vault_unarchive(name: &str) -> anyhow::Result<()> {
     std::fs::remove_file(archive_path)
         .with_context(|| format!("removing {}", archive_path.display()))?;
 
-    let config_path = Config::default_path(&config.home);
+    let config_path = Config::default_path()?;
     Config::unarchive_vault(&config_path, name)?;
 
     println!(
@@ -630,8 +625,7 @@ fn import_vault(source: PathBuf, name: &str, path: PathBuf) -> anyhow::Result<()
         vault.save_note(*id, note)?;
     }
 
-    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-    let config_path = Config::default_path(&home);
+    let config_path = Config::default_path()?;
     Config::add_vault(&config_path, name, path.clone(), true)?;
 
     println!(
@@ -648,7 +642,7 @@ fn import_vault(source: PathBuf, name: &str, path: PathBuf) -> anyhow::Result<()
 /// The index itself is always disposable — this is safe to rerun any time.
 fn reindex() -> anyhow::Result<()> {
     let config = Config::load()?;
-    let index_path = Index::default_path(&config.home);
+    let index_path = Index::default_path()?;
     let results = perform_reindex(&config)?;
     for (name, count) in &results {
         println!(
@@ -671,7 +665,7 @@ fn reindex() -> anyhow::Result<()> {
 /// watched root).
 fn watch_reindex() -> anyhow::Result<()> {
     let config = Config::load()?;
-    let index_path = Index::default_path(&config.home);
+    let index_path = Index::default_path()?;
 
     let results = perform_reindex(&config)?;
     for (name, count) in &results {
@@ -724,7 +718,7 @@ fn watch_reindex() -> anyhow::Result<()> {
 /// to any note in any mounted vault) the same way `vault.load()`'s own
 /// warnings are printed — reported, not an error.
 fn perform_reindex(config: &Config) -> anyhow::Result<Vec<(String, usize)>> {
-    let index_path = Index::default_path(&config.home);
+    let index_path = Index::default_path()?;
     let mut index = Index::open(&index_path)?;
 
     let mut loaded: Vec<(String, Tree, Vault)> = Vec::new();
