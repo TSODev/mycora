@@ -5,7 +5,7 @@ order: 2
 tags:
 - features
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T14:00:00Z
+updated: 2026-07-15T09:00:00Z
 ---
 
 # Features
@@ -24,5 +24,9 @@ What's actually built, grouped by area:
 - [[Importing an Obsidian vault]] — folders become tree structure
 - [[The interface speaks four languages]] — English, French, Spanish,
   German, switchable live with `:lang`
+- [[Attaching files to a note]] — copy a file into the vault and link it
+  from the cursor, `Ctrl+A` while editing a body
+- [[Cut, paste, and cross-vault copy]] — `x`/`c`/`p` move or copy a
+  note/subtree onto any destination, cross-vault for copy
 
 See [[Roadmap]] for what's still ahead.

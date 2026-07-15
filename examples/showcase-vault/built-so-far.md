@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T21:00:00Z
+updated: 2026-07-15T09:00:00Z
 ---
 
 # Built so far
@@ -90,3 +90,18 @@ updated: 2026-07-13T21:00:00Z
   (see [[Markdown as source of truth]]); and the SQLite index opens in
   WAL mode with a real busy timeout, a cheap step toward the still-open
   concurrent-write-safety question (see [[Disposable SQLite index]])
+- **v0.11** — [[Cut, paste, and cross-vault copy]]: `x` marks a
+  note/subtree to move, `c` marks it to copy (copying alone works from a
+  read-only mounted vault too — see
+  [[Copying works from a read-only vault; moving doesn't]]), `p` on a
+  destination completes whichever is pending as its last child, `Esc`
+  cancels a pending mark
+- **Since v0.11** — [[Attaching files to a note]] copies a file into
+  `attachments/` and links it from the cursor, `Ctrl+A` while editing a
+  body (see [[Attachments are copied and linked, never rendered]] for
+  why nothing renders inline); three more showcase vaults joined this
+  one, documenting sibling projects [[Rowdy]], [[Terapi]], and
+  [[Jsoned]] the same way this vault documents Mycora itself (see
+  [[Other projects]]); and `PUBLISH.md` written up as a real release
+  checklist instead of living only in memory from one release to the
+  next

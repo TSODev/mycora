@@ -5,7 +5,7 @@ order: 3
 tags:
 - design-decision
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T13:00:00Z
+updated: 2026-07-15T09:00:00Z
 ---
 
 # Design decisions
@@ -28,6 +28,8 @@ behind each — the "why," not just the "what."
 - [[Reindex was quadratic, one missing index fixed it]]
 - [[Unmounted vaults are visible too]]
 - [[Compressing a vault trades files for one archive, deliberately]]
+- [[Attachments are copied and linked, never rendered]]
+- [[Copying works from a read-only vault; moving doesn't]]
 
 Most of these were resolved as open questions during development, not
 decided upfront — see [[Roadmap]] for the versioned history each one is

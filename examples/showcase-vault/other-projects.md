@@ -5,7 +5,7 @@ order: 5
 tags:
 - meta
 created: 2026-07-13T10:00:00Z
-updated: 2026-07-13T10:00:00Z
+updated: 2026-07-15T09:30:00Z
 ---
 
 # Other projects
@@ -17,3 +17,11 @@ switched away from the terminal for.
 - [[Rowdy]] — a TUI database management tool
 - [[Terapi]] — a TUI for testing REST and GraphQL APIs
 - [[Jsoned]] — a TUI for viewing and editing JSON
+
+Each one has its own Mycora showcase vault too
+(`examples/showcase-jsoned/`, `examples/showcase-rowdy/`,
+`examples/showcase-terapi/`), built from that project's own
+documentation the same way this vault documents Mycora itself — mount
+one alongside this vault to see cross-vault wikilinks and read-only
+secondary vaults (see [[Read-only secondary vaults]]) in practice, with
+real content on both sides instead of just this one.
