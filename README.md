@@ -7,18 +7,8 @@ notes — mind-map-style trees — while letting individual notes reference each
 other across branches, the way a mycelial network links the root systems of
 otherwise separate trees.
 
-> Status: working, in active development. Hierarchical notes, Markdown
-> persistence, full tree editing with undo/redo, tag management, SQLite-
-> backed full-text search, the "mycelial" cross-link layer
-> (`[[wikilink]]`-style references with a backlinks panel), a resizable
-> three-pane layout with a `:` command palette, multi-vault mounting
-> (including archiving a vault to a single compressed file), a
-> multilingual interface (English/French/Spanish/German, switchable
-> live with `:lang`), `[[wikilink]]` autocompletion while typing, and
-> Obsidian import / Markdown-or-PDF export are all shipped today
-> (v0.1–v0.9). Configurable keybindings are the one item still
-> deliberately deferred — see [ROADMAP.md](./ROADMAP.md) for what's
-> built vs. still ahead, and [USAGE.md](./USAGE.md) to actually use it.
+> Working and daily-usable. See [Features](#features) below for what's
+> built, and [USAGE.md](./USAGE.md) to actually use it.
 
 ![Mycora's three-pane layout: tree on the left (with a second, read-only
 mounted vault below it), a Markdown-rendered body preview with tag
@@ -85,11 +75,14 @@ names the part of the design that's actually differentiating: not the tree
   return relevant results fast, with ranking that reflects relevance
   (BM25-class scoring), not just substring matches.
 
-## Built (v0.1–v0.9)
+## Features
 
 - **Tree operations**: create, rename, delete (the whole subtree moves to
   `.trash/`, never erased outright), move/reparent with cycle detection,
   reorder siblings, deep-copy a subtree (fresh ids, no shared identity).
+- **Cut, paste, and cross-vault copy**: mark a note/subtree with `x`
+  (move) or `c` (copy — works from a read-only mounted vault too), then
+  `p` on any destination to complete it as that note's last child.
 - **Tags**: `:tag add <tag>` / `:tag del <tag>` on the selected note,
   shown as `#tag` badges along the bottom of the body preview; undo/redo-
   aware, a no-op (not an error) on a duplicate add or a missing removal.
@@ -138,16 +131,9 @@ names the part of the design that's actually differentiating: not the tree
 - **Link autocompletion**: typing `[[` in the body editor opens a popup
   of matching note titles across every mounted vault — `Up`/`Down` to
   pick, `Tab`/`Enter` to accept, `Esc` to keep typing manually.
-
-## Still ahead
-
-- **Configurable keybindings** — deliberately out of scope until real
-  friction shows up in practice, rather than built speculatively.
-- **v1.0 — Public release**: a versioned crates.io publish, a release
-  checklist, gathering feedback.
-
-See [ROADMAP.md](./ROADMAP.md) for the full staged plan and the reasoning
-behind every non-obvious decision along the way.
+- **Attaching files**: `Ctrl+A` while editing a note's body copies a
+  file into `attachments/` and inserts a link at the cursor — never
+  rendered inline, just kept alongside the note and linked from it.
 
 ## Architecture
 
@@ -205,21 +191,12 @@ Considered and deliberately not adopted:
 
 ## Status
 
-Working and daily-usable — v0.1 through v0.9 are functionally complete
-(except configurable keybindings, deliberately deferred): in-memory tree
-with full structural operations, undo/redo, and tag management, Markdown
-+ YAML frontmatter persistence with atomic writes throughout,
-SQLite-backed search (FTS5 full-text, BM25 ranking, tag/date/branch
-facets) that scales linearly to thousands of notes, the `[[wikilink]]`
-cross-link layer (with autocompletion while typing) and a backlinks
-panel, multi-vault mounting (including archiving a vault to a single
-compressed file) with a full `mycora vault` CLI, a resizable three-pane
-TUI layout with a `:` command palette, a multilingual interface
-(English/French/Spanish/German), and Obsidian import /
-Markdown-or-PDF export. See [USAGE.md](./USAGE.md) for how to use it
-today, [ROADMAP.md](./ROADMAP.md) for what's still ahead (a stable
-v1.0), and [BENCHMARK.md](./BENCHMARK.md) for how it performs at
-thousands of notes.
+Working and daily-usable, published on crates.io. Configurable
+keybindings are the one thing deliberately left out for now, until real
+friction shows up in practice rather than being built speculatively.
+See [USAGE.md](./USAGE.md) for how to use it today, and
+[BENCHMARK.md](./BENCHMARK.md) for how it performs at thousands of
+notes.
 
 ## Showcase vaults
 
