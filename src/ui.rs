@@ -843,6 +843,17 @@ fn draw_hint_row(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
+    // Same "live input wins" priority as `Mode::Command`'s `:` prompt
+    // above — the attach prompt is layered on top of `Mode::EditBody`
+    // rather than its own mode (see `App::attach_prompt`'s doc comment),
+    // so it's checked here by field rather than by `app.mode`.
+    if let Some(input) = app.attach_prompt() {
+        let text = format!("{}{input}", app.lang.attach_prompt_label());
+        let paragraph = Paragraph::new(text).style(bg.fg(Color::Gray));
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
     if app.mode == Mode::ConfirmDelete {
         let title = app.pending_delete_title().unwrap_or(app.lang.this_note());
         let descendants = app.pending_delete_descendant_count().unwrap_or(0);

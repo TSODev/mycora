@@ -793,6 +793,23 @@ mounted one (the same scope `[[wikilinks]]` already resolve across).
 Typing `]]` yourself instead of picking a suggestion finishes the link
 manually; the popup just closes once there's nothing left to match.
 
+### Attaching a file
+
+`Ctrl+A` opens a small inline prompt — same status-bar area as `:` — for
+a file path to attach (`~/` expands to your home directory). On `Enter`,
+the file is *copied* (never moved) into `attachments/` at the vault's
+root, disambiguated on a name collision the same way a brand-new note's
+filename is, and a `![alt](attachments/name.ext)` Markdown link is
+inserted right at the cursor. `Esc` cancels the prompt without touching
+anything.
+
+Mycora doesn't render images inline (or any other embedded media) — the
+link shows as plain alt text in the body preview, same as any other
+Markdown it doesn't specially handle. Attaching is about keeping a file
+alongside your notes and linked from them, not about viewing it inside
+Mycora itself; open it with whatever normally opens that file type on
+your system.
+
 ## Moving notes
 
 - `Tab` — indent: reparents the selected note under its immediately
@@ -900,6 +917,7 @@ to fit on a real terminal.
 | Key | Action |
 |---|---|
 | *(type)* | Edit the body, multi-line — `Enter` inserts a newline |
+| `Ctrl+A` | Attach a file (see [Attaching a file](#attaching-a-file)) |
 | `Esc` | Save and return to Normal mode (see [Editing a note's body](#editing-a-notes-body)) |
 
 While the `[[wikilink]]` autocomplete popup is open (see

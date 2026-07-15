@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Attach a file to a note**: `Ctrl+A` while editing a note's body opens
+  an inline prompt for a file path (`~/` expands to your home
+  directory); on `Enter` the file is copied into `attachments/` at the
+  vault's root and a `![alt](attachments/name.ext)` link is inserted at
+  the cursor. Images/media are never rendered inline — this is about
+  keeping a file linked alongside a note, not viewing it in Mycora.
 - **Three more showcase vaults**: `examples/showcase-jsoned/`,
   `examples/showcase-rowdy/`, and `examples/showcase-terapi/` document
   those sibling TSODev projects as interlinked Mycora notes, the same

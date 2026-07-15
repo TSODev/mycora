@@ -650,10 +650,22 @@ impl Lang {
                 "RÜCKVERWEISE",
                 "j/k: bewegen  Enter: springen  Esc/b: zurück zum Baum",
             ),
-            (Lang::En, Mode::EditBody) => ("EDIT BODY", "Esc: save & exit"),
-            (Lang::Fr, Mode::EditBody) => ("ÉDITION", "Esc: sauver & quitter"),
-            (Lang::Es, Mode::EditBody) => ("EDITAR", "Esc: guardar y salir"),
-            (Lang::De, Mode::EditBody) => ("BEARBEITEN", "Esc: speichern & verlassen"),
+            (Lang::En, Mode::EditBody) => (
+                "EDIT BODY",
+                "Esc: save & exit  Ctrl+A: attach file",
+            ),
+            (Lang::Fr, Mode::EditBody) => (
+                "ÉDITION",
+                "Esc: sauver & quitter  Ctrl+A: joindre un fichier",
+            ),
+            (Lang::Es, Mode::EditBody) => (
+                "EDITAR",
+                "Esc: guardar y salir  Ctrl+A: adjuntar archivo",
+            ),
+            (Lang::De, Mode::EditBody) => (
+                "BEARBEITEN",
+                "Esc: speichern & verlassen  Ctrl+A: Datei anhängen",
+            ),
             (Lang::En, Mode::TagResults) => {
                 ("TAG RESULTS", "j/k: move  Enter: open  Esc: cancel")
             }
@@ -814,6 +826,35 @@ impl Lang {
             Lang::Fr => format!("échec de la sauvegarde : {err}"),
             Lang::Es => format!("error al guardar: {err}"),
             Lang::De => format!("Speichern fehlgeschlagen: {err}"),
+        }
+    }
+
+    /// Label prefix on the inline attach-file prompt (`Ctrl+A` in
+    /// `Mode::EditBody`) — see `App::attach_prompt`.
+    pub fn attach_prompt_label(self) -> &'static str {
+        match self {
+            Lang::En => "Attach file: ",
+            Lang::Fr => "Joindre un fichier : ",
+            Lang::Es => "Adjuntar archivo: ",
+            Lang::De => "Datei anhängen: ",
+        }
+    }
+
+    pub fn attached_file(self, rel_path: &str) -> String {
+        match self {
+            Lang::En => format!("attached {rel_path}"),
+            Lang::Fr => format!("fichier joint : {rel_path}"),
+            Lang::Es => format!("archivo adjuntado: {rel_path}"),
+            Lang::De => format!("Datei angehängt: {rel_path}"),
+        }
+    }
+
+    pub fn attach_failed(self, err: &impl std::fmt::Display) -> String {
+        match self {
+            Lang::En => format!("attach failed: {err}"),
+            Lang::Fr => format!("échec de la jointure : {err}"),
+            Lang::Es => format!("error al adjuntar: {err}"),
+            Lang::De => format!("Anhängen fehlgeschlagen: {err}"),
         }
     }
 

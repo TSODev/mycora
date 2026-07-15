@@ -25,6 +25,19 @@ fn reveal_ancestors(tree: &Tree, expanded: &mut HashSet<NoteId>, id: NoteId) {
     }
 }
 
+/// Expands a leading `~/` to `$HOME`, for a path typed into the attach
+/// prompt (see `App::confirm_attach`) — left untouched if `HOME` isn't set
+/// or the path doesn't start with `~/`. Not a full shell-style expansion
+/// (no `~user/...`), just the common case of one's own home directory.
+fn expand_home(path: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return PathBuf::from(home).join(rest);
+    }
+    PathBuf::from(path)
+}
+
 /// A vault mounted alongside the primary one: loaded and indexed (so its
 /// notes count toward search/backlinks/link-count badges under its own
 /// `vault_id`, and its wikilinks can resolve cross-vault against the
@@ -256,6 +269,13 @@ pub struct App {
     /// pending at a time), or by `paste_pending` itself, whether or not
     /// the paste actually succeeds.
     pending_clipboard: Option<PendingClipboard>,
+    /// Text typed into the inline attach-file prompt (`Ctrl+A` while
+    /// `mode == Mode::EditBody`) — `Some` exactly while the prompt is
+    /// open, same shape as `command_input`/`Mode::Command` but layered on
+    /// top of `Mode::EditBody` instead of its own mode, since confirming
+    /// it needs the body editor (to insert the link at the cursor) still
+    /// live underneath. See `begin_attach`/`confirm_attach`/`cancel_attach`.
+    attach_prompt: Option<String>,
 }
 
 /// See `App::link_autocomplete`'s doc comment.
@@ -509,6 +529,7 @@ impl App {
             links_results: Vec::new(),
             links_selected: 0,
             pending_clipboard: None,
+            attach_prompt: None,
         };
 
         Ok((app, warnings))
@@ -1957,6 +1978,78 @@ impl App {
 
     pub fn body_editor(&self) -> Option<&TextArea<'static>> {
         self.body_editor.as_ref()
+    }
+
+    /// `Ctrl+A` while `mode == Mode::EditBody` — opens the inline
+    /// attach-file prompt. Clears `link_autocomplete` too, same as
+    /// `begin_edit_body` does when the editor itself opens, so a stray
+    /// wikilink popup can't linger visually behind the prompt.
+    pub fn begin_attach(&mut self) {
+        self.link_autocomplete = None;
+        self.attach_prompt = Some(String::new());
+    }
+
+    pub fn attach_prompt(&self) -> Option<&str> {
+        self.attach_prompt.as_deref()
+    }
+
+    pub fn attach_prompt_push(&mut self, c: char) {
+        if let Some(input) = &mut self.attach_prompt {
+            input.push(c);
+        }
+    }
+
+    pub fn attach_prompt_backspace(&mut self) {
+        if let Some(input) = &mut self.attach_prompt {
+            input.pop();
+        }
+    }
+
+    /// `Esc` while the attach prompt is open — dismisses just the prompt,
+    /// leaving the rest of the edit session untouched (a separate `Esc`
+    /// afterward still saves and exits the editor as usual, same as
+    /// `cancel_link_autocomplete`).
+    pub fn cancel_attach(&mut self) {
+        self.attach_prompt = None;
+    }
+
+    /// `Enter` while the attach prompt is open — copies the typed path
+    /// into `attachments/` (see `Vault::attach_file`) and inserts a
+    /// `![alt](attachments/name.ext)` link at the cursor. The prompt is
+    /// always cleared, whether or not the attach actually succeeds, same
+    /// confirm-or-cancel-clears-it shape as `paste_pending` — a failure
+    /// (bad path, permissions, ...) is reported through `last_error`
+    /// rather than left as a stale prompt to notice and dismiss
+    /// separately. A blank (or all-whitespace) path is treated as if
+    /// `Esc` had been pressed instead, since there's nothing to attach.
+    pub fn confirm_attach(&mut self) {
+        let Some(raw_input) = self.attach_prompt.take() else {
+            return;
+        };
+        let trimmed = raw_input.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        let source = expand_home(trimmed);
+
+        match self.vault.attach_file(&source) {
+            Ok(rel_path) => {
+                let rel_display = rel_path.display().to_string();
+                if let Some(editor) = &mut self.body_editor {
+                    let alt = source
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("attachment");
+                    editor.insert_str(format!("![{alt}]({rel_display})"));
+                }
+                self.last_error = None;
+                self.last_message = Some(self.lang.attached_file(&rel_display));
+            }
+            Err(err) => {
+                self.last_message = None;
+                self.last_error = Some(self.lang.attach_failed(&err));
+            }
+        }
     }
 
     /// `:` — opens the command prompt (see `Mode::Command`'s doc comment).

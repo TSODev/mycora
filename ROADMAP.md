@@ -1436,28 +1436,68 @@ Goal: stability before a public release.
       (no behavioral change, `VaultSeparator` stays filtered out of
       `move_selection`'s navigable stops exactly as before), clippy
       clean.
-- [ ] **Attach images/other files to a note, without rendering them**
-      (2026-07-12, user-floated, explicitly not scheduled yet — just
-      captured for later) — asked "even if we don't display them, what
-      about attaching images or other media to a note?" Fits the current
-      "vault is just a directory of files" philosophy cheaply: `vault.rs`
-      already silently skips any non-`.md` file when loading (an
-      extension check, not a whitelist of known-good names), so a real
-      file sitting anywhere in the vault directory — an `attachments/`
-      subfolder, say — is already inert to it today, no special-casing
-      needed there. Referencing one from a note body would just be a
-      normal relative Markdown link (`![alt](attachments/photo.png)`),
-      which `markdown.rs` already degrades gracefully — no `Tag::Image`
-      handling exists, so it falls through to rendering the alt text
-      only, not a crash or literal broken markup.
-      The open fork, deliberately not resolved yet: do nothing further
-      (the user manually drops files into the vault directory and types
-      the relative link by hand — zero new code) versus a real `:attach
-      <path>` command that copies the file into the vault and inserts
-      the link at the cursor automatically (more useful, but touches
-      `vault.rs` for a first non-note file operation, and raises a
-      follow-on question of whether `:export`'s subtree flatten should
-      then also copy along any attachments a copied note references).
+- [x] **Attach images/other files to a note, without rendering them**
+      (2026-07-12, user-floated; implemented 2026-07-15) — asked "even if
+      we don't display them, what about attaching images or other media
+      to a note?" Fits the current "vault is just a directory of files"
+      philosophy cheaply: `vault.rs` already silently skips any non-`.md`
+      file when loading (an extension check, not a whitelist of
+      known-good names), so a real file sitting anywhere in the vault
+      directory — an `attachments/` subfolder, say — is already inert to
+      it today, no special-casing needed there. Referencing one from a
+      note body is just a normal relative Markdown link
+      (`![alt](attachments/photo.png)`), which `markdown.rs` already
+      degrades gracefully — no `Tag::Image` handling exists, so it falls
+      through to rendering the alt text only, not a crash or literal
+      broken markup. Images/media are deliberately never rendered inline
+      — that was the framing of the ask from the start, and stays true:
+      this is about keeping a file linked alongside a note, not viewing
+      it inside Mycora.
+      **Resolved the open fork** (do nothing further vs. a real command)
+      in favor of the more useful option, but landed differently than the
+      original `:attach <path>` sketch: the `:` command palette only
+      works in `Mode::Normal`/`Mode::Command`, not while actually editing
+      a body (`Mode::EditBody`, where "insert at the cursor" is the only
+      place that phrase means anything — a `ratatui-textarea` cursor).
+      So instead, `Ctrl+A` while `mode == Mode::EditBody` opens a small
+      inline prompt (`App::attach_prompt`, layered on top of `EditBody`
+      the same way the `[[wikilink]]` autocomplete popup is, rather than
+      its own `Mode` — confirming it needs the body editor still live
+      underneath to insert into). Typing a path and `Enter` calls the new
+      `Vault::attach_file`, which copies (never moves) the source into
+      `<vault>/attachments/`, disambiguating a name collision with the
+      same `unique_path` a brand-new note's first save already uses —
+      unlike a note's filename, the destination name is *not* slugified
+      (nothing about it drifts over time the way a note's title-derived
+      slug can), just whitespace-collapsed so it can't break Markdown's
+      `(path)` link syntax. On success, a `![alt](attachments/name.ext)`
+      link is inserted at the cursor and reported via `last_message`;
+      failure (bad path, permissions) reports through `last_error`
+      instead, same channel every other guarded action already uses.
+      `Esc` cancels just the prompt, same "layered popup" shape as the
+      wikilink autocomplete's own `Esc`. A leading `~/` in the typed path
+      expands to `$HOME` (a small `expand_home` helper, not a full
+      shell-style expansion — no `~user/...`). Deliberately no dedicated
+      undo entry for the attach itself (a raw filesystem copy, not a
+      `Tree` mutation — same non-undoable territory as the Obsidian
+      importer or a reindex) — but the inserted link text rides along
+      for free inside the *body edit's* own undo entry, since it's just
+      more text in the same `EditBody` session; only the physical copy
+      under `attachments/` would be left behind after an undo, not a
+      dangling reference to it. 193 tests (3 new in `vault.rs`:
+      copies correctly, disambiguates a collision, collapses whitespace
+      in the destination name), clippy clean. Manually verified in tmux:
+      `Ctrl+A` opened the prompt with the EditBody hint row showing it
+      as an option; typing a real path and `Enter` copied the file,
+      inserted the link at the cursor, and reported "attached
+      attachments/photo.png"; `u` afterward reverted the whole body edit
+      (including the inserted link) in one step; `Esc` mid-prompt
+      cancelled just the prompt without leaving `EditBody`; a
+      nonexistent source path reported "attach failed: copying ..."
+      through the usual error channel instead of silently doing nothing.
+      **Left open, as originally flagged**: whether `:export`'s subtree
+      flatten should also copy along any attachments a copied note
+      references — a separate question, not resolved here.
 - [ ] **Concurrent-write safety for a shared vault directory**
       (2026-07-13, user-asked, explicitly not scheduled yet — just
       captured for later) — asked whether a vault on a shared directory

@@ -171,6 +171,51 @@ impl Vault {
     fn allocate_path(&self, title: &str) -> PathBuf {
         unique_path(&self.root, &slugify(title), "md")
     }
+
+    /// Copies `source` into `<vault>/attachments/`, returning the path
+    /// (relative to the vault root, e.g. `attachments/photo.png`) to embed
+    /// as a Markdown link. Always a copy, never a move — `source` is left
+    /// untouched. Unlike a note's filename, an attachment's is *not*
+    /// slugified: it's not derived from anything that can drift over time
+    /// the way a note's title does, so the original name is kept as-is
+    /// (whitespace collapsed to `-`, since an unescaped space would break
+    /// Markdown's `(path)` link syntax), only disambiguated on collision
+    /// via the same `unique_path` every note's first save already uses.
+    /// `load()` already ignores both non-`.md` files and directories, so
+    /// nothing else needs to change for attachments to coexist safely.
+    pub fn attach_file(&self, source: &Path) -> Result<PathBuf> {
+        let attachments_dir = self.root.join("attachments");
+        fs::create_dir_all(&attachments_dir).with_context(|| {
+            format!(
+                "creating attachments directory at {}",
+                attachments_dir.display()
+            )
+        })?;
+
+        let stem = source
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("attachment")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join("-");
+        let ext = source.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let dest = unique_path(&attachments_dir, &stem, ext);
+
+        let tmp_path = dest.with_extension(format!("{ext}.tmp"));
+        fs::copy(source, &tmp_path).with_context(|| {
+            format!("copying {} to {}", source.display(), tmp_path.display())
+        })?;
+        fs::rename(&tmp_path, &dest)
+            .with_context(|| format!("finalizing attachment at {}", dest.display()))?;
+
+        let file_name = dest
+            .file_name()
+            .expect("unique_path always yields a path with a file name")
+            .to_string_lossy()
+            .into_owned();
+        Ok(PathBuf::from("attachments").join(file_name))
+    }
 }
 
 fn unique_path(dir: &Path, base: &str, ext: &str) -> PathBuf {
@@ -525,5 +570,66 @@ mod tests {
         assert!(tree.roots().is_empty());
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn attach_file_copies_into_an_attachments_subdirectory() {
+        let dir = temp_vault_dir();
+        let vault = Vault::open(dir.clone()).unwrap();
+
+        let source_dir = temp_vault_dir();
+        let source = source_dir.join("photo.png");
+        fs::write(&source, b"fake image bytes").unwrap();
+
+        let rel_path = vault.attach_file(&source).unwrap();
+
+        assert_eq!(rel_path, PathBuf::from("attachments/photo.png"));
+        assert_eq!(
+            fs::read(dir.join(&rel_path)).unwrap(),
+            b"fake image bytes"
+        );
+        // source untouched — always a copy, never a move
+        assert!(source.exists());
+
+        fs::remove_dir_all(&dir).ok();
+        fs::remove_dir_all(&source_dir).ok();
+    }
+
+    #[test]
+    fn attach_file_disambiguates_a_name_collision() {
+        let dir = temp_vault_dir();
+        let vault = Vault::open(dir.clone()).unwrap();
+        fs::create_dir_all(dir.join("attachments")).unwrap();
+        fs::write(dir.join("attachments/photo.png"), b"existing").unwrap();
+
+        let source_dir = temp_vault_dir();
+        let source = source_dir.join("photo.png");
+        fs::write(&source, b"new bytes").unwrap();
+
+        let rel_path = vault.attach_file(&source).unwrap();
+
+        assert_eq!(rel_path, PathBuf::from("attachments/photo-2.png"));
+        assert_eq!(fs::read(dir.join("attachments/photo.png")).unwrap(), b"existing");
+        assert_eq!(fs::read(dir.join(&rel_path)).unwrap(), b"new bytes");
+
+        fs::remove_dir_all(&dir).ok();
+        fs::remove_dir_all(&source_dir).ok();
+    }
+
+    #[test]
+    fn attach_file_collapses_whitespace_in_the_destination_name() {
+        let dir = temp_vault_dir();
+        let vault = Vault::open(dir.clone()).unwrap();
+
+        let source_dir = temp_vault_dir();
+        let source = source_dir.join("My Photo.png");
+        fs::write(&source, b"bytes").unwrap();
+
+        let rel_path = vault.attach_file(&source).unwrap();
+
+        assert_eq!(rel_path, PathBuf::from("attachments/My-Photo.png"));
+
+        fs::remove_dir_all(&dir).ok();
+        fs::remove_dir_all(&source_dir).ok();
     }
 }
