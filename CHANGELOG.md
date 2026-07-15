@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.12.1] — 2026-07-15
+
+### Changed
+- **README polish**: a `cargo install mycora` quick-start snippet right
+  after the tagline (previously only in USAGE.md), and a link to a live
+  asciinema.org demo recording. No code changes — published purely so
+  crates.io's rendered README (frozen at publish time) reflects these.
+
 ## [0.12.0] — 2026-07-15
 
 ### Added
