@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-07-15
+
 ### Added
 - **Attach a file to a note**: `Ctrl+A` while editing a note's body opens
   an inline prompt for a file path (`~/` expands to your home
@@ -19,6 +21,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   those sibling TSODev projects as interlinked Mycora notes, the same
   way `examples/showcase-vault/` documents Mycora itself — built from
   each project's own docs, not filler content.
+
+### Changed
+- **README.md dropped its versioned `v0.1–v0.9`/"Still ahead" framing**
+  in favor of an evergreen `## Features` list, updated to include
+  cut/paste and file attachments; `## Status` no longer duplicates the
+  same list with version tags. USAGE.md's intro and remaining
+  `ROADMAP.md` pointers were similarly de-versioned, and gained the
+  **Cut, paste, and cross-vault copy** section (`x`/`c`/`p`) it had been
+  missing entirely since that feature shipped in 0.11.0 — "Moving
+  notes" no longer claims arbitrary reparenting isn't built, since
+  that's exactly what it now covers.
 
 ## [0.11.0] — 2026-07-14
 
