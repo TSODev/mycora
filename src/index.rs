@@ -732,6 +732,17 @@ mod tests {
         dir
     }
 
+    /// Removes a scratch database and its WAL-mode sidecar files
+    /// (`-wal`/`-shm`, created alongside the main file ever since `open()`
+    /// started enabling WAL journal mode) — a bare `remove_file(&db_path)`
+    /// used to leave those two behind in `std::env::temp_dir()` on every
+    /// test run, accumulating indefinitely across sessions.
+    fn cleanup_scratch_db(db_path: &Path) {
+        std::fs::remove_file(db_path).ok();
+        std::fs::remove_file(db_path.with_extension("sqlite3-wal")).ok();
+        std::fs::remove_file(db_path.with_extension("sqlite3-shm")).ok();
+    }
+
     #[test]
     fn open_enables_wal_mode_and_a_nonzero_busy_timeout() {
         let db_path = scratch_db_path();
@@ -749,7 +760,7 @@ mod tests {
             .unwrap();
         assert_eq!(busy_timeout_ms, Index::BUSY_TIMEOUT.as_millis() as i64);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
     }
 
     #[test]
@@ -768,7 +779,7 @@ mod tests {
         assert_eq!(report.note_count, 2);
         assert_eq!(index.note_count("default").unwrap(), 2);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -800,7 +811,7 @@ mod tests {
         assert_eq!(index.note_count("a").unwrap(), 0);
         assert_eq!(index.note_count("b").unwrap(), 2);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
         std::fs::remove_dir_all(&vault_b_dir).ok();
     }
@@ -831,7 +842,7 @@ mod tests {
 
         assert!(index.search("default", "xyzzy").unwrap().is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -859,7 +870,7 @@ mod tests {
         assert!(end > start);
         assert_eq!(&hits[0].snippet[start + 1..end], "borrowing");
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -890,7 +901,7 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].note_id, in_branch);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -916,7 +927,7 @@ mod tests {
             .unwrap()
             .is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -948,7 +959,7 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].note_id, rust_note);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -980,7 +991,7 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].note_id, both_tags);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1007,7 +1018,7 @@ mod tests {
             .unwrap()
             .is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1046,7 +1057,7 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].note_id, recent_id);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1064,7 +1075,7 @@ mod tests {
         assert_eq!(index.search("a", "shared").unwrap().len(), 1);
         assert!(index.search("b", "shared").unwrap().is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
     }
 
@@ -1100,7 +1111,7 @@ mod tests {
         assert_eq!(hits[0].title, "Go channels");
         assert_eq!(hits[1].title, "Rust ownership");
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1132,7 +1143,7 @@ mod tests {
             .unwrap()
             .is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1183,7 +1194,7 @@ mod tests {
         assert_eq!(both[0].vault_id, "a");
         assert_eq!(both[1].vault_id, "b");
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
         std::fs::remove_dir_all(&vault_b_dir).ok();
     }
@@ -1196,7 +1207,7 @@ mod tests {
             .filter_by_tags(&["default"], &[], TagFilterOp::Any)
             .unwrap()
             .is_empty());
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
     }
 
     #[test]
@@ -1208,7 +1219,7 @@ mod tests {
             .filter_by_tags(&[], &tags, TagFilterOp::Any)
             .unwrap()
             .is_empty());
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
     }
 
     #[test]
@@ -1236,7 +1247,7 @@ mod tests {
             ]
         );
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1278,7 +1289,7 @@ mod tests {
             ]
         );
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
         std::fs::remove_dir_all(&vault_b_dir).ok();
     }
@@ -1288,7 +1299,7 @@ mod tests {
         let db_path = scratch_db_path();
         let index = Index::open(&db_path).unwrap();
         assert!(index.all_tags(&["default"]).unwrap().is_empty());
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
     }
 
     #[test]
@@ -1296,7 +1307,7 @@ mod tests {
         let db_path = scratch_db_path();
         let index = Index::open(&db_path).unwrap();
         assert!(index.all_tags(&[]).unwrap().is_empty());
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
     }
 
     fn links_for(index: &Index, vault_id: &str) -> Vec<(String, String)> {
@@ -1332,7 +1343,7 @@ mod tests {
             vec![(source.0.to_string(), target.0.to_string())]
         );
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1358,7 +1369,7 @@ mod tests {
         expected.sort();
         assert_eq!(links_for(&index, "default"), expected);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1377,7 +1388,7 @@ mod tests {
 
         assert!(links_for(&index, "default").is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1396,7 +1407,7 @@ mod tests {
 
         assert!(links_for(&index, "default").is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1419,7 +1430,7 @@ mod tests {
         );
         assert!(links_for(&index, "b").is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
     }
 
@@ -1447,7 +1458,7 @@ mod tests {
         assert_eq!(hits[1].title, "Source B");
         assert!(!hits.iter().any(|h| h.note_id == unrelated));
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1465,7 +1476,7 @@ mod tests {
 
         assert!(index.backlinks("default", lonely).unwrap().is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1485,7 +1496,7 @@ mod tests {
         assert_eq!(index.backlinks("a", target_a).unwrap().len(), 1);
         assert!(index.backlinks("b", target_a).unwrap().is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
     }
 
@@ -1506,7 +1517,7 @@ mod tests {
         assert_eq!(report.broken_links[0].source, source);
         assert_eq!(report.broken_links[0].title, "Nonexistent Title");
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1526,7 +1537,7 @@ mod tests {
 
         assert!(report.broken_links.is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1558,7 +1569,7 @@ mod tests {
             .unwrap();
         assert_eq!(count, 3); // A->C, A->B, D->B
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1577,7 +1588,7 @@ mod tests {
         let subtree = tree.subtree_ids(lonely);
         assert_eq!(index.link_count_for_subtree("default", &subtree).unwrap(), 0);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1586,7 +1597,7 @@ mod tests {
         let db_path = scratch_db_path();
         let index = Index::open(&db_path).unwrap();
         assert_eq!(index.link_count_for_subtree("default", &[]).unwrap(), 0);
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
     }
 
     #[test]
@@ -1615,7 +1626,7 @@ mod tests {
         assert_eq!(links_for(&index, "a"), vec![(source.0.to_string(), target.0.to_string())]);
         assert!(links_for(&index, "b").is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
         std::fs::remove_dir_all(&vault_b_dir).ok();
     }
@@ -1650,7 +1661,7 @@ mod tests {
         expected.sort();
         assert_eq!(hits, expected);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
         std::fs::remove_dir_all(&vault_b_dir).ok();
     }
@@ -1682,7 +1693,7 @@ mod tests {
         assert_eq!(report.broken_links[0].title, "Target In B");
         assert!(links_for(&index, "a").is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
         std::fs::remove_dir_all(&vault_b_dir).ok();
     }
@@ -1711,7 +1722,7 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].note_id, source);
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
         std::fs::remove_dir_all(&vault_b_dir).ok();
     }
@@ -1738,7 +1749,7 @@ mod tests {
         assert_eq!(hits[1].note_id, target_b);
         assert!(!hits.iter().any(|h| h.note_id == unrelated));
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1756,7 +1767,7 @@ mod tests {
 
         assert!(index.outgoing_links("default", lonely).unwrap().is_empty());
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();
     }
 
@@ -1785,7 +1796,7 @@ mod tests {
         assert_eq!(hits[0].note_id, target);
         assert_eq!(hits[0].vault_id, "b");
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
         std::fs::remove_dir_all(&vault_b_dir).ok();
     }
@@ -1823,7 +1834,7 @@ mod tests {
             1
         );
 
-        std::fs::remove_file(&db_path).ok();
+        cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_a_dir).ok();
         std::fs::remove_dir_all(&vault_b_dir).ok();
     }
