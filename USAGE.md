@@ -8,7 +8,9 @@
 > (read-only secondary vaults, unmounted and archived vaults both
 > visible as their own tree rows), `[[wikilink]]` cross-links (including
 > cross-vault ones) with a backlinks panel, an outgoing-links jump,
-> link-count badges, and autocompletion while typing, file attachments,
+> link-count badges, and autocompletion while typing, a table-of-contents
+> overlay with one-key section extraction to a new linked child note,
+> file attachments,
 > a full-pane note-body editor, a resizable three-pane layout (tree,
 > rendered-Markdown body preview, backlinks) with light/dark-aware
 > colors, a multilingual interface (English/French/Spanish/German), and
@@ -27,6 +29,8 @@
 - [Layout](#layout)
 - [Searching](#searching)
 - [Backlinks](#backlinks)
+- [Following links](#following-links)
+- [Table of contents and extracting sections](#table-of-contents-and-extracting-sections)
 - [Command palette](#command-palette)
 - [Exporting a subtree](#exporting-a-subtree)
 - [Importing an Obsidian vault](#importing-an-obsidian-vault)
@@ -607,6 +611,43 @@ If the note has no outgoing links, the status bar says so instead of
 opening an empty list. Works on a read-only mounted vault's note just as
 well as the active vault's, since following a link only reads.
 
+## Table of contents and extracting sections
+
+`t` opens a full-pane overlay listing the selected note's Markdown
+headings (`#`, `##`, ...), indented by level:
+
+- `j` / `k` (or `↑` / `↓`) — move between headings
+- `Enter` — scrolls the body preview to the selected heading and returns
+  to Normal mode
+- `x` — **extracts** the selected heading's whole section into a brand
+  new child note of the current one, and replaces it in the source body
+  with a `[[wikilink]]` pointing at that new note. The heading's text
+  becomes the new note's title; everything under it (up to the next
+  heading at the same or a shallower level) becomes its body
+- `Esc` — cancels back to Normal mode without changing anything
+
+If the note has no headings, the status bar says so instead of opening
+an empty overlay.
+
+Extraction is deliberately **not recursive**: if the extracted section
+contains its own sub-headings, they stay as ordinary Markdown text
+inside the new note's body rather than being split into further notes
+of their own. Reopen `t` on the new note and extract one of those
+sub-headings yourself if you want to go a level deeper — decomposing a
+long note into smaller linked ones stays a sequence of deliberate,
+one-at-a-time choices, not an automatic cascade.
+
+Both halves of an extraction — creating the new note and rewriting the
+source note's body — undo and redo together as a single step (`u` /
+`Ctrl+R`), the same as any other single action. Extraction requires the
+note to be in the active (editable) vault, same as any other edit; on a
+read-only mounted vault's note, `t`/`Enter` still work (they only read),
+but `x` reports the read-only error instead.
+
+The new note doesn't show up in [Following links](#following-links) or
+[Backlinks](#backlinks) until the next reindex (opening search, `f`, or
+restarting), same as any other freshly-typed `[[wikilink]]`.
+
 ## Command palette
 
 `:` in Normal mode opens a command prompt — vim/helix-style, replacing
@@ -901,6 +942,7 @@ changes, for the rest of the session. Not persisted across restarts.
 | `/` | Open search (see [Searching](#searching)) |
 | `b` | Focus the backlinks pane (see [Backlinks](#backlinks)) |
 | `f` | Follow the selected note's outgoing links (see [Following links](#following-links)) |
+| `t` | Open the table of contents (see [Table of contents and extracting sections](#table-of-contents-and-extracting-sections)) |
 | `Ctrl+d` / `Ctrl+u` | Scroll the body preview down / up |
 | `[` / `]` | Shrink / grow the tree pane (see [Layout](#layout)) |
 | `{` / `}` | Shrink / grow the backlinks pane |
@@ -970,6 +1012,15 @@ apply to the popup instead of the rows above:
 |---|---|
 | `j` / `k` / `↑` / `↓` | Move between entries |
 | `Enter` | Jump to the selected entry (see [Following links](#following-links)) |
+| `Esc` | Cancel, keeping the current selection |
+
+### Table of contents
+
+| Key | Action |
+|---|---|
+| `j` / `k` / `↑` / `↓` | Move between headings |
+| `Enter` | Jump to the selected heading (see [Table of contents and extracting sections](#table-of-contents-and-extracting-sections)) |
+| `x` | Extract the selected heading's section into a new child note |
 | `Esc` | Cancel, keeping the current selection |
 
 ### Command
