@@ -1,6 +1,7 @@
 use pulldown_cmark::{Alignment, CowStr, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// Renders a note body's Markdown into styled lines for a read-only
 /// preview pane. Headings, bold/italic, inline/block code, lists,
@@ -267,7 +268,7 @@ impl Renderer {
         let mut spans = vec![Span::styled("│".to_string(), border_style)];
         for (i, &width) in widths.iter().enumerate() {
             let cell = row.get(i).cloned().unwrap_or_default();
-            let text_len: usize = cell.iter().map(|s| s.content.chars().count()).sum();
+            let text_len = Self::cell_width(&cell);
             let pad = width.saturating_sub(text_len);
             let (left_pad, right_pad) = match alignments.get(i) {
                 Some(Alignment::Right) => (pad, 0),
@@ -313,14 +314,34 @@ impl Renderer {
             .collect()
     }
 
-    /// Word-wrap of one cell's spans to `width` columns, styling
-    /// preserved per word/fragment. A word longer than `width` on its
-    /// own is hard-broken at the character level (no hyphenation) rather
-    /// than left to overflow — that's what guarantees every line
-    /// `render_table` emits is exactly `width` columns wide, however
-    /// narrow the pane or long a single token (e.g. a URL) is. Always
-    /// returns at least one (possibly empty) line, so every cell
-    /// contributes at least one row to the table.
+    /// Terminal display width of a cell's text — *not* `str::chars().count()`,
+    /// which undercounts anything the terminal renders double-wide (CJK
+    /// characters, most emoji: `❌`/`✅` are each a single `char` but occupy
+    /// two columns). Using char count here was the original bug: it sized
+    /// columns and padding for a table that only matched the terminal's
+    /// actual layout when every cell was single-width ASCII — a table with
+    /// emoji or CJK content silently drifted the borders out of alignment
+    /// row by row. `ratatui`'s own `Wrap` widget measures width the same
+    /// way (it depends on `unicode-width` too), so this keeps our notion
+    /// of "how wide is this line" consistent with what actually lands on
+    /// screen.
+    fn cell_width(cell: &[Span<'static>]) -> usize {
+        cell.iter()
+            .map(|s| UnicodeWidthStr::width(s.content.as_ref()))
+            .sum()
+    }
+
+    /// Word-wrap of one cell's spans to `width` display columns, styling
+    /// preserved per word/fragment. A word wider than `width` on its own
+    /// is hard-broken (no hyphenation) rather than left to overflow —
+    /// that's what guarantees every line `render_table` emits is exactly
+    /// `width` columns wide, however narrow the pane or long a single
+    /// token (e.g. a URL) is. The break point is chosen by accumulated
+    /// *display* width, not character count, so a double-wide character
+    /// never gets split across the boundary in a way that overshoots
+    /// `width` by one column. Always returns at least one (possibly
+    /// empty) line, so every cell contributes at least one row to the
+    /// table.
     fn wrap_cell(cell: &[Span<'static>], width: usize) -> Vec<Vec<Span<'static>>> {
         let width = width.max(1);
         // (text, style, glued) — `glued` marks a continuation fragment
@@ -328,13 +349,25 @@ impl Renderer {
         let mut tokens: Vec<(String, Style, bool)> = Vec::new();
         for span in cell {
             for word in span.content.split_whitespace() {
-                let chars: Vec<char> = word.chars().collect();
-                if chars.len() <= width {
+                if UnicodeWidthStr::width(word) <= width {
                     tokens.push((word.to_string(), span.style, false));
                     continue;
                 }
-                for (i, chunk) in chars.chunks(width).enumerate() {
-                    tokens.push((chunk.iter().collect(), span.style, i > 0));
+                let mut chunk = String::new();
+                let mut chunk_width = 0usize;
+                let mut glued = false;
+                for c in word.chars() {
+                    let cw = UnicodeWidthChar::width(c).unwrap_or(0);
+                    if !chunk.is_empty() && chunk_width + cw > width {
+                        tokens.push((std::mem::take(&mut chunk), span.style, glued));
+                        glued = true;
+                        chunk_width = 0;
+                    }
+                    chunk.push(c);
+                    chunk_width += cw;
+                }
+                if !chunk.is_empty() {
+                    tokens.push((chunk, span.style, glued));
                 }
             }
         }
@@ -343,7 +376,7 @@ impl Renderer {
         let mut current: Vec<Span<'static>> = Vec::new();
         let mut current_len = 0usize;
         for (text, style, glued) in tokens {
-            let token_len = text.chars().count();
+            let token_len = UnicodeWidthStr::width(text.as_str());
             let sep = usize::from(!glued && !current.is_empty());
             if !current.is_empty() && current_len + sep + token_len > width {
                 lines.push(std::mem::take(&mut current));
@@ -384,8 +417,7 @@ impl Renderer {
         let mut ideal = vec![0usize; col_count];
         for row in &rows {
             for (i, cell) in row.iter().enumerate() {
-                let len: usize = cell.iter().map(|s| s.content.chars().count()).sum();
-                ideal[i] = ideal[i].max(len);
+                ideal[i] = ideal[i].max(Self::cell_width(cell));
             }
         }
         let widths = Self::allocate_column_widths(&ideal, self.available_width);
@@ -604,5 +636,28 @@ mod tests {
         assert!(table_width <= 12);
         assert!(text.iter().all(|line| line.chars().count() == table_width));
         assert!(text.len() > 4);
+    }
+
+    #[test]
+    fn table_columns_stay_aligned_with_double_width_emoji_cells() {
+        // ❌/✅ are each a single `char` but occupy two terminal columns —
+        // sizing columns by `chars().count()` (the original bug) rendered
+        // this table's borders visibly out of alignment starting on the
+        // first emoji row. `display_width` below mirrors `cell_width` in
+        // production code (both back onto `unicode_width`), so this
+        // assertion is checking real on-screen alignment, not just that
+        // every rendered `Line`'s `char` count happens to match.
+        fn display_width(s: &str) -> usize {
+            unicode_width::UnicodeWidthStr::width(s)
+        }
+        let lines = render(
+            "| Fonctionnalité | `cat` | `bat` |\n| --- | --- | --- |\n\
+             | Coloration syntaxique | ❌ | ✅ |\n\
+             | Numéros de ligne | ❌ | ✅ |",
+            80,
+        );
+        let text = plain_text(&lines);
+        let table_width = display_width(&text[0]);
+        assert!(text.iter().all(|line| display_width(line) == table_width));
     }
 }

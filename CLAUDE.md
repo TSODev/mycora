@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (198 tests, all in-crate, no external deps)
+cargo test                # all unit tests (199 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -220,7 +220,16 @@ directly and guarantee its synthetic output matches the real on-disk format.
   line the table emits is *exactly* `width` columns wide and `Wrap`
   never has anything left to do to it. Everything else (prose,
   headings, lists, code) skips this entirely and still relies on
-  `ui.rs`'s `Wrap` for reflow, same as before tables existed.
+  `ui.rs`'s `Wrap` for reflow, same as before tables existed. Every
+  width/padding calculation in the table path (`cell_width`,
+  `allocate_column_widths`, `wrap_cell`) goes through the `unicode-width`
+  crate rather than `str::chars().count()` — a `char` is not a terminal
+  column: `❌`/`✅` and CJK text are each one `char` but render two
+  columns wide, so sizing by char count alone drifted a table's right
+  border out of alignment starting on the first double-wide row. This
+  is a real (explicit) Cargo dependency even though `ratatui-core`
+  already pulls it in transitively — relying on a transitive version
+  silently would break the moment ratatui's own dependency changed.
 - **`session.rs` — `Session`**: reads/writes
   `<data dir>/mycora/session.toml`, keyed by vault name
   (`selected`/`expanded` per vault, so switching which vault is `"default"`

@@ -15,7 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   text. Columns shrink and cell text word-wraps (hard-breaking a single
   overlong word as a last resort) to fit the pane's actual width, so a
   wide table never gets mangled by the preview pane's own line-wrapping
-  slicing through the box-drawing borders.
+  slicing through the box-drawing borders. Column/padding math uses
+  actual terminal display width (`unicode-width`), not `char` count, so
+  double-wide content — emoji like ❌/✅, CJK text — keeps every row's
+  right border aligned instead of drifting out row by row.
 - **Windows support**: config, session, and the search index now resolve
   via the `dirs` crate (`%APPDATA%\mycora\...`) instead of a literal
   `$HOME` read, which previously failed outright on native Windows.

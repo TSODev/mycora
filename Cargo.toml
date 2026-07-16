@@ -26,6 +26,7 @@ serde_yaml = "0.9.34"
 tar = "0.4.46"
 time = { version = "0.3.53", features = ["formatting", "parsing", "serde-well-known"] }
 toml = "1.1.2"
+unicode-width = "0.2"
 uuid = { version = "1.23.4", features = ["v4", "serde"] }
 
 [dev-dependencies]
