@@ -220,6 +220,7 @@ impl Lang {
                 ("/", "search"),
                 ("b", "backlinks (notes linking here)"),
                 ("f", "follow outgoing links"),
+                ("t", "table of contents"),
                 ("[ / ]", "shrink / grow tree pane"),
                 ("{ / }", "shrink / grow backlinks pane"),
                 ("Ctrl+D / Ctrl+U", "scroll body preview down / up"),
@@ -249,6 +250,7 @@ impl Lang {
                 ("/", "rechercher"),
                 ("b", "rétroliens (notes qui pointent ici)"),
                 ("f", "suivre les liens sortants"),
+                ("t", "sommaire (table des matières)"),
                 ("[ / ]", "réduire / agrandir le panneau arbre"),
                 ("{ / }", "réduire / agrandir le panneau rétroliens"),
                 ("Ctrl+D / Ctrl+U", "faire défiler l'aperçu du corps"),
@@ -278,6 +280,7 @@ impl Lang {
                 ("/", "buscar"),
                 ("b", "retroenlaces (notas que enlazan aquí)"),
                 ("f", "seguir enlaces salientes"),
+                ("t", "tabla de contenidos"),
                 ("[ / ]", "encoger / agrandar el panel del árbol"),
                 ("{ / }", "encoger / agrandar el panel de retroenlaces"),
                 ("Ctrl+D / Ctrl+U", "desplazar la vista previa arriba/abajo"),
@@ -307,6 +310,7 @@ impl Lang {
                 ("/", "suchen"),
                 ("b", "Rückverweise (Notizen, die hierher verlinken)"),
                 ("f", "ausgehenden Links folgen"),
+                ("t", "Inhaltsverzeichnis"),
                 ("[ / ]", "Baumbereich verkleinern / vergrößern"),
                 ("{ / }", "Rückverweisbereich verkleinern / vergrößern"),
                 ("Ctrl+D / Ctrl+U", "Vorschau runter-/hochscrollen"),
@@ -442,6 +446,17 @@ impl Lang {
             Lang::Fr => format!("Liens [{scope}]"),
             Lang::Es => format!("Enlaces [{scope}]"),
             Lang::De => format!("Links [{scope}]"),
+        }
+    }
+
+    /// Title of the `t` (table of contents) full-pane overlay — `scope`
+    /// is the note whose headings are listed.
+    pub fn toc_title(self, scope: &str) -> String {
+        match self {
+            Lang::En => format!("Contents [{scope}]"),
+            Lang::Fr => format!("Sommaire [{scope}]"),
+            Lang::Es => format!("Contenido [{scope}]"),
+            Lang::De => format!("Inhalt [{scope}]"),
         }
     }
 
@@ -686,6 +701,21 @@ impl Lang {
             (Lang::Fr, Mode::Links) => ("LIENS", "j/k: bouger  Enter: sauter  Esc: annuler"),
             (Lang::Es, Mode::Links) => ("ENLACES", "j/k: mover  Enter: saltar  Esc: cancelar"),
             (Lang::De, Mode::Links) => ("LINKS", "j/k: bewegen  Enter: springen  Esc: abbrechen"),
+            (Lang::En, Mode::Toc) => {
+                ("TOC", "j/k: move  Enter: jump  x: extract  Esc: cancel")
+            }
+            (Lang::Fr, Mode::Toc) => (
+                "SOMMAIRE",
+                "j/k: bouger  Enter: sauter  x: extraire  Esc: annuler",
+            ),
+            (Lang::Es, Mode::Toc) => (
+                "CONTENIDO",
+                "j/k: mover  Enter: saltar  x: extraer  Esc: cancelar",
+            ),
+            (Lang::De, Mode::Toc) => (
+                "INHALT",
+                "j/k: bewegen  Enter: springen  x: extrahieren  Esc: abbrechen",
+            ),
             (Lang::En, Mode::Help) => ("HELP", "any key: close"),
             (Lang::Fr, Mode::Help) => ("AIDE", "n'importe quelle touche : fermer"),
             (Lang::Es, Mode::Help) => ("AYUDA", "cualquier tecla: cerrar"),
@@ -902,6 +932,16 @@ impl Lang {
             Lang::Fr => "cette note n'a aucun lien sortant",
             Lang::Es => "esta nota no tiene enlaces salientes",
             Lang::De => "diese Notiz hat keine ausgehenden Links",
+        }
+    }
+
+    /// `t`'s empty-result message — this note's body has no headings.
+    pub fn no_headings(self) -> &'static str {
+        match self {
+            Lang::En => "this note has no headings",
+            Lang::Fr => "cette note n'a pas de titres",
+            Lang::Es => "esta nota no tiene encabezados",
+            Lang::De => "diese Notiz hat keine Überschriften",
         }
     }
 
@@ -1348,6 +1388,7 @@ mod tests {
                 Mode::TagResults,
                 Mode::TagList,
                 Mode::Links,
+                Mode::Toc,
                 Mode::Help,
             ] {
                 let (label, hints) = lang.mode_line(mode);

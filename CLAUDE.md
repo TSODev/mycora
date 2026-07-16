@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (199 tests, all in-crate, no external deps)
+cargo test                # all unit tests (208 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -51,8 +51,8 @@ mycora reindex [--watch]  # CLI subcommand, not a cargo command — rebuilds
   not exist), no Cursor/Copilot instruction files in this repo.
 - **Tests are all `#[cfg(test)] mod tests` unit tests**, spread across
   `tree.rs`, `vault.rs`, `config.rs`, `index.rs`, `link.rs`, `lang.rs`,
-  `markdown.rs`, and `session.rs` — there is no `tests/` integration
-  directory. None of
+  `markdown.rs`, `outline.rs`, and `session.rs` — there is no `tests/`
+  integration directory. None of
   them need an external service, network, or env var: `vault.rs`/`index.rs`
   tests build a scratch directory under `std::env::temp_dir()` per test
   (unique via a fresh UUID) and clean it up at the end. The only place
@@ -193,6 +193,29 @@ directly and guarantee its synthetic output matches the real on-disk format.
   autocomplete popup (`App::refresh_link_autocomplete` in `app.rs`) —
   character-indexed to match `ratatui-textarea`'s own cursor addressing,
   not byte offsets.
+- **`outline.rs`**: heading/section geometry for the `t` table-of-contents
+  overlay — a separate lexical concern from `markdown.rs`'s styling, so
+  it's its own small module (same shape as `link.rs`) rather than bolted
+  onto `Renderer`. `headings(source) -> Vec<HeadingRef>` walks
+  `Parser::new_ext(source, Options::ENABLE_TABLES).into_offset_iter()`
+  (the same options as `markdown::render`, so a `#` inside a table cell
+  or fenced code block is never mistaken for a heading here either) and
+  records each heading's level, trimmed title, and *byte* start/end
+  offsets in the source — not rendered-line indices, which stay
+  width-dependent (see below). `section_range`/`extract_section` turn a
+  heading index into the byte range it owns (up to the next heading at
+  the same or a shallower level, or end of body) and slice it out —
+  extraction is inherently non-recursive since it's one contiguous byte
+  range; a deeper sub-heading inside is just part of that slice, never a
+  boundary. `scroll_offset_for(source, heading_start)` (used by
+  `App::confirm_toc` to jump to a heading) sidesteps the fact that `App`
+  never knows the live body-preview pane width (`ui.rs` is pure
+  rendering — see its own note below) by re-calling
+  `markdown::render` on `source[..heading_start]` at a fixed constant
+  width and counting the lines produced — exact for every block type
+  except tables (width-sensitive), gracefully approximate otherwise, the
+  same accepted imprecision as `App::scroll_body_down`'s own doc
+  comment.
 - **`markdown.rs`**: `render(&str, width: u16) -> Vec<Line>` walks
   `pulldown-cmark`'s event stream (`Parser::new_ext(source,
   Options::ENABLE_TABLES)` — the crate's `default-features = false` only
@@ -242,7 +265,7 @@ directly and guarantee its synthetic output matches the real on-disk format.
   `Tree` + `Vault`, every other mounted-but-read-only vault
   (`ReadOnlyVault { id, tree, vault }`), and the shared `Index`. `Mode` is
   `Normal | Insert | ConfirmDelete | Search | Backlinks | EditBody |
-  Command | TagResults | TagList | Links | Help` — dispatch lives in `event.rs`, rendering in
+  Command | TagResults | TagList | Links | Toc | Help` — dispatch lives in `event.rs`, rendering in
   `ui.rs` (see those files' notes on which modes are full-pane overlays vs.
   status-bar-only prompts vs. in-place pane focus). Every mutating method
   (`create_child`, `commit_rename`, `confirm_delete`, `indent_selected`,
@@ -255,6 +278,15 @@ directly and guarantee its synthetic output matches the real on-disk format.
   the entry on the opposite stack. This is what keeps a chain of undo/redo
   correct even when other edits happened in between; don't "simplify" this
   into replaying stored snapshots without preserving that property.
+  `UndoAction::Compound(Vec<UndoAction>)` composes several of these into
+  one stack entry — `apply_undo_action` recurses into each sub-action
+  (still against live state) and collects their inverses, reversed, into
+  another `Compound` for the opposite stack. The only current user is
+  `extract_toc_selection` (`t`'s TOC overlay, `x` to extract a heading's
+  section into a new child note + rewrite the source body with a
+  `[[wikilink]]`) — both halves undo/redo as a single `u`/`Ctrl+R`
+  instead of two, since each sub-action already independently calls
+  `set_selected`.
   `visible_rows()` (depth-first, respecting `expanded: HashSet<NoteId>`)
   is recomputed on every call rather than cached — acceptable at current
   scale per ROADMAP's v0.1 note, revisit if it shows up in profiling. It

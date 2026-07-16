@@ -79,6 +79,10 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
             draw_links(frame, area, app);
             return;
         }
+        Mode::Toc => {
+            draw_toc(frame, area, app);
+            return;
+        }
         Mode::Help => {
             draw_help(frame, area, app.lang);
             return;
@@ -472,6 +476,32 @@ fn draw_links(frame: &mut Frame, area: Rect, app: &App) {
     let title = app.lang.links_title(app.vault_name());
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     let mut state = ListState::default().with_selected(Some(app.links_selected()));
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
+/// Table of contents for the selected note's body headings (`t`) —
+/// full-pane like `draw_links`, one row per heading indented by level.
+fn draw_toc(frame: &mut Frame, area: Rect, app: &App) {
+    let items: Vec<ListItem> = app
+        .toc_headings()
+        .iter()
+        .enumerate()
+        .map(|(i, heading)| {
+            let style = if i == app.toc_selected() {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            let indent = "  ".repeat(heading.level.saturating_sub(1) as usize);
+            let label = format!("{indent}{}", heading.title);
+            ListItem::new(Line::from(Span::styled(label, style)))
+        })
+        .collect();
+
+    let note_title = app.selected_note().map(|n| n.title.as_str()).unwrap_or("");
+    let title = app.lang.toc_title(note_title);
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
+    let mut state = ListState::default().with_selected(Some(app.toc_selected()));
     frame.render_stateful_widget(list, area, &mut state);
 }
 

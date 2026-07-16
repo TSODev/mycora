@@ -45,6 +45,7 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::TagResults => handle_tag_results(app, key.code),
             Mode::TagList => handle_tag_list(app, key.code),
             Mode::Links => handle_links(app, key.code),
+            Mode::Toc => handle_toc(app, key.code),
             // Any key closes the reference, same as before — but rather
             // than just swallowing that keypress, it's replayed straight
             // into `handle_normal` afterward: pressing `f` (say) while
@@ -104,6 +105,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Char('/') => app.begin_search(),
         KeyCode::Char('b') => app.focus_backlinks(),
         KeyCode::Char('f') => app.begin_links(),
+        KeyCode::Char('t') => app.begin_toc(),
         KeyCode::Char('?') => app.begin_help(),
         KeyCode::Char('e') => app.begin_edit_body(),
         KeyCode::Char('[') => app.shrink_tree_pane(),
@@ -257,6 +259,17 @@ fn handle_links(app: &mut App, code: KeyCode) {
         KeyCode::Esc => app.cancel_links(),
         KeyCode::Char('j') | KeyCode::Down => app.move_links_selection(1),
         KeyCode::Char('k') | KeyCode::Up => app.move_links_selection(-1),
+        _ => {}
+    }
+}
+
+fn handle_toc(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Enter => app.confirm_toc(),
+        KeyCode::Esc => app.cancel_toc(),
+        KeyCode::Char('j') | KeyCode::Down => app.move_toc_selection(1),
+        KeyCode::Char('k') | KeyCode::Up => app.move_toc_selection(-1),
+        KeyCode::Char('x') => app.extract_toc_selection(),
         _ => {}
     }
 }

@@ -9,6 +9,7 @@ pub mod lang;
 pub mod link;
 pub mod markdown;
 pub mod note;
+pub mod outline;
 pub mod session;
 pub mod tree;
 pub mod ui;

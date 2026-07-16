@@ -99,6 +99,14 @@ pub enum Mode {
     /// focus into, so this is a transient list instead, dismissed on
     /// `Esc` or after `Enter` jumps. See `App::begin_links`.
     Links,
+    /// Table of contents for the selected note's body headings (`t`) —
+    /// full-pane overlay, same shape as `Links`. `Enter` scrolls the body
+    /// preview to the selected heading and closes; `x` extracts that
+    /// heading's whole section into a new child note, replacing it with a
+    /// `[[wikilink]]` in the source (one undo step); `Esc` cancels.
+    /// Derived straight from the body, unlike `Links` — no reindex. See
+    /// `App::begin_toc`.
+    Toc,
     /// The full-pane `?` keybinding reference, over `Lang::help_reference`
     /// — Normal mode's own hint row only shows a short, curated subset
     /// (see `Lang::mode_line`'s `Normal` arm) since the whole set is far
@@ -136,6 +144,13 @@ enum UndoAction {
     /// record one of these per invocation, not per tag, same "one entry
     /// per user action" shape as `EditBody`.
     SetTags { id: NoteId, tags: Vec<String> },
+    /// Applying this applies each sub-action in order (against the live
+    /// tree, same as every other variant) and collects their inverses,
+    /// reversed, into another `Compound` — so a multi-part user action
+    /// (currently only `extract_toc_selection`'s create-child +
+    /// edit-source-body) undoes and redoes as a single stack entry
+    /// instead of two.
+    Compound(Vec<UndoAction>),
 }
 
 /// A note/subtree marked by `x`/`c`, awaiting a `p` on the destination to
@@ -263,6 +278,12 @@ pub struct App {
     /// see `App::begin_links`.
     links_results: Vec<IndexedNote>,
     links_selected: usize,
+    /// The selected note's body headings, while `mode == Mode::Toc` —
+    /// captured at `begin_toc` time (the body can't change while the
+    /// overlay is open, so the byte offsets in each `HeadingRef` stay
+    /// valid for `confirm_toc`). See `App::begin_toc`.
+    toc_headings: Vec<crate::outline::HeadingRef>,
+    toc_selected: usize,
     /// A note/subtree marked by `x` (move) or `c` (copy), awaiting a `p`
     /// on some destination note to complete it — see
     /// `mark_pending_move`/`mark_pending_copy`/`paste_pending`. `None`
@@ -530,6 +551,8 @@ impl App {
             link_autocomplete: None,
             links_results: Vec::new(),
             links_selected: 0,
+            toc_headings: Vec::new(),
+            toc_selected: 0,
             pending_clipboard: None,
             attach_prompt: None,
         };
@@ -1344,6 +1367,20 @@ impl App {
                     tags: previous,
                 })
             }
+            UndoAction::Compound(actions) => {
+                let mut inverses = Vec::with_capacity(actions.len());
+                for sub in actions {
+                    if let Some(inverse) = self.apply_undo_action(sub) {
+                        inverses.push(inverse);
+                    }
+                }
+                if inverses.is_empty() {
+                    None
+                } else {
+                    inverses.reverse();
+                    Some(UndoAction::Compound(inverses))
+                }
+            }
         }
     }
 
@@ -1604,6 +1641,109 @@ impl App {
 
     pub fn links_selected(&self) -> usize {
         self.links_selected
+    }
+
+    /// `t` — opens the table-of-contents overlay for the selected note's
+    /// body headings. Derived straight from the body, unlike `begin_links`
+    /// — no reindex needed. An empty result (no headings) reports through
+    /// `last_message` rather than opening an empty overlay, same
+    /// convention as `begin_links`.
+    pub fn begin_toc(&mut self) {
+        let Some(body) = self.selected_note().map(|note| note.body.clone()) else {
+            return;
+        };
+        let headings = crate::outline::headings(&body);
+        if headings.is_empty() {
+            self.last_error = None;
+            self.last_message = Some(self.lang.no_headings().to_string());
+            return;
+        }
+        self.last_message = None;
+        self.toc_headings = headings;
+        self.toc_selected = 0;
+        self.mode = Mode::Toc;
+    }
+
+    pub fn move_toc_selection(&mut self, delta: isize) {
+        if self.toc_headings.is_empty() {
+            return;
+        }
+        let len = self.toc_headings.len() as isize;
+        let new_pos = (self.toc_selected as isize + delta).rem_euclid(len) as usize;
+        self.toc_selected = new_pos;
+    }
+
+    /// `Enter` — scrolls the body preview to the selected heading and
+    /// returns to Normal. The note being viewed doesn't change, so
+    /// `body_scroll` is set directly rather than through `set_selected`
+    /// (which would reset it back to 0).
+    pub fn confirm_toc(&mut self) {
+        if let (Some(heading), Some(note)) =
+            (self.toc_headings.get(self.toc_selected), self.selected_note())
+        {
+            self.body_scroll = crate::outline::scroll_offset_for(&note.body, heading.start);
+        }
+        self.mode = Mode::Normal;
+    }
+
+    pub fn cancel_toc(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    pub fn toc_headings(&self) -> &[crate::outline::HeadingRef] {
+        &self.toc_headings
+    }
+
+    pub fn toc_selected(&self) -> usize {
+        self.toc_selected
+    }
+
+    /// `x` (within `Mode::Toc`) — extracts the selected heading's whole
+    /// section into a new child note, leaving a `[[wikilink]]` where it
+    /// was, as a single undo step (`UndoAction::Compound`). Recomputes
+    /// the section against the *live* body rather than trusting
+    /// `toc_headings`'s captured offsets, so this stays correct even if
+    /// something else touched the note's body while the overlay was open.
+    pub fn extract_toc_selection(&mut self) {
+        let Some(id) = self.selected else {
+            self.mode = Mode::Normal;
+            return;
+        };
+        if !self.require_editable(id) {
+            self.mode = Mode::Normal;
+            return;
+        }
+        let Some(source) = self.tree.get(id).map(|note| note.body.clone()) else {
+            self.mode = Mode::Normal;
+            return;
+        };
+        let headings = crate::outline::headings(&source);
+        if headings.get(self.toc_selected).is_none() {
+            self.mode = Mode::Normal;
+            return;
+        }
+        let extraction = crate::outline::extract_section(&source, &headings, self.toc_selected);
+        let title = if extraction.title.is_empty() {
+            self.lang.new_note_title().to_string()
+        } else {
+            extraction.title
+        };
+
+        let new_id = self.tree.create_note(title, Some(id));
+        self.tree.set_body(new_id, extraction.body);
+        self.expanded.insert(id);
+        self.persist(new_id);
+
+        self.tree.set_body(id, extraction.new_source);
+        self.persist(id);
+
+        self.record(UndoAction::Compound(vec![
+            UndoAction::Remove { root_id: new_id },
+            UndoAction::EditBody { id, body: source },
+        ]));
+
+        self.set_selected(Some(id));
+        self.mode = Mode::Normal;
     }
 
     /// `?` — opens the full keybinding reference (`Mode::Help`).
