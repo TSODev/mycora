@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (196 tests, all in-crate, no external deps)
+cargo test                # all unit tests (198 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -193,20 +193,34 @@ directly and guarantee its synthetic output matches the real on-disk format.
   autocomplete popup (`App::refresh_link_autocomplete` in `app.rs`) —
   character-indexed to match `ratatui-textarea`'s own cursor addressing,
   not byte offsets.
-- **`markdown.rs`**: `render(&str) -> Vec<Line>` walks `pulldown-cmark`'s
-  event stream (`Parser::new_ext(source, Options::ENABLE_TABLES)` — the
-  crate's `default-features = false` only trims unrelated Cargo
-  features, table parsing is a runtime `Options` flag and unaffected)
-  and builds styled `ratatui::text::Line`s directly (a small hand-rolled
-  `Renderer` with a style stack, not a dedicated markdown-widget crate).
-  Used by `ui.rs`'s body preview pane; read-only and not interactive —
-  links and `[[wikilinks]]` render as plain text. Tables are the one
-  block that can't stream straight to `self.lines` like every other
-  event: column widths depend on every row, so cells are buffered
-  (`table_rows: Vec<Vec<Vec<Span>>>`) until `TagEnd::Table`, then
-  rendered as a bordered grid (box-drawing characters, dimmed) with a
-  bold header row and per-column alignment honoring GFM's
-  `| :--- | ---: | :---: |` markers.
+- **`markdown.rs`**: `render(&str, width: u16) -> Vec<Line>` walks
+  `pulldown-cmark`'s event stream (`Parser::new_ext(source,
+  Options::ENABLE_TABLES)` — the crate's `default-features = false` only
+  trims unrelated Cargo features, table parsing is a runtime `Options`
+  flag and unaffected) and builds styled `ratatui::text::Line`s directly
+  (a small hand-rolled `Renderer` with a style stack, not a dedicated
+  markdown-widget crate). Used by `ui.rs`'s body preview pane (called
+  with `chunks[0].width`, the inner pane width post-border/padding);
+  read-only and not interactive — links and `[[wikilinks]]` render as
+  plain text. Tables are the one block that can't stream straight to
+  `self.lines` like every other event: column widths depend on every
+  row, so cells are buffered (`table_rows: Vec<Vec<Vec<Span>>>`) until
+  `TagEnd::Table`, then rendered as a bordered grid (box-drawing
+  characters, dimmed) with a bold header row and per-column alignment
+  honoring GFM's `| :--- | ---: | :---: |` markers. `width` exists
+  *only* for this: `ui.rs` applies ratatui's `Wrap` widget on top of
+  every rendered `Line` for ordinary prose reflow, but `Wrap` breaks
+  lines at arbitrary points to fit the pane — fatal for a box-drawn
+  table, since it slices straight through the borders. So
+  `allocate_column_widths` shrinks columns to fit `width` first (every
+  column's floor-divided share of the budget, proportional to its ideal
+  content width) and `wrap_cell` greedily word-wraps each cell into that
+  column, hard-breaking at the character level as a last resort for a
+  single word too long to fit its column at all (e.g. a URL) — so every
+  line the table emits is *exactly* `width` columns wide and `Wrap`
+  never has anything left to do to it. Everything else (prose,
+  headings, lists, code) skips this entirely and still relies on
+  `ui.rs`'s `Wrap` for reflow, same as before tables existed.
 - **`session.rs` — `Session`**: reads/writes
   `<data dir>/mycora/session.toml`, keyed by vault name
   (`selected`/`expanded` per vault, so switching which vault is `"default"`

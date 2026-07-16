@@ -12,7 +12,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   pane, with a bold header row and per-column left/center/right
   alignment (`| :--- | ---: | :---: |`) — previously the parser never
   enabled GFM tables at all, so a table just showed up as literal `|`
-  text.
+  text. Columns shrink and cell text word-wraps (hard-breaking a single
+  overlong word as a last resort) to fit the pane's actual width, so a
+  wide table never gets mangled by the preview pane's own line-wrapping
+  slicing through the box-drawing borders.
 - **Windows support**: config, session, and the search index now resolve
   via the `dirs` crate (`%APPDATA%\mycora\...`) instead of a literal
   `$HOME` read, which previously failed outright on native Windows.

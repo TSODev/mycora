@@ -310,7 +310,7 @@ fn draw_body_preview(frame: &mut Frame, area: Rect, app: &App) {
         .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(inner);
 
-    let paragraph = Paragraph::new(crate::markdown::render(body))
+    let paragraph = Paragraph::new(crate::markdown::render(body, chunks[0].width))
         .wrap(Wrap { trim: false })
         // Manual offset (not auto-follow — there's no "selected line"
         // concept for prose): `Ctrl+d`/`Ctrl+u` adjust `App::body_scroll`,
