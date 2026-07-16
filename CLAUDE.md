@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (188 tests, all in-crate, no external deps)
+cargo test                # all unit tests (196 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -194,10 +194,19 @@ directly and guarantee its synthetic output matches the real on-disk format.
   character-indexed to match `ratatui-textarea`'s own cursor addressing,
   not byte offsets.
 - **`markdown.rs`**: `render(&str) -> Vec<Line>` walks `pulldown-cmark`'s
-  event stream and builds styled `ratatui::text::Line`s directly (a small
-  hand-rolled `Renderer` with a style stack, not a dedicated
-  markdown-widget crate). Used by `ui.rs`'s body preview pane; read-only
-  and not interactive — links and `[[wikilinks]]` render as plain text.
+  event stream (`Parser::new_ext(source, Options::ENABLE_TABLES)` — the
+  crate's `default-features = false` only trims unrelated Cargo
+  features, table parsing is a runtime `Options` flag and unaffected)
+  and builds styled `ratatui::text::Line`s directly (a small hand-rolled
+  `Renderer` with a style stack, not a dedicated markdown-widget crate).
+  Used by `ui.rs`'s body preview pane; read-only and not interactive —
+  links and `[[wikilinks]]` render as plain text. Tables are the one
+  block that can't stream straight to `self.lines` like every other
+  event: column widths depend on every row, so cells are buffered
+  (`table_rows: Vec<Vec<Vec<Span>>>`) until `TagEnd::Table`, then
+  rendered as a bordered grid (box-drawing characters, dimmed) with a
+  bold header row and per-column alignment honoring GFM's
+  `| :--- | ---: | :---: |` markers.
 - **`session.rs` — `Session`**: reads/writes
   `<data dir>/mycora/session.toml`, keyed by vault name
   (`selected`/`expanded` per vault, so switching which vault is `"default"`
