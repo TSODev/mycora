@@ -1,17 +1,17 @@
-use pulldown_cmark::{CowStr, Event, HeadingLevel, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CowStr, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
 /// Renders a note body's Markdown into styled lines for a read-only
 /// preview pane. Headings, bold/italic, inline/block code, lists,
-/// blockquotes, and horizontal rules get distinct styling. Nothing is
-/// interactive — links render as their text, not as clickable/navigable
-/// spans, and `[[wikilinks]]` aren't CommonMark syntax so they just render
-/// as literal bracketed text (no special-casing here; that's a separate
-/// concern from "render the Markdown").
+/// blockquotes, horizontal rules, and GFM tables get distinct styling.
+/// Nothing is interactive — links render as their text, not as
+/// clickable/navigable spans, and `[[wikilinks]]` aren't CommonMark syntax
+/// so they just render as literal bracketed text (no special-casing here;
+/// that's a separate concern from "render the Markdown").
 pub fn render(source: &str) -> Vec<Line<'static>> {
     let mut renderer = Renderer::new();
-    for event in Parser::new(source) {
+    for event in Parser::new_ext(source, Options::ENABLE_TABLES) {
         renderer.handle(event);
     }
     renderer.finish()
@@ -25,6 +25,13 @@ struct Renderer {
     /// list's next item number, `None` is an unordered (bulleted) list.
     list_stack: Vec<Option<u64>>,
     in_code_block: bool,
+    /// Per-column alignment for the table currently being collected, set
+    /// from `Tag::Table` and read back once the whole table (every row's
+    /// cells) has been gathered — column widths depend on every row, so
+    /// nothing can be emitted to `lines` until `TagEnd::Table`.
+    table_alignments: Vec<Alignment>,
+    table_rows: Vec<Vec<Vec<Span<'static>>>>,
+    current_row: Vec<Vec<Span<'static>>>,
 }
 
 impl Renderer {
@@ -35,6 +42,9 @@ impl Renderer {
             style_stack: vec![Style::default()],
             list_stack: Vec::new(),
             in_code_block: false,
+            table_alignments: Vec::new(),
+            table_rows: Vec::new(),
+            current_row: Vec::new(),
         }
     }
 
@@ -143,6 +153,16 @@ impl Renderer {
                     .add_modifier(Modifier::ITALIC);
                 self.style_stack.push(style);
             }
+            Tag::Table(alignments) => {
+                self.flush_line_if_nonempty();
+                self.table_alignments = alignments;
+                self.table_rows.clear();
+            }
+            // Header cells are direct `TableCell` children of `TableHead`,
+            // not wrapped in their own `TableRow` (see pulldown-cmark's
+            // `TableHead` doc comment) — reset here too, not just on
+            // `TableRow`.
+            Tag::TableHead | Tag::TableRow => self.current_row = Vec::new(),
             Tag::List(start) => self.list_stack.push(start),
             Tag::Item => {
                 self.flush_line_if_nonempty();
@@ -185,8 +205,98 @@ impl Renderer {
             TagEnd::List(_) => {
                 self.list_stack.pop();
             }
+            TagEnd::TableCell => {
+                let cell = std::mem::take(&mut self.current);
+                self.current_row.push(cell);
+            }
+            TagEnd::TableHead => {
+                let header: Vec<Vec<Span<'static>>> = std::mem::take(&mut self.current_row)
+                    .into_iter()
+                    .map(|cell| {
+                        cell.into_iter()
+                            .map(|s| Span::styled(s.content, s.style.add_modifier(Modifier::BOLD)))
+                            .collect()
+                    })
+                    .collect();
+                self.table_rows.push(header);
+            }
+            TagEnd::TableRow => {
+                let row = std::mem::take(&mut self.current_row);
+                self.table_rows.push(row);
+            }
+            TagEnd::Table => self.render_table(),
             _ => {}
         }
+    }
+
+    fn table_border(widths: &[usize], left: char, mid: char, right: char) -> Line<'static> {
+        let style = Style::default().add_modifier(Modifier::DIM);
+        let mut spans = vec![Span::styled(left.to_string(), style)];
+        for (i, width) in widths.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::styled(mid.to_string(), style));
+            }
+            spans.push(Span::styled("─".repeat(width + 2), style));
+        }
+        spans.push(Span::styled(right.to_string(), style));
+        Line::from(spans)
+    }
+
+    fn table_row_line(
+        row: &[Vec<Span<'static>>],
+        widths: &[usize],
+        alignments: &[Alignment],
+    ) -> Line<'static> {
+        let border_style = Style::default().add_modifier(Modifier::DIM);
+        let mut spans = vec![Span::styled("│".to_string(), border_style)];
+        for (i, &width) in widths.iter().enumerate() {
+            let cell = row.get(i).cloned().unwrap_or_default();
+            let text_len: usize = cell.iter().map(|s| s.content.chars().count()).sum();
+            let pad = width.saturating_sub(text_len);
+            let (left_pad, right_pad) = match alignments.get(i) {
+                Some(Alignment::Right) => (pad, 0),
+                Some(Alignment::Center) => (pad / 2, pad - pad / 2),
+                _ => (0, pad),
+            };
+            spans.push(Span::raw(" ".repeat(1 + left_pad)));
+            spans.extend(cell);
+            spans.push(Span::raw(" ".repeat(right_pad + 1)));
+            spans.push(Span::styled("│".to_string(), border_style));
+        }
+        Line::from(spans)
+    }
+
+    /// Column widths depend on every cell in the table, so nothing here
+    /// can be emitted until the whole table has been collected — unlike
+    /// every other block, which streams straight to `self.lines`.
+    fn render_table(&mut self) {
+        let rows = std::mem::take(&mut self.table_rows);
+        let alignments = std::mem::take(&mut self.table_alignments);
+        if rows.is_empty() {
+            return;
+        }
+        let col_count = rows
+            .iter()
+            .map(|r| r.len())
+            .max()
+            .unwrap_or(0)
+            .max(alignments.len());
+        let mut widths = vec![0usize; col_count];
+        for row in &rows {
+            for (i, cell) in row.iter().enumerate() {
+                let len: usize = cell.iter().map(|s| s.content.chars().count()).sum();
+                widths[i] = widths[i].max(len);
+            }
+        }
+        self.lines.push(Self::table_border(&widths, '┌', '┬', '┐'));
+        for (i, row) in rows.iter().enumerate() {
+            self.lines
+                .push(Self::table_row_line(row, &widths, &alignments));
+            if i == 0 {
+                self.lines.push(Self::table_border(&widths, '├', '┼', '┤'));
+            }
+        }
+        self.lines.push(Self::table_border(&widths, '└', '┴', '┘'));
     }
 
     fn finish(mut self) -> Vec<Line<'static>> {
@@ -301,5 +411,48 @@ mod tests {
     #[test]
     fn empty_body_renders_no_lines() {
         assert!(render("").is_empty());
+    }
+
+    #[test]
+    fn table_renders_as_a_bordered_grid_with_a_header_separator() {
+        let lines = render("| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bob | 25 |");
+        let text = plain_text(&lines);
+        assert_eq!(
+            text,
+            vec![
+                "┌───────┬─────┐",
+                "│ Name  │ Age │",
+                "├───────┼─────┤",
+                "│ Alice │ 30  │",
+                "│ Bob   │ 25  │",
+                "└───────┴─────┘",
+            ]
+        );
+    }
+
+    #[test]
+    fn table_header_cells_are_bold() {
+        let lines = render("| Name |\n| --- |\n| Alice |");
+        let header_span = lines[1]
+            .spans
+            .iter()
+            .find(|s| s.content.as_ref() == "Name")
+            .unwrap();
+        assert!(header_span.style.add_modifier.contains(Modifier::BOLD));
+        let body_span = lines[3]
+            .spans
+            .iter()
+            .find(|s| s.content.as_ref() == "Alice")
+            .unwrap();
+        assert!(!body_span.style.add_modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn table_columns_respect_alignment_markers() {
+        let lines = render(
+            "| Left | Right | Center |\n| :--- | ---: | :---: |\n| a | b | c |",
+        );
+        let text = plain_text(&lines);
+        assert_eq!(text[3], "│ a    │     b │   c    │");
     }
 }
