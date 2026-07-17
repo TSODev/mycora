@@ -15,6 +15,12 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    # softprops/action-gh-release needs write access to create/attach to
+    # the release; the default GITHUB_TOKEN is read-only for contents on
+    # this repo, which is what "Resource not accessible by integration"
+    # actually means here.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
