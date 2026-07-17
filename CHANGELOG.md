@@ -7,6 +7,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **`mycora repair`**: detects broken `[[wikilink]]`s across every
+  mounted vault (the same detection `reindex` already warns about) and,
+  optionally, fixes them, in three tiers. Report-only by default —
+  lists every broken link with a best-guess suggestion where one exists
+  (a case-insensitive exact-title match, or a close-enough
+  `strsim::jaro_winkler` match), changing nothing; this *is* the preview
+  of exactly what `--apply` would do. `--create-stubs` creates an empty
+  note for every broken link with no plausible match, one per distinct
+  missing title per vault, never touching an existing file. `--apply`
+  rewrites a broken link's text to point at its confidently-guessed
+  match — the only tier that edits an existing note's body, so it's
+  off by default and there's no undo for it outside your own
+  backups/version control. `--vault <name>` narrows which vault's own
+  broken links get reported/fixed (detection still checks every
+  mounted vault's titles as candidates either way, for accurate
+  cross-vault suggestions).
+
 ## [0.13.0] — 2026-07-17
 
 ### Added

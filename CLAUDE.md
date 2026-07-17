@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (210 tests, all in-crate, no external deps)
+cargo test                # all unit tests (219 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -40,6 +40,9 @@ cargo run --example generate-test-vault [output_dir] [leaf_note_count]
 mycora reindex [--watch]  # CLI subcommand, not a cargo command — rebuilds
                            # the SQLite index for every mounted vault; --watch
                            # keeps running and reindexes on file changes
+mycora repair [--apply] [--create-stubs] [--vault <name>]
+                           # CLI subcommand — reports (and optionally fixes)
+                           # broken [[wikilink]]s; see repair.rs below
 ```
 
 - Edition 2024, no `rust-toolchain` file pinned; current toolchain in this
@@ -51,8 +54,8 @@ mycora reindex [--watch]  # CLI subcommand, not a cargo command — rebuilds
   not exist), no Cursor/Copilot instruction files in this repo.
 - **Tests are all `#[cfg(test)] mod tests` unit tests**, spread across
   `tree.rs`, `vault.rs`, `config.rs`, `index.rs`, `link.rs`, `lang.rs`,
-  `markdown.rs`, `outline.rs`, `import.rs`, and `session.rs` — there is
-  no `tests/` integration directory. None of
+  `markdown.rs`, `outline.rs`, `import.rs`, `repair.rs`, and
+  `session.rs` — there is no `tests/` integration directory. None of
   them need an external service, network, or env var: `vault.rs`/`index.rs`
   tests build a scratch directory under `std::env::temp_dir()` per test
   (unique via a fresh UUID) and clean it up at the end. The only place
@@ -63,7 +66,10 @@ mycora reindex [--watch]  # CLI subcommand, not a cargo command — rebuilds
 ## Architecture
 
 Data flow: `main.rs` parses CLI args (`clap`) — either a `reindex [--watch]`
-subcommand (`perform_reindex`, exits without touching the terminal) or, with
+subcommand (`perform_reindex`, exits without touching the terminal), a
+`repair [--apply] [--create-stubs] [--vault <name>]` subcommand
+(`perform_repair`, shares `perform_reindex`'s `load_and_reindex_mounted`
+loader — see `repair.rs` below), or, with
 no subcommand, installs a panic hook, builds an `App` (which loads `Config`,
 mounts every vault marked `mounted`, opens the SQLite `Index`, and restores
 the last `Session`), enters raw/alternate-screen mode, and loops `ui::draw` +
@@ -210,7 +216,10 @@ directly and guarantee its synthetic output matches the real on-disk format.
   separate, single-line-scoped scanner backing the body editor's
   autocomplete popup (`App::refresh_link_autocomplete` in `app.rs`) —
   character-indexed to match `ratatui-textarea`'s own cursor addressing,
-  not byte offsets.
+  not byte offsets. `rewrite_wikilink_title(body, old_title, new_title)`
+  is the same bracket-scanning idiom used to *rewrite* rather than
+  extract — every `[[old_title]]` occurrence becomes `[[new_title]]`,
+  backing `mycora repair --apply`'s retargeting (see `repair.rs` below).
 - **`outline.rs`**: heading/section geometry for the `t` table-of-contents
   overlay — a separate lexical concern from `markdown.rs`'s styling, so
   it's its own small module (same shape as `link.rs`) rather than bolted
@@ -234,6 +243,25 @@ directly and guarantee its synthetic output matches the real on-disk format.
   except tables (width-sensitive), gracefully approximate otherwise, the
   same accepted imprecision as `App::scroll_body_down`'s own doc
   comment.
+- **`repair.rs`**: pure suggestion logic behind `mycora repair` — no
+  I/O, no `Tree`/`Vault`, same split as `outline.rs` (logic here,
+  orchestration in the caller, which for this one is `main.rs`'s
+  `perform_repair` rather than `app.rs`, since this is CLI-only).
+  `suggest(broken_title, candidates) -> Option<Suggestion>` first tries
+  a case-insensitive exact match (`Confidence::Certain` — Mycora's own
+  title matching is case-sensitive, so this is the single most likely
+  real cause of a broken link), then falls back to
+  `strsim::jaro_winkler` on lowercased titles (`Confidence::Likely`),
+  refusing to guess (`None`) below a 0.85 similarity threshold or
+  within 0.05 of the second-best candidate (two similarly-named notes —
+  ambiguous, not a confident match). `strsim` was already a transitive
+  dependency of `clap_builder` (its own "did you mean" arg-name
+  suggestions) before this — promoted to a direct one rather than
+  hand-rolling similarity scoring, since it added no new compiled code.
+  The actual fix application (rewriting a note's body via
+  `link::rewrite_wikilink_title`, or creating a stub note via
+  `Tree::create_note`) lives in `main.rs::perform_repair`, not here —
+  see the Data flow note above.
 - **`markdown.rs`**: `render(&str, width: u16) -> Vec<Line>` walks
   `pulldown-cmark`'s event stream (`Parser::new_ext(source,
   Options::ENABLE_TABLES)` — the crate's `default-features = false` only

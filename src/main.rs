@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io;
 use std::path::PathBuf;
 use std::sync::mpsc;
@@ -16,7 +17,9 @@ use mycora::app::App;
 use mycora::archive;
 use mycora::config::Config;
 use mycora::index::Index;
+use mycora::link;
 use mycora::note::NoteId;
+use mycora::repair::{self, Confidence};
 use mycora::tree::Tree;
 use mycora::vault::Vault;
 use mycora::{event, ui};
@@ -76,6 +79,34 @@ enum Command {
         name: String,
         /// Path to create the new Mycora vault directory at.
         path: PathBuf,
+    },
+    /// Report (and optionally fix) broken [[wikilink]]s across every
+    /// mounted vault.
+    ///
+    /// With no flags, only reports — the safe default, and its own
+    /// preview of exactly what --apply would do. Detection always
+    /// considers every mounted vault's note titles as candidates, for
+    /// accurate cross-vault suggestions, even when --vault narrows which
+    /// vault's own broken links get reported/fixed.
+    Repair {
+        /// Retarget a broken link to its best-guess match (a
+        /// case-insensitive exact match, or a close-enough fuzzy match)
+        /// by rewriting the note's body. Links without a confident match
+        /// are left untouched. The only flag that rewrites an existing
+        /// note's body — there's no undo for this outside your own
+        /// backups/version control.
+        #[arg(long)]
+        apply: bool,
+        /// Create an empty stub note for every broken link with no
+        /// plausible match, so it resolves. One stub per distinct
+        /// missing title per vault, not one per occurrence — never
+        /// touches an existing file.
+        #[arg(long)]
+        create_stubs: bool,
+        /// Only report/fix broken links whose source note is in this
+        /// mounted vault.
+        #[arg(long)]
+        vault: Option<String>,
     },
 }
 
@@ -237,6 +268,11 @@ fn main() -> anyhow::Result<()> {
         }) => return vault_sync_filenames(&name),
         Some(Command::Export { title, output }) => return export_note(&title, output),
         Some(Command::Import { source, name, path }) => return import_vault(source, &name, path),
+        Some(Command::Repair {
+            apply,
+            create_stubs,
+            vault,
+        }) => return repair(apply, create_stubs, vault.as_deref()),
         None => {}
     }
 
@@ -708,16 +744,26 @@ fn watch_reindex() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// One mounted vault, fully loaded and reindexed — the unit
+/// `load_and_reindex_mounted` produces and both `perform_reindex` and
+/// `perform_repair` consume.
+struct LoadedVault {
+    name: String,
+    tree: Tree,
+    vault: Vault,
+    report: mycora::index::ReindexReport,
+}
+
 /// Loads every mounted vault fresh from disk and rebuilds its index rows
-/// together, returning `(vault name, note count)` per vault. Shared by the
-/// one-shot and `--watch` reindex paths. Vaults are loaded before any of
-/// them are indexed, and reindexed as one `Index::reindex_mounted` batch —
-/// cross-vault wikilink resolution needs every vault's notes visible to
-/// the index together, not one at a time (see that method's doc comment).
-/// Prints a warning per broken wikilink (a `[[title]]` that didn't resolve
-/// to any note in any mounted vault) the same way `vault.load()`'s own
-/// warnings are printed — reported, not an error.
-fn perform_reindex(config: &Config) -> anyhow::Result<Vec<(String, usize)>> {
+/// together. Shared by the reindex paths (one-shot and `--watch`) and by
+/// `mycora repair`, the only other CLI path that needs every mounted
+/// vault loaded together with accurate cross-vault broken-link data.
+/// Vaults are loaded before any of them are indexed, and reindexed as one
+/// `Index::reindex_mounted` batch — cross-vault wikilink resolution needs
+/// every vault's notes visible to the index together, not one at a time
+/// (see that method's doc comment). Prints `vault.load()`'s own warnings
+/// as it goes, the same way it always has.
+fn load_and_reindex_mounted(config: &Config) -> anyhow::Result<Vec<LoadedVault>> {
     let index_path = Index::default_path()?;
     let mut index = Index::open(&index_path)?;
 
@@ -737,21 +783,175 @@ fn perform_reindex(config: &Config) -> anyhow::Result<Vec<(String, usize)>> {
         .collect();
     let reports = index.reindex_mounted(&batch)?;
 
+    Ok(loaded
+        .into_iter()
+        .zip(reports)
+        .map(|((name, tree, vault), report)| LoadedVault {
+            name,
+            tree,
+            vault,
+            report,
+        })
+        .collect())
+}
+
+/// Prints a warning per broken wikilink (a `[[title]]` that didn't
+/// resolve to any note in any mounted vault) the same way `vault.load()`'s
+/// own warnings are printed — reported, not an error — and returns
+/// `(vault name, note count)` per vault.
+fn perform_reindex(config: &Config) -> anyhow::Result<Vec<(String, usize)>> {
+    let loaded = load_and_reindex_mounted(config)?;
+
     let mut results = Vec::new();
-    for ((name, tree, _), report) in loaded.iter().zip(reports.iter()) {
-        for broken in &report.broken_links {
-            let source_title = tree
+    for lv in &loaded {
+        for broken in &lv.report.broken_links {
+            let source_title = lv
+                .tree
                 .get(broken.source)
                 .map(|note| note.title.as_str())
                 .unwrap_or("?");
             eprintln!(
-                "mycora: [{name}] broken link in \"{source_title}\": [[{}]] matches no note",
-                broken.title
+                "mycora: [{}] broken link in \"{source_title}\": [[{}]] matches no note",
+                lv.name, broken.title
             );
         }
-        results.push((name.clone(), report.note_count));
+        results.push((lv.name.clone(), lv.report.note_count));
     }
     Ok(results)
+}
+
+fn repair(apply: bool, create_stubs: bool, vault_filter: Option<&str>) -> anyhow::Result<()> {
+    let config = Config::load()?;
+    perform_repair(&config, apply, create_stubs, vault_filter)
+}
+
+/// Reports every broken wikilink across every mounted vault (same
+/// detection as `reindex`, via `load_and_reindex_mounted`), and — if
+/// `apply`/`create_stubs` are set — fixes what it confidently can.
+/// `vault_filter`, if given, must name a vault that's actually mounted
+/// (only mounted vaults get loaded at all) and narrows which vault's own
+/// broken links get reported/fixed; detection still considers every
+/// mounted vault's titles as suggestion candidates either way, for
+/// accurate cross-vault matches. Never forces a second reindex pass after
+/// fixing — the Markdown files are the source of truth and are now
+/// correct; the disposable SQLite index catches up on the next natural
+/// reindex, same as every other write this crate makes outside a
+/// `reindex`/`--watch` call.
+fn perform_repair(
+    config: &Config,
+    apply: bool,
+    create_stubs: bool,
+    vault_filter: Option<&str>,
+) -> anyhow::Result<()> {
+    let mut loaded = load_and_reindex_mounted(config)?;
+
+    if let Some(filter) = vault_filter
+        && !loaded.iter().any(|lv| lv.name == filter)
+    {
+        bail!("no mounted vault named \"{filter}\"");
+    }
+
+    // Every note's title across every loaded vault, snapshotted before any
+    // fix is applied — suggestions are computed against the original
+    // state, so a stub created for one broken link never becomes a
+    // candidate match for another processed later in this same run.
+    let all_titles: Vec<String> = loaded
+        .iter()
+        .flat_map(|lv| lv.tree.iter().map(|(_, note)| note.title.clone()))
+        .collect();
+
+    let mut total_broken = 0usize;
+    let mut total_retargeted = 0usize;
+    let mut total_stubs = 0usize;
+    let mut total_unresolved = 0usize;
+
+    for lv in &mut loaded {
+        if vault_filter.is_some_and(|filter| filter != lv.name) {
+            continue;
+        }
+
+        // Distinct (source note, broken title) pairs — a title repeated
+        // several times in one note's body is one thing to fix, not one
+        // per occurrence (`extract_wikilink_titles`/`write_links` don't
+        // dedup, so `broken_links` can contain duplicates).
+        let mut seen: HashSet<(NoteId, String)> = HashSet::new();
+        let mut fixes: Vec<(NoteId, String, repair::Suggestion)> = Vec::new();
+        let mut missing_titles: HashSet<String> = HashSet::new();
+        let mut missing_pair_count = 0usize;
+
+        for broken in &lv.report.broken_links {
+            if !seen.insert((broken.source, broken.title.clone())) {
+                continue;
+            }
+            total_broken += 1;
+
+            let source_title = lv
+                .tree
+                .get(broken.source)
+                .map(|note| note.title.clone())
+                .unwrap_or_else(|| "?".to_string());
+
+            match repair::suggest(&broken.title, &all_titles) {
+                Some(suggestion) => {
+                    let reason = match suggestion.confidence {
+                        Confidence::Certain => "case difference",
+                        Confidence::Likely => "similar title",
+                    };
+                    println!(
+                        "mycora: [{}] broken link in \"{source_title}\": [[{}]] matches no \
+                         note — maybe [[{}]] ({reason})",
+                        lv.name, broken.title, suggestion.title
+                    );
+                    fixes.push((broken.source, broken.title.clone(), suggestion));
+                }
+                None => {
+                    println!(
+                        "mycora: [{}] broken link in \"{source_title}\": [[{}]] matches no \
+                         note (no similar title found)",
+                        lv.name, broken.title
+                    );
+                    missing_titles.insert(broken.title.clone());
+                    missing_pair_count += 1;
+                }
+            }
+        }
+
+        if apply {
+            let mut touched: HashSet<NoteId> = HashSet::new();
+            for (source, old_title, suggestion) in &fixes {
+                let Some(note) = lv.tree.get(*source) else {
+                    continue;
+                };
+                let new_body = link::rewrite_wikilink_title(&note.body, old_title, &suggestion.title);
+                lv.tree.set_body(*source, new_body);
+                touched.insert(*source);
+            }
+            for id in touched {
+                let note = lv.tree.get(id).expect("just set its body above");
+                lv.vault.save_note(id, note)?;
+            }
+            total_retargeted += fixes.len();
+        } else {
+            total_unresolved += fixes.len();
+        }
+
+        if create_stubs {
+            for title in &missing_titles {
+                let new_id = lv.tree.create_note(title.clone(), None);
+                let note = lv.tree.get(new_id).expect("just created it");
+                lv.vault.save_note(new_id, note)?;
+                total_stubs += 1;
+            }
+        } else {
+            total_unresolved += missing_pair_count;
+        }
+    }
+
+    println!(
+        "mycora: repair complete — {total_broken} broken link(s), {total_retargeted} \
+         retargeted, {total_stubs} stub(s) created, {total_unresolved} still unresolved"
+    );
+    Ok(())
 }
 
 fn run(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> anyhow::Result<()> {

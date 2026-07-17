@@ -8,15 +8,17 @@
 > (read-only secondary vaults, unmounted and archived vaults both
 > visible as their own tree rows), `[[wikilink]]` cross-links (including
 > cross-vault ones) with a backlinks panel, an outgoing-links jump,
-> link-count badges, and autocompletion while typing, a table-of-contents
-> overlay with one-key section extraction to a new linked child note,
-> file attachments, importing a single external Markdown file as a new
-> note, a full-pane note-body editor, a resizable three-pane layout
-> (tree, rendered-Markdown body preview, backlinks) with light/dark-aware
-> colors, a multilingual interface (English/French/Spanish/German), and
-> a `:` command palette (`:reindex`, `:tags`, `:tag`, `:lang`, `:panes`,
-> `:export`, `:import`, `:config`, `:q`). No configurable keybindings yet —
-> deliberately out of scope until real friction shows up in practice.
+> link-count badges, autocompletion while typing, and a `mycora repair`
+> CLI for detecting (and optionally fixing) broken links, a
+> table-of-contents overlay with one-key section extraction to a new
+> linked child note, file attachments, importing a single external
+> Markdown file as a new note, a full-pane note-body editor, a
+> resizable three-pane layout (tree, rendered-Markdown body preview,
+> backlinks) with light/dark-aware colors, a multilingual interface
+> (English/French/Spanish/German), and a `:` command palette
+> (`:reindex`, `:tags`, `:tag`, `:lang`, `:panes`, `:export`, `:import`,
+> `:config`, `:q`). No configurable keybindings yet — deliberately out
+> of scope until real friction shows up in practice.
 
 ## Table of Contents
 
@@ -26,6 +28,7 @@
 - [Configuration](#configuration)
 - [The vault format](#the-vault-format)
 - [The search index](#the-search-index)
+- [Repairing broken links](#repairing-broken-links)
 - [Layout](#layout)
 - [Searching](#searching)
 - [Backlinks](#backlinks)
@@ -470,6 +473,62 @@ they add/remove a tag on the *selected* note itself, shown as `#tag`
 badges in the body preview (see [Layout](#layout)), rather than
 filtering *by* tags. Like every mutating command, they're scoped to
 (and refuse outside of) the active vault.
+
+## Repairing broken links
+
+A `[[wikilink]]` whose title matches no note is a **broken link** —
+`mycora reindex` already warns about these (`broken link in "X":
+[[Y]] matches no note`), but does nothing about them. `mycora repair`
+is the CLI-only, headless companion for actually fixing them, in three
+tiers from safest to most invasive:
+
+```sh
+mycora repair                  # report only — the safe default
+mycora repair --create-stubs   # + create a stub note for unmatched links
+mycora repair --apply          # + retarget confidently-matched links
+mycora repair --vault <name>   # narrow reporting/fixing to one vault
+```
+
+With no flags, `repair` only reports — every broken link, across every
+mounted vault, with a best-guess suggestion where one exists:
+
+- **Case difference** — Mycora's own title matching is case-sensitive,
+  so `[[commandes]]` next to a note titled "Commandes" is a very common
+  real cause of a broken link. Reported as `maybe [[Commandes]] (case
+  difference)`.
+- **Similar title** — otherwise, a close-enough fuzzy match (title
+  similarity scoring) against another note's title, reported as `maybe
+  [[Title]] (similar title)`. If two notes are both close enough to be
+  ambiguous, or nothing is close at all, no suggestion is shown —
+  `repair` never guesses when it isn't reasonably sure.
+
+This default, report-only run changes nothing on disk — it's also
+exactly the preview of what `--apply` (below) would do, so you always
+see the fix before it happens.
+
+`--create-stubs` creates an empty note for every broken link that has
+*no* plausible suggestion, so the link resolves — one stub per distinct
+missing title per vault (not one per occurrence, if several notes
+reference the same missing title), created as a new root note in
+whichever vault referenced it. Always safe: it only ever adds a new
+note, never touches an existing file.
+
+`--apply` is the one flag that edits an existing note: for every broken
+link with a suggestion, it rewrites the link's text in place to point
+at the suggested title (`[[commandes]]` becomes `[[Commandes]]`) and
+saves the note. There's no undo for this outside your own backups or
+version control — unlike everything the TUI itself does, a CLI run
+doesn't go through the undo stack. Run without `--apply` first (the
+default) to see exactly what would change.
+
+Both flags can be combined in one run. `--vault <name>` restricts which
+vault's own broken links get reported and fixed — detection still
+checks every mounted vault's note titles as suggestion candidates
+either way, so a broken link can still be matched to a note living in a
+*different* mounted vault than the one being repaired. `repair` doesn't
+force a second reindex after fixing anything — the on-disk Markdown is
+already correct, and the disposable index catches up next time anything
+reindexes ([The search index](#the-search-index)).
 
 ## Layout
 

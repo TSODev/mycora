@@ -1385,6 +1385,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_yaml",
+ "strsim",
  "tar",
  "time",
  "toml",

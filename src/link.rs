@@ -55,6 +55,36 @@ pub fn unclosed_wikilink_start(line: &str, cursor_col: usize) -> Option<usize> {
     open_at
 }
 
+/// Rewrites every `[[old_title]]` occurrence in `body` to `[[new_title]]`
+/// — same trimmed-title matching `extract_wikilink_titles` uses, so this
+/// only ever touches a link that function would also report. Backs
+/// `mycora repair --apply`'s retargeting of a broken link to its resolved
+/// title. Same naive scan-and-rebuild idiom as `extract_wikilink_titles`
+/// itself: an unclosed `[[` stops rewriting and passes the rest of the
+/// body through unchanged rather than erroring.
+pub fn rewrite_wikilink_title(body: &str, old_title: &str, new_title: &str) -> String {
+    let mut out = String::with_capacity(body.len());
+    let mut rest = body;
+    loop {
+        let Some(start) = rest.find("[[") else {
+            out.push_str(rest);
+            break;
+        };
+        out.push_str(&rest[..start]);
+        let after_open = &rest[start + 2..];
+        let Some(end) = after_open.find("]]") else {
+            out.push_str(&rest[start..]);
+            break;
+        };
+        let title = after_open[..end].trim();
+        out.push_str("[[");
+        out.push_str(if title == old_title { new_title } else { title });
+        out.push_str("]]");
+        rest = &after_open[end + 2..];
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,6 +153,42 @@ mod tests {
         assert_eq!(
             extract_wikilink_titles("[[Outer [[Inner]] tail]]"),
             vec!["Outer [[Inner"]
+        );
+    }
+
+    #[test]
+    fn rewrite_wikilink_title_replaces_a_single_occurrence() {
+        assert_eq!(
+            rewrite_wikilink_title("see [[commandes]] for details", "commandes", "Commandes"),
+            "see [[Commandes]] for details"
+        );
+    }
+
+    #[test]
+    fn rewrite_wikilink_title_replaces_every_occurrence_of_the_same_title() {
+        assert_eq!(
+            rewrite_wikilink_title(
+                "[[commandes]] then again [[commandes]]",
+                "commandes",
+                "Commandes"
+            ),
+            "[[Commandes]] then again [[Commandes]]"
+        );
+    }
+
+    #[test]
+    fn rewrite_wikilink_title_leaves_other_titles_untouched() {
+        assert_eq!(
+            rewrite_wikilink_title("[[commandes]] and [[Other Note]]", "commandes", "Commandes"),
+            "[[Commandes]] and [[Other Note]]"
+        );
+    }
+
+    #[test]
+    fn rewrite_wikilink_title_stops_cleanly_at_an_unclosed_bracket() {
+        assert_eq!(
+            rewrite_wikilink_title("[[commandes]] then [[unterminated", "commandes", "Commandes"),
+            "[[Commandes]] then [[unterminated"
         );
     }
 

@@ -23,6 +23,7 @@ ratatui-textarea = "0.9.2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"
+strsim = "0.11"
 tar = "0.4.46"
 time = { version = "0.3.53", features = ["formatting", "parsing", "serde-well-known"] }
 toml = "1.1.2"
