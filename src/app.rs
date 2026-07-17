@@ -1742,6 +1742,22 @@ impl App {
             UndoAction::EditBody { id, body: source },
         ]));
 
+        // Unlike `create_child` (which never introduces a link) or a body
+        // edit (which might), extraction *always* both adds a `[[wikilink]]`
+        // and creates the note it resolves to — the source note's outgoing
+        // link and the new note's backlink are known outcomes, not just
+        // possible ones. Reindexing immediately means `b` on the new note
+        // shows the source as a backlink right away, rather than only after
+        // some later action (`/`, `f`, restart) happens to reindex first —
+        // same motivation as `begin_links`'s own reindex-before-showing.
+        match self.reindex_mounted() {
+            Ok(_) => {
+                self.last_error = None;
+                self.last_message = None;
+            }
+            Err(err) => self.last_error = Some(self.lang.reindex_failed(&err)),
+        }
+
         self.set_selected(Some(id));
         self.mode = Mode::Normal;
     }

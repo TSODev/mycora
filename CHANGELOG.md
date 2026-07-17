@@ -21,11 +21,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   headings, indented by level. `Enter` scrolls the body preview to the
   chosen heading; `x` extracts its whole section into a new child note,
   replacing it in the source with a `[[wikilink]]` — one single undo
-  step for both the note creation and the source-body edit. Extraction
-  is deliberately non-recursive: a sub-heading nested inside the
-  extracted section stays as plain Markdown in the new note's body
-  rather than being split into its own note, so the tree only grows one
-  deliberate level at a time.
+  step for both the note creation and the source-body edit, and the
+  vault reindexes immediately afterward (unlike most edits, extraction
+  is guaranteed to add both a link and its target, so `b` on the new
+  note shows the backlink right away instead of only after a later `/`
+  or `f` happens to reindex first). Extraction is deliberately
+  non-recursive: a sub-heading nested inside the extracted section
+  stays as plain Markdown in the new note's body rather than being
+  split into its own note, so the tree only grows one deliberate level
+  at a time.
 - **Markdown tables** now render as a bordered grid in the body preview
   pane, with a bold header row and per-column left/center/right
   alignment (`| :--- | ---: | :---: |`) — previously the parser never
