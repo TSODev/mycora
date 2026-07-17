@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-07-17
+
 ### Added
 - **`:import <path>`**: creates a new child note of the selected note
   from an external Markdown file, so its content doesn't need to be
