@@ -1375,11 +1375,21 @@ impl App {
                     }
                 }
                 if inverses.is_empty() {
-                    None
-                } else {
-                    inverses.reverse();
-                    Some(UndoAction::Compound(inverses))
+                    return None;
                 }
+                inverses.reverse();
+                // `extract_toc_selection` (the only current source of a
+                // `Compound`) reindexes right after building it, since it's
+                // guaranteed to add both a `[[wikilink]]` and the note it
+                // resolves to — the same is true in reverse for undo (the
+                // link and its target both disappear) and again for redo
+                // (both come back), so both directions need the same
+                // eager reindex, not just the original forward action.
+                match self.reindex_mounted() {
+                    Ok(_) => self.last_error = None,
+                    Err(err) => self.last_error = Some(self.lang.reindex_failed(&err)),
+                }
+                Some(UndoAction::Compound(inverses))
             }
         }
     }
