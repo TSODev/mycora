@@ -127,7 +127,18 @@ names the part of the design that's actually differentiating: not the tree
 - **A three-pane layout**: resizable tree + Markdown-rendered body
   preview + backlinks panes, a full-pane body editor, a `:` command
   palette, light/dark theming for free via named ANSI colors, and
-  session persistence (remembers where you were, per vault).
+  session persistence (remembers where you were, per vault). The body
+  preview renders GFM tables as a bordered grid too — columns shrink
+  and cell text word-wraps to fit the pane, sized by actual terminal
+  display width rather than `char` count so double-wide content
+  (emoji, CJK) keeps its borders aligned.
+- **Table of contents & section extraction**: `t` lists a note's own
+  headings; `Enter` jumps to one, `x` extracts its whole section into a
+  new linked child note (heading text becomes the title, the wikilink
+  it leaves behind ties back to the source) as a single undo step.
+  Deliberately non-recursive — a nested sub-heading stays plain
+  Markdown in the new note rather than cascading into notes of its
+  own.
 - **Multilingual interface**: English (default), French, Spanish, and
   German — `language = "fr"` in `config.toml`, or `:lang <en|fr|es|de>`
   to switch live from inside the TUI, persisted for next time.
@@ -135,9 +146,11 @@ names the part of the design that's actually differentiating: not the tree
   vim's `:w`; every string is embedded and compile-checked, so a
   missing translation is a build failure, not a runtime gap.
 - **Import/export**: `mycora import` converts an existing Obsidian vault
-  (folder structure becomes tree structure); `:export`/`mycora export`
-  flattens a note's subtree to a single Markdown *or* PDF document
-  (format inferred from the output path's extension).
+  (folder structure becomes tree structure); `:import <path>` pulls a
+  single external Markdown file into the open vault as a new child
+  note, sharing that same title/tags/link parsing; `:export`/`mycora
+  export` flattens a note's subtree to a single Markdown *or* PDF
+  document (format inferred from the output path's extension).
 - **Link autocompletion**: typing `[[` in the body editor opens a popup
   of matching note titles across every mounted vault — `Up`/`Down` to
   pick, `Tab`/`Enter` to accept, `Esc` to keep typing manually.
