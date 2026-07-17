@@ -645,9 +645,13 @@ note to be in the active (editable) vault, same as any other edit; on a
 read-only mounted vault's note, `t`/`Enter` still work (they only read),
 but `x` reports the read-only error instead.
 
-The new note doesn't show up in [Following links](#following-links) or
-[Backlinks](#backlinks) until the next reindex (opening search, `f`, or
-restarting), same as any other freshly-typed `[[wikilink]]`.
+Unlike most edits (which only get picked up by the next reindex — see
+[The search index](#the-search-index)), extraction reindexes right
+away, on `x` itself and again after any later `u`/`Ctrl+R` of it —
+since it always adds (or, on undo, removes) both a wikilink and the
+note it resolves to together, the new note's [Backlinks](#backlinks)
+and the source's [Following links](#following-links) are correct
+immediately, with no need to search or press `f` first.
 
 ## Command palette
 

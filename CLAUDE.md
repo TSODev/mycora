@@ -304,7 +304,17 @@ directly and guarantee its synthetic output matches the real on-disk format.
   section into a new child note + rewrite the source body with a
   `[[wikilink]]`) — both halves undo/redo as a single `u`/`Ctrl+R`
   instead of two, since each sub-action already independently calls
-  `set_selected`.
+  `set_selected`. The `Compound` arm also calls `self.reindex_mounted()`
+  after applying its sub-actions — deliberately *not* pushed down into
+  `extract_toc_selection` alone, since undo/redo re-enter through this
+  same arm and need the same fix: extraction is the one action
+  guaranteed to add or remove both a `[[wikilink]]` *and* the note it
+  resolves to together, so without this, `b` on the note right after
+  `x`, `u`, or `Ctrl+R` could show a stale (usually empty) backlinks
+  pane until something else happened to reindex — the same staleness
+  `begin_links` already avoids by reindexing before showing outgoing
+  links. Every other `UndoAction` arm leaves the index alone, same as
+  the plain (non-Compound) actions that record them.
   `visible_rows()` (depth-first, respecting `expanded: HashSet<NoteId>`)
   is recomputed on every call rather than cached — acceptable at current
   scale per ROADMAP's v0.1 note, revisit if it shows up in profiling. It
