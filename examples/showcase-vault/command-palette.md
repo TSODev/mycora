@@ -7,7 +7,7 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T13:30:00Z
+updated: 2026-07-17T09:00:00Z
 ---
 
 # Command palette
@@ -41,6 +41,11 @@ command also appears above the prompt for as long as it's open.
 - `:export <path>` — flattens the *selected* note's subtree to Markdown
   or PDF at `path` (format inferred from the extension), refusing if it
   already exists — see [[Exporting a subtree]]
+- `:import <path>` — creates a new child note of the *selected* note
+  from an external Markdown file at `path`, parsed the same way a
+  single file inside an Obsidian-vault import is (title from the
+  filename, tags from frontmatter, aliased/heading-anchored links
+  rewritten to plain ones) — see [[Importing a single Markdown file]]
 - `:config unmount <show|hide>` / `:config archive <show|hide>` —
   shows/hides the placeholder rows for unmounted/archived vaults in the
   tree — see [[Unmounted vaults are visible too]]

@@ -8,7 +8,7 @@ tags:
 - backlinks
 - v0.5
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T17:00:00Z
+updated: 2026-07-17T09:00:00Z
 ---
 
 # Cross-links and backlinks
@@ -40,3 +40,7 @@ double-square-bracket title, independent of tree position.
   editor opens a popup of matching titles across every mounted vault;
   `Up`/`Down` picks, `Tab`/`Enter` accepts, `Esc` dismisses just the
   popup. See [[Full-pane body editor, save on exit]].
+- **Extraction** — wikilinks aren't only typed by hand: a note's own
+  table of contents can carve a heading's section into a new child
+  note and drop a wikilink in its place — see
+  [[Table of contents and section extraction]].

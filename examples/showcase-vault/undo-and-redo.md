@@ -6,7 +6,7 @@ tags:
 - features
 - undo-redo
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-12T15:00:00Z
+updated: 2026-07-17T09:00:00Z
 ---
 
 # Undo and redo
@@ -28,3 +28,12 @@ session collapses into one entry, so `u` reverts the entire session at
 once rather than character by character — see
 [[Full-pane body editor, save on exit]]. Same for `:tag add`/`:tag del`
 (see [[Command palette]]): one undo step per command, not per tag.
+
+Some actions are really two mutations at once — extraction's `x` (see
+[[Table of contents and section extraction]]) both creates a new note
+and rewrites the source note's body. Rather than inventing bespoke undo
+logic for that one case, a `Compound` action wraps a list of ordinary
+ones: applying it applies each in order (still against live state, same
+as any other step) and collects their individual inverses into another
+`Compound` for the opposite stack. One `u` or `Ctrl+R` reverses or
+reapplies the whole thing, same as any single-mutation action.

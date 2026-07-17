@@ -7,7 +7,7 @@ tags:
 - import
 - v0.8
 created: 2026-07-11T09:30:00Z
-updated: 2026-07-11T09:30:00Z
+updated: 2026-07-17T09:00:00Z
 ---
 
 # Importing an Obsidian vault
@@ -20,10 +20,13 @@ Obsidian vault in.
 mycora import <source> <name> <path>
 ```
 
-CLI-only, no in-TUI equivalent — see
+CLI-only, and always creates a brand new vault rather than adding into
+one you already have open — see
 [[Folder structure becomes tree structure]] for the core design
-tension this had to resolve (Obsidian has no `parent` field at all)
-and why there's no `:import` command.
+tension this had to resolve (Obsidian has no `parent` field at all).
+For pulling a *single* file into an existing vault instead, see
+[[Importing a single Markdown file]] (`:import`, in the
+[[Command palette]]).
 
 Per note, on the way in:
 

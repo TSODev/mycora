@@ -5,7 +5,7 @@ order: 2
 tags:
 - features
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-15T09:00:00Z
+updated: 2026-07-17T09:00:00Z
 ---
 
 # Features
@@ -22,11 +22,16 @@ What's actually built, grouped by area:
 - [[Exporting a subtree]] — flatten a note and its subtree to Markdown
   or PDF
 - [[Importing an Obsidian vault]] — folders become tree structure
+- [[Importing a single Markdown file]] — `:import <path>` pulls one
+  external file in as a new child note
 - [[The interface speaks four languages]] — English, French, Spanish,
   German, switchable live with `:lang`
 - [[Attaching files to a note]] — copy a file into the vault and link it
   from the cursor, `Ctrl+A` while editing a body
 - [[Cut, paste, and cross-vault copy]] — `x`/`c`/`p` move or copy a
   note/subtree onto any destination, cross-vault for copy
+- [[Table of contents and section extraction]] — `t` lists a note's
+  headings, `Enter` jumps, `x` extracts a section into a linked child
+  note
 
 See [[Roadmap]] for what's still ahead.
