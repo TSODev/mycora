@@ -22,14 +22,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   chosen heading; `x` extracts its whole section into a new child note,
   replacing it in the source with a `[[wikilink]]` — one single undo
   step for both the note creation and the source-body edit, and the
-  vault reindexes immediately afterward (unlike most edits, extraction
-  is guaranteed to add both a link and its target, so `b` on the new
-  note shows the backlink right away instead of only after a later `/`
-  or `f` happens to reindex first). Extraction is deliberately
-  non-recursive: a sub-heading nested inside the extracted section
-  stays as plain Markdown in the new note's body rather than being
-  split into its own note, so the tree only grows one deliberate level
-  at a time.
+  vault reindexes immediately afterward, on the original extraction as
+  well as any later undo or redo of it (unlike most edits, extraction
+  is guaranteed to add or remove both a link and its target together,
+  so `b` on the note right after any of the three shows the correct
+  backlinks instead of only after a later `/` or `f` happens to
+  reindex first). Extraction is deliberately non-recursive: a
+  sub-heading nested inside the extracted section stays as plain
+  Markdown in the new note's body rather than being split into its own
+  note, so the tree only grows one deliberate level at a time.
 - **Markdown tables** now render as a bordered grid in the body preview
   pane, with a bold header row and per-column left/center/right
   alignment (`| :--- | ---: | :---: |`) — previously the parser never
