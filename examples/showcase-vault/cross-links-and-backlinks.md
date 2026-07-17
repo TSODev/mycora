@@ -8,7 +8,7 @@ tags:
 - backlinks
 - v0.5
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-17T10:00:00Z
+updated: 2026-07-17T10:30:00Z
 ---
 
 # Cross-links and backlinks
@@ -23,8 +23,9 @@ double-square-bracket title, independent of tree position.
   matching nothing is a **broken link** (reported, not an error); a note
   linking to its own title is skipped. See [[Fan-out ambiguous wikilinks]]
   for why fan-out specifically was chosen, and
-  [[Repairing broken links]] for `mycora repair`, the CLI that actually
-  does something about a broken one instead of only reporting it.
+  [[Repairing broken links]] for `mycora repair` and `:brokenlinks`,
+  which actually do something about a broken one instead of only
+  reporting it.
 - **Cross-vault** — a wikilink can resolve to a note in any *mounted*
   vault, not just the current one — see [[Multi-vault mounting]]. This is
   the intended way to reference another vault's content, since trees

@@ -7,7 +7,7 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-17T09:00:00Z
+updated: 2026-07-17T10:30:00Z
 ---
 
 # Command palette
@@ -18,6 +18,9 @@ command also appears above the prompt for as long as it's open.
 
 - `:reindex` — manually rebuilds the [[Search and indexing]] index,
   reporting how many notes were indexed
+- `:brokenlinks` — lists every broken wikilink across every mounted
+  vault with a best-guess fix suggestion, for reviewing and fixing them
+  one at a time by hand — see [[Repairing broken links]]
 - `:tags <tag1,tag2,...>` — matches notes with *any* of the listed tags
   (OR, not AND yet) across *every mounted vault at once*, each result
   labeled with its own vault. Opens a full-pane result list (`j`/`k`

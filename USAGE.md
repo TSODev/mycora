@@ -10,15 +10,16 @@
 > cross-vault ones) with a backlinks panel (each entry naming its
 > parent, to tell apart similarly-titled notes), an outgoing-links jump,
 > link-count badges, autocompletion while typing, a `Ctrl+O` navigation
-> history to jump back through a followed path, and a `mycora repair`
-> CLI for detecting (and optionally fixing) broken links, a
-> table-of-contents overlay with one-key section extraction to a new
-> linked child note, file attachments, importing a single external
-> Markdown file as a new note, a full-pane note-body editor, a
-> resizable three-pane layout (tree, rendered-Markdown body preview,
-> backlinks) with light/dark-aware colors, a multilingual interface
-> (English/French/Spanish/German), and a `:` command palette
-> (`:reindex`, `:tags`, `:tag`, `:lang`, `:panes`, `:export`, `:import`,
+> history to jump back through a followed path, broken-link detection
+> and fixing both as a `mycora repair` CLI (batch) and a `:brokenlinks`
+> TUI overlay (review one at a time by hand), a table-of-contents
+> overlay with one-key section extraction to a new linked child note,
+> file attachments, importing a single external Markdown file as a new
+> note, a full-pane note-body editor, a resizable three-pane layout
+> (tree, rendered-Markdown body preview, backlinks) with light/dark-aware
+> colors, a multilingual interface (English/French/Spanish/German), and
+> a `:` command palette (`:reindex`, `:brokenlinks`, `:tags`, `:tag`,
+> `:lang`, `:panes`, `:export`, `:import`,
 > `:config`, `:q`). No configurable keybindings yet — deliberately out
 > of scope until real friction shows up in practice.
 
@@ -481,9 +482,11 @@ filtering *by* tags. Like every mutating command, they're scoped to
 
 A `[[wikilink]]` whose title matches no note is a **broken link** —
 `mycora reindex` already warns about these (`broken link in "X":
-[[Y]] matches no note`), but does nothing about them. `mycora repair`
-is the CLI-only, headless companion for actually fixing them, in three
-tiers from safest to most invasive:
+[[Y]] matches no note`), but does nothing about them. Two ways to
+actually fix one: `mycora repair`, a CLI, headless, and batch-oriented
+tool, for fixing many at once without opening the TUI at all; and
+`:brokenlinks` (below), the TUI's own review-one-at-a-time equivalent.
+`mycora repair` has three tiers from safest to most invasive:
 
 ```sh
 mycora repair                  # report only — the safe default
@@ -532,6 +535,30 @@ either way, so a broken link can still be matched to a note living in a
 force a second reindex after fixing anything — the on-disk Markdown is
 already correct, and the disposable index catches up next time anything
 reindexes ([The search index](#the-search-index)).
+
+### `:brokenlinks` — fixing one by hand, from inside the TUI
+
+`:brokenlinks` (see [Command palette](#command-palette)) opens a
+full-pane list of the same broken links `mycora repair` would report,
+each with the same suggestion where one exists. Rather than trusting an
+automated `--apply`, this is for reviewing and fixing them one at a
+time, judged individually:
+
+- `j` / `k` — move between entries
+- `Enter` — jumps to the broken link's source note *and* scrolls the
+  body preview near the broken text itself, not just the top of the
+  note — so on a note longer than a few lines, the link is already on
+  screen
+- `Esc` — cancels, keeping the current selection
+
+From there it's ordinary navigation: `e` opens the body editor exactly
+where you landed, so you fix the text by hand (e.g. `[[commandes]]` →
+`[[Commandes]]`) and `Esc` saves, same as any other edit — no special
+mechanism, `:brokenlinks` only gets you to the right spot quickly.
+`Ctrl+O` afterward returns to wherever you were before jumping, same as
+any other jump (see [Navigation history](#navigation-history)). If
+nothing is broken anywhere, the status bar says so instead of opening
+an empty overlay.
 
 ## Layout
 
@@ -747,6 +774,13 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
 - `:reindex` — manually reindexes the mounted vaults (the same reindex
   search already triggers automatically), reporting how many notes were
   indexed
+- `:brokenlinks` — lists every broken wikilink across every mounted
+  vault, each with a best-guess fix suggestion where one exists (see
+  [Repairing broken links](#repairing-broken-links)). `j`/`k` to move,
+  `Enter` jumps to the link's source note and scrolls the body preview
+  near the broken text itself, `Esc` cancels. Reviewing and fixing one
+  at a time by hand — the TUI-side complement to `mycora repair`'s
+  batch fixing
 - `:tags <tag1,tag2,...>` — comma-separated, matches notes with *any* of
   the listed tags (not all — there's no AND syntax yet), across *every
   mounted vault at once* (see [Tags](#tags)), each result labeled with

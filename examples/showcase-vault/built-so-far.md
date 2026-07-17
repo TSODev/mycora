@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-17T10:00:00Z
+updated: 2026-07-17T10:30:00Z
 ---
 
 # Built so far
@@ -119,9 +119,13 @@ updated: 2026-07-17T10:00:00Z
   duplicating it (see [[Importing a single Markdown file]])
 - **Since v0.13** — `mycora repair` reports (and, with `--create-stubs`/
   `--apply`, fixes) broken wikilinks across every mounted vault, in
-  tiers from safe to destructive (see [[Repairing broken links]]);
-  backlinks pane entries now name their parent, dimmed, so
-  similarly-titled notes stay distinguishable before you jump to one
-  (see [[Cross-links and backlinks]]); and `Ctrl+O` jumps back through
-  your last few search/backlinks/links/tag-results jumps, vim-jumplist
-  style (see [[Navigation history]])
+  tiers from safe to destructive; `:brokenlinks` brings the same
+  detection into the TUI as a full-pane list, `Enter` jumping to a
+  link's source note with the body preview scrolled right to the
+  broken text, for fixing one at a time by hand with `e` instead of an
+  automated retarget (see [[Repairing broken links]]); backlinks pane
+  entries now name their parent, dimmed, so similarly-titled notes stay
+  distinguishable before you jump to one (see
+  [[Cross-links and backlinks]]); and `Ctrl+O` jumps back through your
+  last few search/backlinks/links/tag-results/broken-links jumps,
+  vim-jumplist style (see [[Navigation history]])

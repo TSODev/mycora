@@ -45,6 +45,7 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::TagResults => handle_tag_results(app, key.code),
             Mode::TagList => handle_tag_list(app, key.code),
             Mode::Links => handle_links(app, key.code),
+            Mode::BrokenWikilinks => handle_broken_wikilinks(app, key.code),
             Mode::Toc => handle_toc(app, key.code),
             // Any key closes the reference, same as before — but rather
             // than just swallowing that keypress, it's replayed straight
@@ -266,6 +267,16 @@ fn handle_links(app: &mut App, code: KeyCode) {
         KeyCode::Esc => app.cancel_links(),
         KeyCode::Char('j') | KeyCode::Down => app.move_links_selection(1),
         KeyCode::Char('k') | KeyCode::Up => app.move_links_selection(-1),
+        _ => {}
+    }
+}
+
+fn handle_broken_wikilinks(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Enter => app.confirm_broken_wikilinks(),
+        KeyCode::Esc => app.cancel_broken_wikilinks(),
+        KeyCode::Char('j') | KeyCode::Down => app.move_broken_wikilinks_selection(1),
+        KeyCode::Char('k') | KeyCode::Up => app.move_broken_wikilinks_selection(-1),
         _ => {}
     }
 }

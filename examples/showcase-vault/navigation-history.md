@@ -5,17 +5,18 @@ order: 14
 tags:
 - features
 created: 2026-07-17T10:00:00Z
-updated: 2026-07-17T10:00:00Z
+updated: 2026-07-17T10:30:00Z
 ---
 
 # Navigation history
 
 `Ctrl+O` jumps back to the note you were on just before your last
 *jump* — `Enter` in [[Search and indexing]], the backlinks/outgoing-links
-panels (see [[Cross-links and backlinks]]), or a `:tags` result list
-(see [[Command palette]]). Each press pops one more step off a stack, so
-pressing it repeatedly walks back further through the path you've
-followed — the same jumplist convention vim uses for `Ctrl+O`/`Ctrl+I`.
+panels (see [[Cross-links and backlinks]]), a `:tags` result list, or
+`:brokenlinks` (see [[Command palette]] and [[Repairing broken links]]).
+Each press pops one more step off a stack, so pressing it repeatedly
+walks back further through the path you've followed — the same
+jumplist convention vim uses for `Ctrl+O`/`Ctrl+I`.
 
 Plain `j`/`k` movement in the tree doesn't add to this history — only an
 actual jump does, so `Ctrl+O` retraces the notes you followed links to,

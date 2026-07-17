@@ -7,16 +7,17 @@ tags:
 - links
 - cli
 created: 2026-07-17T09:00:00Z
-updated: 2026-07-17T09:00:00Z
+updated: 2026-07-17T10:30:00Z
 ---
 
 # Repairing broken links
 
 [[Cross-links and backlinks]] already reports a broken link (a
 wikilink title matching no note) via `mycora reindex`'s warnings — but
-does nothing about it. `mycora repair` is the CLI-only, headless
-companion that actually fixes them, in three tiers from safest to most
-invasive:
+does nothing about it. Two ways to actually fix one: `mycora repair`, a
+headless CLI for batch fixes; and `:brokenlinks`, the TUI's own
+review-one-at-a-time overlay (below). `mycora repair` has three tiers
+from safest to most invasive:
 
 ```sh
 mycora repair                  # report only — the safe default
@@ -53,3 +54,14 @@ to it.
 mean" argument suggestions) before this — promoted to a direct one
 rather than hand-rolling similarity scoring from scratch, since it
 added no new compiled code to the binary.
+
+`:brokenlinks` in the [[Command palette]] is the TUI's own take on the
+same idea — a full-pane list of the same broken links with the same
+suggestions, `j`/`k` to move, `Enter` to jump. Rather than trusting an
+automated `--apply`, this is for reviewing and fixing them one at a
+time: `Enter` jumps to the link's source note *and* scrolls the body
+preview near the broken text itself (not just the top of the note), so
+`e` opens the body editor already at the right spot — an ordinary
+manual edit, no special mechanism, then `Esc` saves like any other
+change. `Ctrl+O` afterward returns to wherever the jump started from,
+same as [[Navigation history]] everywhere else.

@@ -5,7 +5,7 @@ use ratatui::widgets::{Block, Borders};
 use ratatui_textarea::TextArea;
 
 use crate::config::{Config, VaultEntry};
-use crate::index::{Index, IndexedNote, SearchHit, TagFilterOp};
+use crate::index::{Index, IndexedNote, ReindexReport, SearchHit, TagFilterOp};
 use crate::lang::Lang;
 use crate::note::{Note, NoteId};
 use crate::session::Session;
@@ -99,6 +99,14 @@ pub enum Mode {
     /// focus into, so this is a transient list instead, dismissed on
     /// `Esc` or after `Enter` jumps. See `App::begin_links`.
     Links,
+    /// Every broken `[[wikilink]]` across every mounted vault (`:brokenlinks`)
+    /// — full-pane overlay, same shape as `Links`, but not scoped to the
+    /// current selection (spans everything, like `:tags`). Always
+    /// reindexes first, unlike `Links`. `Enter` jumps to the link's
+    /// source note (and scrolls the body preview near the broken text
+    /// itself, not just the top) so it can be fixed by hand with `e`;
+    /// `Esc` cancels. See `App::begin_broken_wikilinks`.
+    BrokenWikilinks,
     /// Table of contents for the selected note's body headings (`t`) —
     /// full-pane overlay, same shape as `Links`. `Enter` scrolls the body
     /// preview to the selected heading and closes; `x` extracts that
@@ -284,6 +292,10 @@ pub struct App {
     /// see `App::begin_links`.
     links_results: Vec<IndexedNote>,
     links_selected: usize,
+    /// Every broken wikilink across every mounted vault, while
+    /// `mode == Mode::BrokenWikilinks` — see `App::begin_broken_wikilinks`.
+    broken_wikilinks_results: Vec<BrokenWikilinkHit>,
+    broken_wikilinks_selected: usize,
     /// The selected note's body headings, while `mode == Mode::Toc` —
     /// captured at `begin_toc` time (the body can't change while the
     /// overlay is open, so the byte offsets in each `HeadingRef` stay
@@ -313,6 +325,19 @@ struct LinkAutocomplete {
     /// `App::wikilink_candidates`.
     matches: Vec<String>,
     selected: usize,
+}
+
+/// One broken wikilink, enriched for display — `index::BrokenLink` only
+/// carries `source`/`title`; this adds what `ui.rs`'s
+/// `draw_broken_wikilinks` needs (resolved source title, owning vault,
+/// best-guess fix) without re-deriving them on every redraw. See
+/// `App::begin_broken_wikilinks`.
+pub struct BrokenWikilinkHit {
+    pub source: NoteId,
+    pub source_title: String,
+    pub broken_title: String,
+    pub vault_id: String,
+    pub suggestion: Option<crate::repair::Suggestion>,
 }
 
 /// One row in the tree pane, as returned by `App::visible_rows`: a note
@@ -558,6 +583,8 @@ impl App {
             link_autocomplete: None,
             links_results: Vec::new(),
             links_selected: 0,
+            broken_wikilinks_results: Vec::new(),
+            broken_wikilinks_selected: 0,
             toc_headings: Vec::new(),
             toc_selected: 0,
             pending_clipboard: None,
@@ -1585,23 +1612,27 @@ impl App {
 
     /// Reindexes the primary vault together with every read-only mounted
     /// vault, so cross-vault wikilinks stay resolved against each other —
-    /// same reasoning as `App::new()`'s startup reindex. Called from `/`
-    /// and `f`, the two places that need fresh results mid-session (`b`
-    /// deliberately doesn't — see `focus_backlinks`'s doc comment).
-    /// Errors fold into `last_error` rather than propagating, since these
-    /// are UI-triggered entry points that can't fail the whole app.
-    /// Returns the total note count across every mounted vault on success,
-    /// for callers (`:reindex`) that want to report it — `begin_search`
-    /// just ignores it.
-    fn reindex_mounted(&mut self) -> anyhow::Result<usize> {
+    /// same reasoning as `App::new()`'s startup reindex. Called from `/`,
+    /// `f`, `:reindex`, and `:brokenlinks`, the places that need fresh
+    /// results mid-session (`b` deliberately doesn't — see
+    /// `focus_backlinks`'s doc comment). Errors fold into `last_error`
+    /// rather than propagating, since these are UI-triggered entry
+    /// points that can't fail the whole app. Returns each mounted
+    /// vault's name paired with its full `ReindexReport`, not just a
+    /// summed note count — callers need different slices of it
+    /// (`:reindex` wants the total note count, `:brokenlinks` wants
+    /// `broken_links`; `begin_search` and most others ignore it
+    /// entirely).
+    fn reindex_mounted(&mut self) -> anyhow::Result<Vec<(String, ReindexReport)>> {
         let mut batch: Vec<(&str, &Tree, &Vault)> =
             Vec::with_capacity(1 + self.other_vaults.len());
         batch.push((self.vault_id.as_str(), &self.tree, &self.vault));
         for v in &self.other_vaults {
             batch.push((v.id.as_str(), &v.tree, &v.vault));
         }
+        let names: Vec<String> = batch.iter().map(|(name, _, _)| name.to_string()).collect();
         let reports = self.index.reindex_mounted(&batch)?;
-        Ok(reports.iter().map(|r| r.note_count).sum())
+        Ok(names.into_iter().zip(reports).collect())
     }
 
     /// Notes linking to the currently selected note — the split layout's
@@ -1699,6 +1730,113 @@ impl App {
 
     pub fn links_selected(&self) -> usize {
         self.links_selected
+    }
+
+    /// `:brokenlinks` — every broken wikilink across every mounted vault,
+    /// each with a best-guess fix suggestion (same `repair::suggest`
+    /// logic `mycora repair` uses). Unlike `begin_links`, not scoped to
+    /// the current selection — spans everything, like `:tags`. An empty
+    /// result reports through `last_message` rather than opening an
+    /// empty overlay, same convention as `begin_links`.
+    pub fn begin_broken_wikilinks(&mut self) {
+        let reports = match self.reindex_mounted() {
+            Ok(reports) => reports,
+            Err(err) => {
+                self.last_error = Some(self.lang.reindex_failed(&err));
+                return;
+            }
+        };
+
+        let all_titles: Vec<String> = self
+            .tree
+            .iter()
+            .map(|(_, note)| note.title.clone())
+            .chain(
+                self.other_vaults
+                    .iter()
+                    .flat_map(|v| v.tree.iter().map(|(_, note)| note.title.clone())),
+            )
+            .collect();
+
+        let mut hits = Vec::new();
+        for (_, report) in &reports {
+            for broken in &report.broken_links {
+                let Some((tree, vault_id)) = self.resolve(broken.source) else {
+                    continue;
+                };
+                let Some(note) = tree.get(broken.source) else {
+                    continue;
+                };
+                hits.push(BrokenWikilinkHit {
+                    source: broken.source,
+                    source_title: note.title.clone(),
+                    broken_title: broken.title.clone(),
+                    vault_id: vault_id.to_string(),
+                    suggestion: crate::repair::suggest(&broken.title, &all_titles),
+                });
+            }
+        }
+
+        if hits.is_empty() {
+            self.last_error = None;
+            self.last_message = Some(self.lang.no_broken_wikilinks().to_string());
+            return;
+        }
+        self.last_error = None;
+        self.last_message = None;
+        self.broken_wikilinks_results = hits;
+        self.broken_wikilinks_selected = 0;
+        self.mode = Mode::BrokenWikilinks;
+    }
+
+    pub fn move_broken_wikilinks_selection(&mut self, delta: isize) {
+        if self.broken_wikilinks_results.is_empty() {
+            return;
+        }
+        let len = self.broken_wikilinks_results.len() as isize;
+        let new_pos = (self.broken_wikilinks_selected as isize + delta).rem_euclid(len) as usize;
+        self.broken_wikilinks_selected = new_pos;
+    }
+
+    /// `Enter` — jumps to the broken link's source note (same
+    /// reveal+select as every other jump) and scrolls the body preview
+    /// near the broken `[[title]]` occurrence itself rather than just
+    /// the top of the note, so a longer note doesn't hide it.
+    /// Best-effort: if the exact bracketed text can't be found (e.g.
+    /// unusual whitespace inside the brackets), falls back to the top,
+    /// same tolerance `outline::scroll_offset_for` already has
+    /// elsewhere. Counts as a jump for `Ctrl+O`'s navigation history,
+    /// same as every other `confirm_*` method.
+    pub fn confirm_broken_wikilinks(&mut self) {
+        if let Some(hit) = self
+            .broken_wikilinks_results
+            .get(self.broken_wikilinks_selected)
+        {
+            let id = hit.source;
+            let marker = format!("[[{}]]", hit.broken_title);
+            self.record_nav_jump(id);
+            self.reveal(id);
+            self.set_selected(Some(id));
+            if let Some((tree, _)) = self.resolve(id)
+                && let Some(note) = tree.get(id)
+                && let Some(offset) = note.body.find(&marker)
+            {
+                self.body_scroll = crate::outline::scroll_offset_for(&note.body, offset);
+            }
+        }
+        self.mode = Mode::Normal;
+    }
+
+    pub fn cancel_broken_wikilinks(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    pub fn broken_wikilinks_results(&self) -> &[BrokenWikilinkHit] {
+        &self.broken_wikilinks_results
+    }
+
+    pub fn broken_wikilinks_selected(&self) -> usize {
+        self.broken_wikilinks_selected
     }
 
     /// `t` — opens the table-of-contents overlay for the selected note's
@@ -2360,6 +2498,7 @@ impl App {
         match name {
             "q" | "quit" => self.should_quit = true,
             "reindex" => self.command_reindex(),
+            "brokenlinks" => self.begin_broken_wikilinks(),
             "tags" => self.command_tags(args),
             "panes" => self.command_panes(args),
             "export" => self.command_export(args),
@@ -2376,7 +2515,8 @@ impl App {
 
     fn command_reindex(&mut self) {
         match self.reindex_mounted() {
-            Ok(count) => {
+            Ok(reports) => {
+                let count: usize = reports.iter().map(|(_, r)| r.note_count).sum();
                 self.last_error = None;
                 self.last_message = Some(self.lang.reindexed_notes(count));
             }

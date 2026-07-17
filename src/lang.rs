@@ -70,6 +70,10 @@ impl Lang {
             Lang::En => &[
                 (":reindex", "rebuild the search index"),
                 (
+                    ":brokenlinks",
+                    "list broken wikilinks across every mounted vault, jump to one to fix by hand",
+                ),
+                (
                     ":tags <tag1,tag2,...>",
                     "list notes matching any of the given tags",
                 ),
@@ -103,6 +107,10 @@ impl Lang {
             ],
             Lang::Fr => &[
                 (":reindex", "reconstruit l'index de recherche"),
+                (
+                    ":brokenlinks",
+                    "liste les liens cassés de tous les vaults montés, sauter sur un pour le corriger à la main",
+                ),
                 (
                     ":tags <tag1,tag2,...>",
                     "liste les notes portant l'un des tags donnés",
@@ -138,6 +146,10 @@ impl Lang {
             Lang::Es => &[
                 (":reindex", "reconstruye el índice de búsqueda"),
                 (
+                    ":brokenlinks",
+                    "lista los enlaces rotos de todos los vaults montados, salta a uno para corregirlo a mano",
+                ),
+                (
                     ":tags <tag1,tag2,...>",
                     "lista notas que coincidan con alguna de las etiquetas dadas",
                 ),
@@ -171,6 +183,10 @@ impl Lang {
             ],
             Lang::De => &[
                 (":reindex", "baut den Suchindex neu auf"),
+                (
+                    ":brokenlinks",
+                    "listet defekte Links über alle gemounteten Vaults, zu einem springen, um ihn von Hand zu korrigieren",
+                ),
                 (
                     ":tags <tag1,tag2,...>",
                     "listet Notizen mit einem der angegebenen Tags",
@@ -469,6 +485,18 @@ impl Lang {
         }
     }
 
+    /// Title of the `:brokenlinks` full-pane overlay — unscoped, unlike
+    /// `links_title`, since this spans every mounted vault rather than
+    /// one note's own links.
+    pub fn broken_links_title(self) -> &'static str {
+        match self {
+            Lang::En => "Broken Links",
+            Lang::Fr => "Liens cassés",
+            Lang::Es => "Enlaces rotos",
+            Lang::De => "Defekte Links",
+        }
+    }
+
     /// Title of the `t` (table of contents) full-pane overlay — `scope`
     /// is the note whose headings are listed.
     pub fn toc_title(self, scope: &str) -> String {
@@ -721,6 +749,18 @@ impl Lang {
             (Lang::Fr, Mode::Links) => ("LIENS", "j/k: bouger  Enter: sauter  Esc: annuler"),
             (Lang::Es, Mode::Links) => ("ENLACES", "j/k: mover  Enter: saltar  Esc: cancelar"),
             (Lang::De, Mode::Links) => ("LINKS", "j/k: bewegen  Enter: springen  Esc: abbrechen"),
+            (Lang::En, Mode::BrokenWikilinks) => {
+                ("BROKEN LINKS", "j/k: move  Enter: jump  Esc: cancel")
+            }
+            (Lang::Fr, Mode::BrokenWikilinks) => {
+                ("LIENS CASSÉS", "j/k: bouger  Enter: sauter  Esc: annuler")
+            }
+            (Lang::Es, Mode::BrokenWikilinks) => {
+                ("ENLACES ROTOS", "j/k: mover  Enter: saltar  Esc: cancelar")
+            }
+            (Lang::De, Mode::BrokenWikilinks) => {
+                ("DEFEKTE LINKS", "j/k: bewegen  Enter: springen  Esc: abbrechen")
+            }
             (Lang::En, Mode::Toc) => {
                 ("TOC", "j/k: move  Enter: jump  x: extract  Esc: cancel")
             }
@@ -962,6 +1002,17 @@ impl Lang {
             Lang::Fr => "cette note n'a pas de titres",
             Lang::Es => "esta nota no tiene encabezados",
             Lang::De => "diese Notiz hat keine Überschriften",
+        }
+    }
+
+    /// `:brokenlinks`'s empty-result message — no broken wikilink
+    /// anywhere across every mounted vault.
+    pub fn no_broken_wikilinks(self) -> &'static str {
+        match self {
+            Lang::En => "no broken wikilinks",
+            Lang::Fr => "aucun lien cassé",
+            Lang::Es => "sin enlaces rotos",
+            Lang::De => "keine defekten Links",
         }
     }
 
@@ -1450,6 +1501,7 @@ mod tests {
                 Mode::TagResults,
                 Mode::TagList,
                 Mode::Links,
+                Mode::BrokenWikilinks,
                 Mode::Toc,
                 Mode::Help,
             ] {

@@ -234,19 +234,24 @@ directly and guarantee its synthetic output matches the real on-disk format.
   the same or a shallower level, or end of body) and slice it out —
   extraction is inherently non-recursive since it's one contiguous byte
   range; a deeper sub-heading inside is just part of that slice, never a
-  boundary. `scroll_offset_for(source, heading_start)` (used by
-  `App::confirm_toc` to jump to a heading) sidesteps the fact that `App`
-  never knows the live body-preview pane width (`ui.rs` is pure
-  rendering — see its own note below) by re-calling
+  boundary. `scroll_offset_for(source, byte_offset)` (used by
+  `App::confirm_toc` to jump to a heading, and — despite the name and
+  module, since it isn't actually heading-specific — reused verbatim by
+  `App::confirm_broken_wikilinks` to land near a broken wikilink's own
+  position) sidesteps the fact that `App` never knows the live
+  body-preview pane width (`ui.rs` is pure rendering — see its own note
+  below) by re-calling
   `markdown::render` on `source[..heading_start]` at a fixed constant
   width and counting the lines produced — exact for every block type
   except tables (width-sensitive), gracefully approximate otherwise, the
   same accepted imprecision as `App::scroll_body_down`'s own doc
   comment.
-- **`repair.rs`**: pure suggestion logic behind `mycora repair` — no
-  I/O, no `Tree`/`Vault`, same split as `outline.rs` (logic here,
-  orchestration in the caller, which for this one is `main.rs`'s
-  `perform_repair` rather than `app.rs`, since this is CLI-only).
+- **`repair.rs`**: pure suggestion logic shared by `mycora repair` (CLI)
+  and `:brokenlinks` (TUI) — no I/O, no `Tree`/`Vault`, same split as
+  `outline.rs` (logic here, orchestration in the caller: `main.rs`'s
+  `perform_repair` for the CLI, `app.rs`'s `begin_broken_wikilinks` for
+  the TUI — both call the exact same `suggest`, no matching logic
+  duplicated between them).
   `suggest(broken_title, candidates) -> Option<Suggestion>` first tries
   a case-insensitive exact match (`Confidence::Certain` — Mycora's own
   title matching is case-sensitive, so this is the single most likely
@@ -311,7 +316,7 @@ directly and guarantee its synthetic output matches the real on-disk format.
   `Tree` + `Vault`, every other mounted-but-read-only vault
   (`ReadOnlyVault { id, tree, vault }`), and the shared `Index`. `Mode` is
   `Normal | Insert | ConfirmDelete | Search | Backlinks | EditBody |
-  Command | TagResults | TagList | Links | Toc | Help` — dispatch lives in `event.rs`, rendering in
+  Command | TagResults | TagList | Links | BrokenWikilinks | Toc | Help` — dispatch lives in `event.rs`, rendering in
   `ui.rs` (see those files' notes on which modes are full-pane overlays vs.
   status-bar-only prompts vs. in-place pane focus). Every mutating method
   (`create_child`, `commit_rename`, `confirm_delete`, `indent_selected`,
@@ -346,16 +351,41 @@ directly and guarantee its synthetic output matches the real on-disk format.
   **`nav_history: Vec<NoteId>`** is a separate, much simpler session-only
   stack (no inverses, no redo side) behind `Ctrl+O`
   (`navigate_back`) — `record_nav_jump(id)` pushes the *current*
-  selection (not `id`) right before each of the four `confirm_*` jump
+  selection (not `id`) right before each of the five `confirm_*` jump
   methods (`confirm_search`/`confirm_backlinks`/`confirm_links`/
-  `confirm_tag_results`) calls `reveal`+`set_selected`, so popping it
-  later returns to where you were, browser-back-button style.
-  Deliberately not wired into `set_selected` itself or `move_selection`
-  — that would push an entry on every single `j`/`k` tree step, turning
-  "walk back through your last few jumps" into "walk back through your
-  last few keystrokes." `navigate_back` itself never pushes (it would
-  need a mirrored "forward" stack to undo cleanly, which nothing asked
-  for yet) — it only pops and jumps.
+  `confirm_tag_results`/`confirm_broken_wikilinks`) calls
+  `reveal`+`set_selected`, so popping it later returns to where you
+  were, browser-back-button style. Deliberately not wired into
+  `set_selected` itself or `move_selection` — that would push an entry
+  on every single `j`/`k` tree step, turning "walk back through your
+  last few jumps" into "walk back through your last few keystrokes."
+  `navigate_back` itself never pushes (it would need a mirrored
+  "forward" stack to undo cleanly, which nothing asked for yet) — it
+  only pops and jumps.
+  **`reindex_mounted`** (private) returns `Vec<(String, ReindexReport)>`
+  — every mounted vault's name paired with its *full* report, not a
+  summed note count — specifically so `begin_broken_wikilinks`
+  (`:brokenlinks`) can read `broken_links` out of it; `command_reindex`
+  is the one caller that still wants a total, so it sums
+  `report.note_count` itself instead. The other four call sites
+  (`begin_search`, `begin_links`, `extract_toc_selection`'s reindex, the
+  `Compound` arm above) only ever branched on `Err`/`Ok(_)` and needed
+  no changes when this widened. `begin_broken_wikilinks` enriches each
+  `BrokenLink { source, title }` (bare id + unresolved title, nothing
+  else) into a `BrokenWikilinkHit` for `ui.rs` — resolved source title
+  and vault via `resolve(broken.source)`, plus a fix suggestion via
+  `repair::suggest` (the exact same pure function `mycora repair`
+  uses, reused verbatim — no duplicated matching logic between the CLI
+  and the TUI). `confirm_broken_wikilinks` does one thing beyond every
+  other `confirm_*`: after `reveal`+`set_selected`, it searches the
+  now-current note's body for the literal `[[broken title]]` text and,
+  if found, sets `body_scroll` via `outline::scroll_offset_for` — which
+  isn't actually heading-specific despite living in `outline.rs` and
+  being named for that use, it just renders a prefix and counts lines
+  for *any* byte offset, so reusing it here needed zero changes to that
+  module. Landing on the exact line instead of just the top of the note
+  is what makes "`Enter` then `e`" (the whole point of this overlay
+  over the CLI's `--apply`) fast on a note longer than a few lines.
   `visible_rows()` (depth-first, respecting `expanded: HashSet<NoteId>`)
   is recomputed on every call rather than cached — acceptable at current
   scale per ROADMAP's v0.1 note, revisit if it shows up in profiling. It

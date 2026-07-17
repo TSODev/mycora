@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`:brokenlinks`**: the TUI-side companion to `mycora repair` — lists
+  every broken wikilink across every mounted vault, each with the same
+  best-guess suggestion the CLI shows, for reviewing and fixing one at a
+  time by hand instead of trusting an automated retarget. `Enter` jumps
+  to the link's source note *and* scrolls the body preview near the
+  broken text itself (not just the top of the note), so `e` lands you
+  right where the fix needs to happen; `Ctrl+O` afterward returns to
+  wherever you were, same as any other jump.
 - **`mycora repair`**: detects broken `[[wikilink]]`s across every
   mounted vault (the same detection `reindex` already warns about) and,
   optionally, fixes them, in three tiers. Report-only by default —

@@ -79,6 +79,10 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
             draw_links(frame, area, app);
             return;
         }
+        Mode::BrokenWikilinks => {
+            draw_broken_wikilinks(frame, area, app);
+            return;
+        }
         Mode::Toc => {
             draw_toc(frame, area, app);
             return;
@@ -487,6 +491,48 @@ fn draw_links(frame: &mut Frame, area: Rect, app: &App) {
     let title = app.lang.links_title(app.vault_name());
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     let mut state = ListState::default().with_selected(Some(app.links_selected()));
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
+/// Every broken wikilink across every mounted vault (`:brokenlinks`) —
+/// full-pane like `draw_links`, but each row names the *source* note
+/// (the one containing the broken link) rather than a resolved target,
+/// since there isn't one. A suggestion (`repair::suggest`, the same
+/// logic `mycora repair` uses) is appended dimmed when one exists.
+fn draw_broken_wikilinks(frame: &mut Frame, area: Rect, app: &App) {
+    let items: Vec<ListItem> = app
+        .broken_wikilinks_results()
+        .iter()
+        .enumerate()
+        .map(|(i, hit)| {
+            let base = if i == app.broken_wikilinks_selected() {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            let dim = base.add_modifier(Modifier::DIM);
+            let mut spans = vec![
+                Span::styled(format!("[{}] ", hit.vault_id), dim),
+                Span::styled(format!("{}: ", hit.source_title), base),
+                Span::styled(format!("[[{}]]", hit.broken_title), base),
+            ];
+            if let Some(suggestion) = &hit.suggestion {
+                let reason = match suggestion.confidence {
+                    crate::repair::Confidence::Certain => "case difference",
+                    crate::repair::Confidence::Likely => "similar title",
+                };
+                spans.push(Span::styled(
+                    format!(" — maybe [[{}]] ({reason})", suggestion.title),
+                    dim,
+                ));
+            }
+            ListItem::new(Line::from(spans))
+        })
+        .collect();
+
+    let title = app.lang.broken_links_title();
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
+    let mut state = ListState::default().with_selected(Some(app.broken_wikilinks_selected()));
     frame.render_stateful_widget(list, area, &mut state);
 }
 
