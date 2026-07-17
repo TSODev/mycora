@@ -8,6 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`:import <path>`**: creates a new child note of the selected note
+  from an external Markdown file, so its content doesn't need to be
+  copy-pasted in by hand. Title comes from the filename, tags from
+  optional YAML frontmatter, and `[[Title|Alias]]`/`[[Title#Heading]]`
+  wikilinks are rewritten to plain `[[Title]]` — the exact same parsing
+  `mycora vault import` (bulk Obsidian-vault import) already uses, now
+  shared by both so a file means the same thing whichever door it comes
+  in through. `~/` expands the same way the attach-file prompt's path
+  does.
 - **Table of contents overlay (`t`)**: lists the selected note's Markdown
   headings, indented by level. `Enter` scrolls the body preview to the
   chosen heading; `x` extracts its whole section into a new child note,

@@ -10,12 +10,12 @@
 > cross-vault ones) with a backlinks panel, an outgoing-links jump,
 > link-count badges, and autocompletion while typing, a table-of-contents
 > overlay with one-key section extraction to a new linked child note,
-> file attachments,
-> a full-pane note-body editor, a resizable three-pane layout (tree,
-> rendered-Markdown body preview, backlinks) with light/dark-aware
+> file attachments, importing a single external Markdown file as a new
+> note, a full-pane note-body editor, a resizable three-pane layout
+> (tree, rendered-Markdown body preview, backlinks) with light/dark-aware
 > colors, a multilingual interface (English/French/Spanish/German), and
 > a `:` command palette (`:reindex`, `:tags`, `:tag`, `:lang`, `:panes`,
-> `:export`, `:config`, `:q`). No configurable keybindings yet —
+> `:export`, `:import`, `:config`, `:q`). No configurable keybindings yet —
 > deliberately out of scope until real friction shows up in practice.
 
 ## Table of Contents
@@ -34,6 +34,7 @@
 - [Command palette](#command-palette)
 - [Exporting a subtree](#exporting-a-subtree)
 - [Importing an Obsidian vault](#importing-an-obsidian-vault)
+- [Importing a single Markdown file](#importing-a-single-markdown-file)
 - [Creating and renaming notes](#creating-and-renaming-notes)
 - [Editing a note's body](#editing-a-notes-body)
 - [Moving notes](#moving-notes)
@@ -685,6 +686,11 @@ command, `Enter` to run it, `Esc` to cancel without doing anything.
   (see [Exporting a subtree](#exporting-a-subtree)). Works on a
   read-only mounted vault's note too, not just the active vault's —
   exporting only reads. Refuses if `path` already exists.
+- `:import <path>` — creates a new child note of the *selected* note
+  from an external Markdown file at `path` (see [Importing a single
+  Markdown file](#importing-a-single-markdown-file)). Requires a
+  selection (the new note needs a parent) and the active vault to be
+  editable.
 - `:config unmount <show|hide>` / `:config archive <show|hide>` — shows
   or hides the `⊘`/`▦` placeholder rows for unmounted/archived vaults
   in the tree entirely (see [Layout](#layout)), for a registry with
@@ -756,9 +762,10 @@ mycora import <source> <name> <path>
 
 Converts an existing Obsidian vault at `<source>` into a brand new
 Mycora vault registered as `<name>` at `<path>` — mounted immediately,
-same as `mycora vault init`. CLI-only; there's no TUI `:import`, since
-unlike export there's no "currently open" vault to import *into* — it
-always creates a new one.
+same as `mycora vault init`. CLI-only, and always creates a whole new
+vault rather than adding into an existing one — for pulling a *single*
+file into a vault you already have open, see the TUI's `:import` below
+instead.
 
 Obsidian has no `parent` field; its only organizational structure is the
 filesystem. Folder structure becomes tree structure: a subdirectory
@@ -782,6 +789,30 @@ Per note:
 `.obsidian/` and anything that isn't a `.md` file (images, canvases,
 plugin data) are skipped. Refuses if `<path>` already exists and isn't
 empty, same as export's refuse-on-existing-file.
+
+## Importing a single Markdown file
+
+```
+:import <path>
+```
+
+Creates a **new child note of the currently selected note** from an
+external `.md` file — no copy-pasting the content in by hand. `~/`
+expands to your home directory, same as the attach-file prompt's path
+(see [Attaching a file](#attaching-a-file)).
+
+The file is parsed exactly the way a single file inside an [Obsidian
+vault import](#importing-an-obsidian-vault) is — same rules for title
+(from the filename), tags (from optional YAML frontmatter, best-effort:
+unparseable frontmatter just means no tags, not a failed import), and
+links (`[[Title|Alias]]`/`[[Title#Heading]]` rewritten down to plain
+`[[Title]]`) — so a file imports the same way whether it comes in
+through a whole-vault import or one at a time with `:import`.
+
+Requires a selection (the new note is created as its child) and the
+active vault to be editable, same as `a`/`o`. Creating the note and
+writing it to disk both happen as one step, undoable with `u` like any
+other note creation.
 
 ## Creating and renaming notes
 

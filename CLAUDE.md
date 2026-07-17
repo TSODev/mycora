@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (208 tests, all in-crate, no external deps)
+cargo test                # all unit tests (210 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -51,8 +51,8 @@ mycora reindex [--watch]  # CLI subcommand, not a cargo command — rebuilds
   not exist), no Cursor/Copilot instruction files in this repo.
 - **Tests are all `#[cfg(test)] mod tests` unit tests**, spread across
   `tree.rs`, `vault.rs`, `config.rs`, `index.rs`, `link.rs`, `lang.rs`,
-  `markdown.rs`, `outline.rs`, and `session.rs` — there is no `tests/`
-  integration directory. None of
+  `markdown.rs`, `outline.rs`, `import.rs`, and `session.rs` — there is
+  no `tests/` integration directory. None of
   them need an external service, network, or env var: `vault.rs`/`index.rs`
   tests build a scratch directory under `std::env::temp_dir()` per test
   (unique via a fresh UUID) and clean it up at the end. The only place
@@ -111,6 +111,24 @@ directly and guarantee its synthetic output matches the real on-disk format.
   sync-filenames <name>` (`main.rs`) is the retroactive fixer for notes
   that already drifted before this existed — just every note re-saved
   through the same path.
+- **`import.rs`**: reads *foreign* Markdown into a `Tree`, mirroring
+  `Vault::load`'s `(Tree, warnings)` shape for sources that aren't
+  Mycora's own format. `import_obsidian_vault(dir)` (bulk, `mycora vault
+  import` CLI subcommand in `main.rs`) walks a directory tree — a
+  subdirectory becomes a parent note (reusing a same-named sibling `.md`
+  as that note's own content if one exists, else a synthesized empty
+  one), `.obsidian/` and non-`.md` files are skipped. `parse_foreign_note
+  (path, raw) -> (title, body, tags, warning)` is the shared per-file
+  parser behind *both* that bulk import and `App::command_import`
+  (`:import <path>`, a single file into the active vault as a child of
+  the selected note) — title from the filename (unlike
+  `vault.rs::split_title`'s Mycora-native "first `# Heading` is the
+  title" rule), tags from optional YAML frontmatter (best-effort:
+  unparseable frontmatter becomes `warning`, not a failed import), and
+  every `[[Title|Alias]]`/`[[Title#Heading]]` rewritten to a plain
+  `[[Title]]` since `link.rs`'s scanner only understands that bare form.
+  One parser, two call sites, so a file means the same thing regardless
+  of which door it came in through.
 - **`config.rs` — `Config`**: reads `<config dir>/mycora/config.toml`
   (`~/.config/mycora/config.toml` on Linux, `%APPDATA%\mycora\config.toml`
   on Windows). Holds a

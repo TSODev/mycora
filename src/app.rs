@@ -2289,6 +2289,7 @@ impl App {
             "tags" => self.command_tags(args),
             "panes" => self.command_panes(args),
             "export" => self.command_export(args),
+            "import" => self.command_import(args),
             "config" => self.command_config(args),
             "tag" => self.command_tag(args),
             "lang" => self.command_lang(args),
@@ -2664,6 +2665,53 @@ impl App {
                 self.last_error = Some(self.lang.export_failed(&err));
             }
         }
+    }
+
+    /// `:import <path>` — creates a new child note of the selected note
+    /// from an external Markdown file, so its content doesn't have to be
+    /// copy-pasted in by hand. Uses the exact same parsing
+    /// (`import::parse_foreign_note`) as bulk Obsidian-vault import:
+    /// title from the filename, tags from optional frontmatter, and
+    /// `[[Title|Alias]]`/`[[Title#Heading]]` wikilinks rewritten to plain
+    /// `[[Title]]` — so a single file imports identically whether it
+    /// arrives through `:import` or as part of a whole vault. `~/`
+    /// expands the same way the attach-file prompt's path does.
+    fn command_import(&mut self, args: &str) {
+        let path_str = args.trim();
+        if path_str.is_empty() {
+            self.last_message = None;
+            self.last_error = Some(self.lang.import_usage().to_string());
+            return;
+        }
+        let Some(parent) = self.selected else {
+            self.last_message = None;
+            self.last_error = Some(self.lang.nothing_selected_to_import().to_string());
+            return;
+        };
+        if !self.require_editable(parent) {
+            return;
+        }
+        let path = expand_home(path_str);
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(raw) => raw,
+            Err(err) => {
+                self.last_message = None;
+                self.last_error = Some(self.lang.import_failed(&err));
+                return;
+            }
+        };
+
+        let (title, body, tags, warning) = crate::import::parse_foreign_note(&path, &raw);
+        let new_id = self.tree.create_note(title, Some(parent));
+        self.tree.set_body(new_id, body);
+        self.tree.set_tags(new_id, tags);
+        self.expanded.insert(parent);
+        self.set_selected(Some(new_id));
+        self.persist(new_id);
+        self.record(UndoAction::Remove { root_id: new_id });
+
+        self.last_error = None;
+        self.last_message = Some(warning.unwrap_or_else(|| self.lang.imported_note(path_str)));
     }
 
     pub fn move_tag_results_selection(&mut self, delta: isize) {

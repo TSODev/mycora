@@ -85,6 +85,10 @@ impl Lang {
                     "flatten the selected note's subtree to a Markdown file",
                 ),
                 (
+                    ":import <path>",
+                    "create a child note from an external Markdown file",
+                ),
+                (
                     ":config unmount <show|hide>",
                     "show/hide unmounted vault rows in the tree",
                 ),
@@ -113,6 +117,10 @@ impl Lang {
                 (
                     ":export <path>",
                     "aplatit le sous-arbre de la note sélectionnée en Markdown",
+                ),
+                (
+                    ":import <path>",
+                    "crée une note enfant à partir d'un fichier Markdown externe",
                 ),
                 (
                     ":config unmount <show|hide>",
@@ -145,6 +153,10 @@ impl Lang {
                     "aplana el subárbol de la nota seleccionada a un archivo Markdown",
                 ),
                 (
+                    ":import <path>",
+                    "crea una nota hija a partir de un archivo Markdown externo",
+                ),
+                (
                     ":config unmount <show|hide>",
                     "muestra/oculta las filas de vaults no montados en el árbol",
                 ),
@@ -173,6 +185,10 @@ impl Lang {
                 (
                     ":export <path>",
                     "flacht den Teilbaum der ausgewählten Notiz zu Markdown ab",
+                ),
+                (
+                    ":import <path>",
+                    "erstellt eine Kind-Notiz aus einer externen Markdown-Datei",
                 ),
                 (
                     ":config unmount <show|hide>",
@@ -1268,6 +1284,48 @@ impl Lang {
             Lang::Fr => format!("exporté vers {path}"),
             Lang::Es => format!("exportado a {path}"),
             Lang::De => format!("exportiert nach {path}"),
+        }
+    }
+
+    pub fn import_usage(self) -> &'static str {
+        match self {
+            Lang::En => "usage: :import <path>",
+            Lang::Fr => "usage : :import <path>",
+            Lang::Es => "uso: :import <path>",
+            Lang::De => "Verwendung: :import <path>",
+        }
+    }
+
+    pub fn nothing_selected_to_import(self) -> &'static str {
+        match self {
+            Lang::En => "select a note first — :import adds the new note as its child",
+            Lang::Fr => {
+                "sélectionnez d'abord une note — :import ajoute la nouvelle note comme son enfant"
+            }
+            Lang::Es => {
+                "selecciona primero una nota — :import añade la nueva nota como su hija"
+            }
+            Lang::De => {
+                "zuerst eine Notiz auswählen — :import fügt die neue Notiz als deren Kind hinzu"
+            }
+        }
+    }
+
+    pub fn import_failed(self, err: &impl std::fmt::Display) -> String {
+        match self {
+            Lang::En => format!("import failed: {err}"),
+            Lang::Fr => format!("échec de l'import : {err}"),
+            Lang::Es => format!("error al importar: {err}"),
+            Lang::De => format!("Import fehlgeschlagen: {err}"),
+        }
+    }
+
+    pub fn imported_note(self, path: &str) -> String {
+        match self {
+            Lang::En => format!("imported {path}"),
+            Lang::Fr => format!("importé : {path}"),
+            Lang::Es => format!("importado: {path}"),
+            Lang::De => format!("importiert: {path}"),
         }
     }
 }

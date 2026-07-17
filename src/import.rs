@@ -107,23 +107,10 @@ fn import_file(
     warnings: &mut Vec<String>,
 ) -> Result<NoteId> {
     let raw = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let title = path
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "Untitled".to_string());
-
-    let (frontmatter, body) = split_frontmatter(&raw);
-    let tags = frontmatter
-        .and_then(|fm| match serde_yaml::from_str::<ObsidianFrontmatter>(fm) {
-            Ok(parsed) => parsed.tags.map(TagsField::into_vec),
-            Err(err) => {
-                warnings.push(format!("{}: unparseable frontmatter, tags dropped: {err}", path.display()));
-                None
-            }
-        })
-        .unwrap_or_default();
-
-    let body = strip_wikilink_targets(body);
+    let (title, body, tags, warning) = parse_foreign_note(path, &raw);
+    if let Some(warning) = warning {
+        warnings.push(warning);
+    }
     let now = OffsetDateTime::now_utc();
     let id = NoteId::new();
     tree.insert_loaded(
@@ -140,6 +127,46 @@ fn import_file(
         },
     );
     Ok(id)
+}
+
+/// Parses one foreign (non-Mycora) Markdown file's title/body/tags —
+/// shared by the bulk vault importer above and the TUI's `:import <path>`
+/// single-file command (`App::command_import`), so a file means the same
+/// thing to Mycora regardless of which door it came in through. Title
+/// comes from the filename (Obsidian's convention: the body's own `#
+/// Heading`, if any, is left as ordinary body content, unlike
+/// `vault.rs::split_title`'s Mycora-native "first heading is the title"
+/// rule), tags from optional frontmatter, and every `[[Title|Alias]]`/
+/// `[[Title#Heading]]` wikilink is rewritten to a plain `[[Title]]` that
+/// `link.rs`'s scanner understands. Unparseable frontmatter is reported
+/// back as `warning` rather than failing the import — tags are
+/// best-effort, not load-bearing.
+pub(crate) fn parse_foreign_note(
+    path: &Path,
+    raw: &str,
+) -> (String, String, Vec<String>, Option<String>) {
+    let title = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "Untitled".to_string());
+
+    let (frontmatter, body) = split_frontmatter(raw);
+    let mut warning = None;
+    let tags = frontmatter
+        .and_then(|fm| match serde_yaml::from_str::<ObsidianFrontmatter>(fm) {
+            Ok(parsed) => parsed.tags.map(TagsField::into_vec),
+            Err(err) => {
+                warning = Some(format!(
+                    "{}: unparseable frontmatter, tags dropped: {err}",
+                    path.display()
+                ));
+                None
+            }
+        })
+        .unwrap_or_default();
+
+    let body = strip_wikilink_targets(body);
+    (title, body, tags, warning)
 }
 
 /// Obsidian's frontmatter is optional and arbitrary-shaped, unlike
@@ -281,6 +308,26 @@ mod tests {
         let (fm, body) = split_frontmatter(raw);
         assert_eq!(fm, Some("tags: [a, b]"));
         assert_eq!(body, "Body text.");
+    }
+
+    #[test]
+    fn parse_foreign_note_combines_filename_title_frontmatter_tags_and_wikilink_stripping() {
+        let raw = "---\ntags: [a, b]\n---\nsee [[Real Title|shown as this]] here";
+        let (title, body, tags, warning) =
+            parse_foreign_note(Path::new("/tmp/My Note.md"), raw);
+        assert_eq!(title, "My Note");
+        assert_eq!(body, "see [[Real Title]] here");
+        assert_eq!(tags, vec!["a".to_string(), "b".to_string()]);
+        assert!(warning.is_none());
+    }
+
+    #[test]
+    fn parse_foreign_note_reports_unparseable_frontmatter_as_a_warning_not_an_error() {
+        let raw = "---\ntags: {not: valid}\n---\nbody text";
+        let (_, body, tags, warning) = parse_foreign_note(Path::new("/tmp/Note.md"), raw);
+        assert_eq!(body, "body text");
+        assert!(tags.is_empty());
+        assert!(warning.unwrap().contains("unparseable frontmatter"));
     }
 
     #[test]
