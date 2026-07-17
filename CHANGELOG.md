@@ -24,6 +24,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   broken links get reported/fixed (detection still checks every
   mounted vault's titles as candidates either way, for accurate
   cross-vault suggestions).
+- **Backlinks pane entries now show their parent's title** (dim, in
+  parentheses) alongside their own — several notes with similarly
+  worded titles (e.g. more than one "Introduction") were otherwise hard
+  to tell apart before actually jumping to one.
+- **`Ctrl+O`** jumps back to the note you were on just before your last
+  search/backlinks/outgoing-links/tag-results jump, popping one entry
+  off a session-only navigation history each press so repeated presses
+  walk back further through the path — vim's jumplist convention.
+  Plain `j`/`k` tree movement doesn't add to this history, only actual
+  jumps do.
 
 ## [0.13.0] — 2026-07-17
 

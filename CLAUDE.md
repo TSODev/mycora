@@ -343,6 +343,19 @@ directly and guarantee its synthetic output matches the real on-disk format.
   `begin_links` already avoids by reindexing before showing outgoing
   links. Every other `UndoAction` arm leaves the index alone, same as
   the plain (non-Compound) actions that record them.
+  **`nav_history: Vec<NoteId>`** is a separate, much simpler session-only
+  stack (no inverses, no redo side) behind `Ctrl+O`
+  (`navigate_back`) — `record_nav_jump(id)` pushes the *current*
+  selection (not `id`) right before each of the four `confirm_*` jump
+  methods (`confirm_search`/`confirm_backlinks`/`confirm_links`/
+  `confirm_tag_results`) calls `reveal`+`set_selected`, so popping it
+  later returns to where you were, browser-back-button style.
+  Deliberately not wired into `set_selected` itself or `move_selection`
+  — that would push an entry on every single `j`/`k` tree step, turning
+  "walk back through your last few jumps" into "walk back through your
+  last few keystrokes." `navigate_back` itself never pushes (it would
+  need a mirrored "forward" stack to undo cleanly, which nothing asked
+  for yet) — it only pops and jumps.
   `visible_rows()` (depth-first, respecting `expanded: HashSet<NoteId>`)
   is recomputed on every call rather than cached — acceptable at current
   scale per ROADMAP's v0.1 note, revisit if it shows up in profiling. It
@@ -350,8 +363,12 @@ directly and guarantee its synthetic output matches the real on-disk format.
   vault *and* every read-only mounted one (real navigation, not
   roots-only) — `resolve(id) -> Option<(&Tree, &str)>` is the backbone
   every cross-vault read accessor (`live_backlinks`, `selected_note`,
-  `breadcrumb_titles`, ...) uses to find which tree an id actually
-  belongs to, and `require_editable(id)` is the guard every mutating
+  `breadcrumb_titles`, `parent_title_of`, ...) uses to find which tree
+  an id actually belongs to — `parent_title_of(id)` specifically backs
+  `ui.rs`'s backlinks pane, which appends `" (parent title)"` to each
+  entry so two similarly-titled notes (e.g. more than one
+  "Introduction") stay distinguishable before you actually jump to
+  either — and `require_editable(id)` is the guard every mutating
   method checks first, refusing with `last_error` rather than silently
   no-oping or acting on the wrong vault if `id` isn't in the active tree.
   `Lang::command_reference()` (`&[(syntax, description)]`, in `lang.rs`)
@@ -367,7 +384,12 @@ directly and guarantee its synthetic output matches the real on-disk format.
   no way back. In Normal mode: `[`/`]`/`{`/`}` resize the tree/backlinks
   panes (always active, no dedicated resize mode), `b` toggles keyboard
   focus onto the backlinks pane in place (not a separate overlay), `:`
-  opens the command palette (`Mode::Command`).
+  opens the command palette (`Mode::Command`). `Ctrl+d`/`Ctrl+u`/`Ctrl+r`/
+  `Ctrl+o` are each checked early in `handle_normal` before the main
+  `match key.code`, same reasoning repeated four times: a plain
+  `KeyCode::Char` match can't distinguish `Ctrl+o` from bare `o` (new
+  sibling note), so the modifier has to be checked first or the two
+  keys would be indistinguishable.
 - **`ui.rs`**: pure rendering from `App` state. Two vertical chunks: the
   main area, and a `Length(2)` status band (`Color::Indexed(236)` bg,
   harmonized with Terapi/jsoned's convention) split into a breadcrumb row

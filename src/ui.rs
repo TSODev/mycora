@@ -352,7 +352,18 @@ fn draw_backlinks_pane(frame: &mut Frame, area: Rect, app: &App) {
             } else {
                 Style::default()
             };
-            ListItem::new(Line::from(Span::styled(hit.title.clone(), style)))
+            // Several backlinks can share a similarly-worded title —
+            // naming the parent alongside it (dim, so it doesn't compete
+            // with the title itself) is enough to tell them apart without
+            // having to jump to each one to find out.
+            let mut spans = vec![Span::styled(hit.title.clone(), style)];
+            if let Some(parent_title) = app.parent_title_of(hit.note_id) {
+                spans.push(Span::styled(
+                    format!(" ({parent_title})"),
+                    style.add_modifier(Modifier::DIM),
+                ));
+            }
+            ListItem::new(Line::from(spans))
         })
         .collect();
 

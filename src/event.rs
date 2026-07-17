@@ -80,6 +80,13 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         app.scroll_body_up();
         return;
     }
+    // Same early-check reasoning as Ctrl+d/Ctrl+u/Ctrl+r above — Ctrl+o
+    // (vim's jumplist "back") can't be told apart from bare `o` (new
+    // sibling note) in a plain `match key.code`.
+    if key.code == KeyCode::Char('o') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.navigate_back();
+        return;
+    }
 
     match key.code {
         KeyCode::Char('q') => app.request_quit(),

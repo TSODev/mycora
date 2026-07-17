@@ -186,6 +186,12 @@ pub struct App {
     pending_delete: Option<NoteId>,
     undo_stack: Vec<UndoAction>,
     redo_stack: Vec<UndoAction>,
+    /// Notes visited just before a "jump" (search, backlinks, outgoing
+    /// links, tag results — never plain `j`/`k` tree movement), most
+    /// recent last. `Ctrl+O` (`navigate_back`) pops one and jumps back to
+    /// it. Session-only, like `undo_stack`/`redo_stack` — not persisted
+    /// across restarts.
+    nav_history: Vec<NoteId>,
     index: Index,
     /// The active vault's registry name — used as the index's `vault_id`.
     vault_id: String,
@@ -524,6 +530,7 @@ impl App {
             pending_delete: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            nav_history: Vec::new(),
             index,
             vault_id: active.name,
             search_query: String::new(),
@@ -1448,6 +1455,7 @@ impl App {
     pub fn confirm_search(&mut self) {
         if let Some(hit) = self.search_results.get(self.search_selected) {
             let id = hit.note_id;
+            self.record_nav_jump(id);
             self.reveal(id);
             self.set_selected(Some(id));
         }
@@ -1473,6 +1481,33 @@ impl App {
         if let Some(v) = self.other_vaults.iter().find(|v| v.tree.get(id).is_some()) {
             reveal_ancestors(&v.tree, &mut self.expanded, id);
         }
+    }
+
+    /// Records the current selection onto `nav_history` before jumping to
+    /// `id` — shared by every `confirm_*` jump method (search, backlinks,
+    /// outgoing links, tag results). A no-op with nothing selected yet, or
+    /// already on `id` (no real jump to remember). Not used by
+    /// `navigate_back` itself — this stack only remembers forward jumps,
+    /// not the backward ones that unwind it, so `Ctrl+O` doesn't also need
+    /// a matching "forward" push just to undo its own effect.
+    fn record_nav_jump(&mut self, id: NoteId) {
+        if let Some(current) = self.selected
+            && current != id
+        {
+            self.nav_history.push(current);
+        }
+    }
+
+    /// `Ctrl+O` — returns to the note selected just before your last jump,
+    /// popping one entry off `nav_history` each time so repeated presses
+    /// walk back further through the path. A no-op with nothing to go
+    /// back to.
+    pub fn navigate_back(&mut self) {
+        let Some(id) = self.nav_history.pop() else {
+            return;
+        };
+        self.reveal(id);
+        self.set_selected(Some(id));
     }
 
     /// The vault `/` search actually queries: wherever the current
@@ -1533,6 +1568,7 @@ impl App {
     pub fn confirm_backlinks(&mut self) {
         if let Some(hit) = self.live_backlinks().get(self.backlinks_selected) {
             let id = hit.note_id;
+            self.record_nav_jump(id);
             self.reveal(id);
             self.set_selected(Some(id));
         }
@@ -1582,6 +1618,17 @@ impl App {
             return Vec::new();
         };
         self.index.backlinks(vault_id, id).unwrap_or_default()
+    }
+
+    /// The title of `id`'s parent note, if it has one and `id` resolves in
+    /// some currently-loaded vault. Used by `ui.rs`'s backlinks pane to
+    /// show each entry's parent alongside its own title — several notes
+    /// with similarly-worded titles are otherwise hard to tell apart
+    /// before actually jumping to one.
+    pub fn parent_title_of(&self, id: NoteId) -> Option<&str> {
+        let (tree, _) = self.resolve(id)?;
+        let parent_id = tree.get(id)?.parent?;
+        tree.get(parent_id).map(|note| note.title.as_str())
     }
 
     /// `f` — opens a full-pane list of the notes the selected note links
@@ -1635,6 +1682,7 @@ impl App {
     pub fn confirm_links(&mut self) {
         if let Some(hit) = self.links_results.get(self.links_selected) {
             let id = hit.note_id;
+            self.record_nav_jump(id);
             self.reveal(id);
             self.set_selected(Some(id));
         }
@@ -2754,6 +2802,7 @@ impl App {
     pub fn confirm_tag_results(&mut self) {
         if let Some(hit) = self.tag_results.get(self.tag_results_selected) {
             let id = hit.note_id;
+            self.record_nav_jump(id);
             self.reveal(id);
             self.set_selected(Some(id));
         }

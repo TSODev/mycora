@@ -7,8 +7,10 @@
 > that scales linearly to thousands of notes, multi-vault mounting
 > (read-only secondary vaults, unmounted and archived vaults both
 > visible as their own tree rows), `[[wikilink]]` cross-links (including
-> cross-vault ones) with a backlinks panel, an outgoing-links jump,
-> link-count badges, autocompletion while typing, and a `mycora repair`
+> cross-vault ones) with a backlinks panel (each entry naming its
+> parent, to tell apart similarly-titled notes), an outgoing-links jump,
+> link-count badges, autocompletion while typing, a `Ctrl+O` navigation
+> history to jump back through a followed path, and a `mycora repair`
 > CLI for detecting (and optionally fixing) broken links, a
 > table-of-contents overlay with one-key section extraction to a new
 > linked child note, file attachments, importing a single external
@@ -33,6 +35,7 @@
 - [Searching](#searching)
 - [Backlinks](#backlinks)
 - [Following links](#following-links)
+- [Navigation history](#navigation-history)
 - [Table of contents and extracting sections](#table-of-contents-and-extracting-sections)
 - [Command palette](#command-palette)
 - [Exporting a subtree](#exporting-a-subtree)
@@ -639,7 +642,11 @@ jumping to a backlink can land anywhere (see [Backlinks](#backlinks)).
 The right-hand pane (see [Layout](#layout)) always shows notes linking to
 the selected one, live — whichever vault that note is in, including a
 read-only mounted one, and results can span vaults too. `b` moves
-keyboard focus into it — cyan border, current entry highlighted:
+keyboard focus into it — cyan border, current entry highlighted. Each
+entry also names its parent, dimmed, in parentheses — several notes can
+easily share a similarly worded title (more than one "Introduction" is
+a common one), and the parent name is usually enough to tell them apart
+before actually jumping to one:
 
 - `j` / `k` (or `↑` / `↓`) — move between entries
 - `Enter` — jump to the focused entry: expands its ancestors so it's
@@ -670,6 +677,23 @@ is immediately followable rather than waiting on a manual `:reindex`.
 If the note has no outgoing links, the status bar says so instead of
 opening an empty list. Works on a read-only mounted vault's note just as
 well as the active vault's, since following a link only reads.
+
+## Navigation history
+
+`Ctrl+O` jumps back to the note you were on just before your last
+*jump* — `Enter` in [Searching](#searching), [Backlinks](#backlinks),
+[Following links](#following-links), or a `:tags` result list. Each
+press pops one more step, so pressing it repeatedly walks back further
+through the path you've followed, the same jumplist convention vim uses
+for `Ctrl+O`/`Ctrl+I`.
+
+Plain `j`/`k` movement in the tree doesn't add to this history — only
+an actual jump does, so `Ctrl+O` retraces the *notes you followed links
+to*, not every row you scrolled past along the way. There's no
+"forward" counterpart yet (`Ctrl+I` collides with `Tab`, already bound
+to indent, at the terminal level); with nothing left to go back to,
+`Ctrl+O` is a no-op. Session-only, like [undo and
+redo](#undo-and-redo) — not persisted across restarts.
 
 ## Table of contents and extracting sections
 
@@ -1038,6 +1062,7 @@ changes, for the rest of the session. Not persisted across restarts.
 | `f` | Follow the selected note's outgoing links (see [Following links](#following-links)) |
 | `t` | Open the table of contents (see [Table of contents and extracting sections](#table-of-contents-and-extracting-sections)) |
 | `Ctrl+d` / `Ctrl+u` | Scroll the body preview down / up |
+| `Ctrl+o` | Jump back to before your last search/backlinks/links/tags jump (see [Navigation history](#navigation-history)) |
 | `[` / `]` | Shrink / grow the tree pane (see [Layout](#layout)) |
 | `{` / `}` | Shrink / grow the backlinks pane |
 | `:` | Open the command palette (see [Command palette](#command-palette)) |
