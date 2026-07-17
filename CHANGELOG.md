@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-07-17
+
 ### Added
 - **`:brokenlinks`**: the TUI-side companion to `mycora repair` — lists
   every broken wikilink across every mounted vault, each with the same
