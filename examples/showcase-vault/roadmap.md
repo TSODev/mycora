@@ -5,7 +5,7 @@ order: 4
 tags:
 - roadmap
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-15T09:30:00Z
+updated: 2026-07-17T09:30:00Z
 ---
 
 # Roadmap
@@ -13,7 +13,7 @@ updated: 2026-07-15T09:30:00Z
 Development proceeds in small, incremental, always-usable
 versions rather than one big-bang release.
 
-- [[Built so far]] — v0.1 through v0.11, published on crates.io
+- [[Built so far]] — v0.1 through v0.13, published on crates.io
 - [[What's still ahead]] — the v1.1 backlog and the open items along the
   way
 

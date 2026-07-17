@@ -5,7 +5,7 @@ order: 2
 tags:
 - features
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-17T09:00:00Z
+updated: 2026-07-17T10:00:00Z
 ---
 
 # Features
@@ -33,5 +33,9 @@ What's actually built, grouped by area:
 - [[Table of contents and section extraction]] — `t` lists a note's
   headings, `Enter` jumps, `x` extracts a section into a linked child
   note
+- [[Repairing broken links]] — `mycora repair` reports (and optionally
+  fixes) broken wikilinks, in three tiers from safe to destructive
+- [[Navigation history]] — `Ctrl+O` jumps back through your last few
+  search/backlinks/links/tag-results jumps
 
 See [[Roadmap]] for what's still ahead.

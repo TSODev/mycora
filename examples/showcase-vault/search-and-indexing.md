@@ -9,7 +9,7 @@ tags:
 - v0.4
 - v0.6
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-13T11:00:00Z
+updated: 2026-07-17T09:30:00Z
 ---
 
 # Search and indexing
@@ -44,7 +44,9 @@ full-text search and tag filtering.
   vaults get indexed right alongside it, which is what backlinks,
   link-count badges, and read-only tree navigation actually read from.
   `mycora reindex --watch` keeps all of them in sync as files change on
-  disk.
+  disk. It also warns about every broken wikilink it finds along the
+  way — see [[Repairing broken links]] for `mycora repair`, the
+  headless CLI that goes further and actually fixes them.
 
 Considered upgrading to tantivy for ranked search (originally the v0.6
 goal), then reconsidered: FTS5 already does BM25 ranking and already has

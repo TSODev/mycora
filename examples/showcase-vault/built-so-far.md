@@ -6,7 +6,7 @@ tags:
 - roadmap
 - built
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-17T09:00:00Z
+updated: 2026-07-17T10:00:00Z
 ---
 
 # Built so far
@@ -104,14 +104,24 @@ updated: 2026-07-17T09:00:00Z
   [[Jsoned]] the same way this vault documents Mycora itself (see
   [[Other projects]]); `PUBLISH.md` written up as a real release
   checklist instead of living only in memory from one release to the
-  next; the body preview pane learned to render Markdown tables as a
-  bordered grid instead of literal `|` text, columns sized by actual
-  terminal display width rather than `char` count so emoji/CJK content
-  keeps its borders aligned instead of drifting (see [[Layout]]); `t`
-  opens a [[Table of contents and section extraction]] overlay over a
-  note's headings, `Enter` to jump, `x` to extract a heading's section
-  into a new linked child note as a single undoable step (see
-  [[Undo and redo]]); and `:import <path>` pulls a single external Markdown
-  file into the open vault as a new child note, sharing its parser with
-  [[Importing an Obsidian vault]]'s bulk import instead of duplicating
-  it (see [[Importing a single Markdown file]])
+  next
+- **v0.13** — published to crates.io: the body preview pane learned to
+  render Markdown tables as a bordered grid instead of literal `|`
+  text, columns sized by actual terminal display width rather than
+  `char` count so emoji/CJK content keeps its borders aligned instead
+  of drifting (see [[Layout]]); `t` opens a
+  [[Table of contents and section extraction]] overlay over a note's
+  headings, `Enter` to jump, `x` to extract a heading's section into a
+  new linked child note as a single undoable step (see
+  [[Undo and redo]]); and `:import <path>` pulls a single external
+  Markdown file into the open vault as a new child note, sharing its
+  parser with [[Importing an Obsidian vault]]'s bulk import instead of
+  duplicating it (see [[Importing a single Markdown file]])
+- **Since v0.13** — `mycora repair` reports (and, with `--create-stubs`/
+  `--apply`, fixes) broken wikilinks across every mounted vault, in
+  tiers from safe to destructive (see [[Repairing broken links]]);
+  backlinks pane entries now name their parent, dimmed, so
+  similarly-titled notes stay distinguishable before you jump to one
+  (see [[Cross-links and backlinks]]); and `Ctrl+O` jumps back through
+  your last few search/backlinks/links/tag-results jumps, vim-jumplist
+  style (see [[Navigation history]])
