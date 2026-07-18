@@ -25,6 +25,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   passthrough (detected via the `TMUX` env var) when running inside a
   session, since tmux otherwise swallows an arbitrary escape sequence
   instead of forwarding it to the real terminal underneath.
+- **The `:` command palette's help popup now has a selectable cursor**:
+  `Up`/`Down` move a highlighted row through the command reference list,
+  each move filling the `:` prompt with that command's syntax (leading
+  colon and any `<placeholder>` stripped) so picking one is a shortcut
+  for typing it — the prompt stays editable afterward rather than
+  firing immediately, since several commands still need an argument
+  typed in by hand.
 
 ### Fixed
 - **Wikilink detection no longer flags `[[...]]`-shaped text inside a

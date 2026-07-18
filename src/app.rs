@@ -40,6 +40,24 @@ fn expand_home(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
+/// Turns a `Lang::command_reference` syntax entry (e.g. `:tags
+/// <tag1,tag2,...>`, `:reindex`) into the text `move_command_help_selection`
+/// fills `command_input` with: the leading `:` stripped (`command_input`
+/// never includes it — see `execute_command`), and everything from a `<`
+/// placeholder onward dropped, since inserting `<tag1,tag2,...>` literally
+/// would just be more to delete by hand than typing the command name
+/// alone was. What's left already ends in the right separator (a space
+/// before where the placeholder was, or nothing for an argument-less
+/// command like `:reindex`) since that's however `command_reference`
+/// wrote the syntax string in the first place.
+fn command_help_fill_text(syntax: &str) -> String {
+    let syntax = syntax.strip_prefix(':').unwrap_or(syntax);
+    match syntax.find('<') {
+        Some(idx) => syntax[..idx].to_string(),
+        None => syntax.to_string(),
+    }
+}
+
 /// A vault mounted alongside the primary one: loaded and indexed (so its
 /// notes count toward search/backlinks/link-count badges under its own
 /// `vault_id`, and its wikilinks can resolve cross-vault against the
@@ -284,6 +302,14 @@ pub struct App {
     pane_widths: [u16; 3],
     /// Text typed after `:` while `mode == Mode::Command`.
     command_input: String,
+    /// Highlighted row in `draw_command_help`'s popup while `mode ==
+    /// Mode::Command` — `Up`/`Down` move it (`move_command_help_selection`),
+    /// each move overwriting `command_input` with that entry's syntax so
+    /// picking one from the list is a shortcut for typing it, not a
+    /// separate selection concept from what ends up executed. Reset to 0
+    /// by `begin_command`, same as every other `_selected` field is reset
+    /// by its own mode's `begin_*`.
+    command_help_selected: usize,
     tag_results: Vec<IndexedNote>,
     tag_results_selected: usize,
     /// `(tag, note count)` pairs while `mode == Mode::TagList`.
@@ -590,6 +616,7 @@ impl App {
             config_path,
             pane_widths,
             command_input: String::new(),
+            command_help_selected: 0,
             tag_results: Vec::new(),
             tag_results_selected: 0,
             tag_list: Vec::new(),
@@ -660,6 +687,7 @@ impl App {
             config_path: PathBuf::new(),
             pane_widths: Self::DEFAULT_PANE_WIDTHS,
             command_input: String::new(),
+            command_help_selected: 0,
             tag_results: Vec::new(),
             tag_results_selected: 0,
             tag_list: Vec::new(),
@@ -2529,6 +2557,7 @@ impl App {
     /// `:` — opens the command prompt (see `Mode::Command`'s doc comment).
     pub fn begin_command(&mut self) {
         self.command_input.clear();
+        self.command_help_selected = 0;
         self.mode = Mode::Command;
     }
 
@@ -2542,6 +2571,30 @@ impl App {
 
     pub fn command_input_backspace(&mut self) {
         self.command_input.pop();
+    }
+
+    pub fn command_help_selected(&self) -> usize {
+        self.command_help_selected
+    }
+
+    /// `Up`/`Down` while `mode == Mode::Command` — moves the highlighted
+    /// row in `draw_command_help`'s popup (cyclically, same convention as
+    /// every other `move_*_selection`) and overwrites `command_input`
+    /// with that entry's syntax (`command_help_fill_text`), so arrowing to
+    /// a command is a shortcut for typing it rather than a separate
+    /// preview you then have to confirm. Whatever was typed before this
+    /// move is discarded — deliberately, since this *is* the "pick one
+    /// from the list" action the cursor exists for; typing further
+    /// afterward still just appends normally.
+    pub fn move_command_help_selection(&mut self, delta: isize) {
+        let len = self.lang.command_reference().len() as isize;
+        if len == 0 {
+            return;
+        }
+        let new_pos = (self.command_help_selected as isize + delta).rem_euclid(len) as usize;
+        self.command_help_selected = new_pos;
+        let (syntax, _) = self.lang.command_reference()[new_pos];
+        self.command_input = command_help_fill_text(syntax);
     }
 
     pub fn cancel_command(&mut self) {
@@ -3195,6 +3248,47 @@ mod tests {
 
         assert_eq!(app.mode, Mode::Normal);
         assert_eq!(app.selected, Some(source));
+
+        cleanup_scratch_db(&db_path);
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    #[test]
+    fn command_help_fill_text_strips_the_leading_colon_and_any_placeholder() {
+        assert_eq!(command_help_fill_text(":reindex"), "reindex");
+        assert_eq!(
+            command_help_fill_text(":tags <tag1,tag2,...>"),
+            "tags "
+        );
+        assert_eq!(
+            command_help_fill_text(":config unmount <show|hide>"),
+            "config unmount "
+        );
+        assert_eq!(command_help_fill_text(":tags list"), "tags list");
+    }
+
+    #[test]
+    fn move_command_help_selection_fills_command_input_from_the_list() {
+        let (mut app, vault_dir, db_path) = app_with_a_broken_and_a_real_link();
+        let reference = app.lang.command_reference();
+        let first = command_help_fill_text(reference[0].0);
+        let second = command_help_fill_text(reference[1].0);
+        let last = command_help_fill_text(reference[reference.len() - 1].0);
+
+        app.move_command_help_selection(0);
+        assert_eq!(app.command_help_selected(), 0);
+        assert_eq!(app.command_input(), first);
+
+        app.move_command_help_selection(1);
+        assert_eq!(app.command_help_selected(), 1);
+        assert_eq!(app.command_input(), second);
+
+        // Typed text before a move is discarded — arrowing to an entry
+        // is the "pick this one" action, not a preview alongside it.
+        app.command_input_push('z');
+        app.move_command_help_selection(-2);
+        assert_eq!(app.command_help_selected(), reference.len() - 1);
+        assert_eq!(app.command_input(), last);
 
         cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();

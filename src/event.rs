@@ -246,6 +246,8 @@ fn handle_command(app: &mut App, code: KeyCode) {
         KeyCode::Enter => app.execute_command(),
         KeyCode::Esc => app.cancel_command(),
         KeyCode::Backspace => app.command_input_backspace(),
+        KeyCode::Up => app.move_command_help_selection(-1),
+        KeyCode::Down => app.move_command_help_selection(1),
         KeyCode::Char(c) => app.command_input_push(c),
         _ => {}
     }

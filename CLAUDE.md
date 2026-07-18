@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (227 tests, all in-crate, no external deps)
+cargo test                # all unit tests (229 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -467,7 +467,14 @@ directly and guarantee its synthetic output matches the real on-disk format.
   `Mode::Command` additionally overlays a small `Clear`-first help popup
   (`draw_command_help`, anchored bottom-center via `popup_rect`) listing
   `Lang::command_reference()` (in `app.lang`'s language) for as long as
-  the `:` prompt is open. Every string rendered here — titles, hints,
+  the `:` prompt is open, with a reversed-style cursor
+  (`App::command_help_selected`) on one row — `Up`/`Down`
+  (`App::move_command_help_selection`) move it and overwrite
+  `command_input` with that entry's syntax each time (leading `:` and any
+  `<placeholder>` stripped by `command_help_fill_text`), so arrowing to a
+  command is a shortcut for typing it rather than firing it immediately —
+  the prompt stays open and editable, since several commands still need
+  an argument typed in by hand. Every string rendered here — titles, hints,
   prompts, markers — reads `app.lang` rather than a literal, which is
   also the entire mechanism behind `:lang` switching live (see
   `lang.rs`): nothing here caches or needs invalidating. Every color is

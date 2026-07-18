@@ -109,7 +109,7 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
     draw_backlinks_pane(frame, panes[2], app);
 
     if app.mode == Mode::Command {
-        draw_command_help(frame, area, app.lang);
+        draw_command_help(frame, area, app);
     }
 }
 
@@ -638,16 +638,21 @@ fn draw_help(frame: &mut Frame, area: Rect, lang: Lang) {
 /// recognizes (`Lang::command_reference`, in the configured language),
 /// anchored to the bottom of the main area — directly above the status
 /// bar row where the `:` prompt itself is being typed (see
-/// `draw_hint_row`'s `Mode::Command` branch). Static: it doesn't filter
-/// as you type, just lists everything, since the command set is small
-/// enough that filtering wouldn't save much. `Clear` first so it reads as
-/// an opaque popup over the tree/body/backlinks panes rather than
-/// blending with whatever text is underneath it. Width is computed in
-/// `chars`, not bytes — French descriptions contain multi-byte
-/// accented characters, and `len()` would overcount them into a popup
-/// wider than its text.
-fn draw_command_help(frame: &mut Frame, area: Rect, lang: Lang) {
-    let reference = lang.command_reference();
+/// `draw_hint_row`'s `Mode::Command` branch). Doesn't filter as you type,
+/// just lists everything, since the command set is small enough that
+/// filtering wouldn't save much — but `Up`/`Down` move a highlighted
+/// cursor (`App::command_help_selected`, reversed styling, same
+/// convention as `draw_backlinks_pane`'s focused row) through it, each
+/// move auto-filling `command_input` with that entry's syntax (see
+/// `App::move_command_help_selection`), so picking one from the list
+/// still leaves it editable rather than firing it immediately. `Clear`
+/// first so it reads as an opaque popup over the tree/body/backlinks
+/// panes rather than blending with whatever text is underneath it. Width
+/// is computed in `chars`, not bytes — French descriptions contain
+/// multi-byte accented characters, and `len()` would overcount them into
+/// a popup wider than its text.
+fn draw_command_help(frame: &mut Frame, area: Rect, app: &App) {
+    let reference = app.lang.command_reference();
     let width = reference
         .iter()
         .map(|(cmd, desc)| cmd.chars().count() + desc.chars().count() + 4)
@@ -663,14 +668,21 @@ fn draw_command_help(frame: &mut Frame, area: Rect, lang: Lang) {
         .fg(Color::Cyan)
         .add_modifier(Modifier::BOLD);
     let desc_style = Style::default().add_modifier(Modifier::DIM);
+    let selected = app.command_help_selected();
 
     let lines: Vec<Line> = reference
         .iter()
-        .map(|(cmd, desc)| {
+        .enumerate()
+        .map(|(i, (cmd, desc))| {
+            let row_style = if i == selected {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
             Line::from(vec![
-                Span::styled(*cmd, cmd_style),
+                Span::styled(*cmd, cmd_style.patch(row_style)),
                 Span::raw("  "),
-                Span::styled(*desc, desc_style),
+                Span::styled(*desc, desc_style.patch(row_style)),
             ])
         })
         .collect();
@@ -678,7 +690,7 @@ fn draw_command_help(frame: &mut Frame, area: Rect, lang: Lang) {
     let paragraph = Paragraph::new(lines).block(
         Block::default()
             .borders(Borders::ALL)
-            .title(lang.commands_title()),
+            .title(app.lang.commands_title()),
     );
     frame.render_widget(paragraph, popup);
 }
