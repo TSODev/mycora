@@ -212,14 +212,23 @@ directly and guarantee its synthetic output matches the real on-disk format.
   unrelated sentences — don't write a bare illustrative `[[` in a note body
   (e.g. to describe the syntax itself) without a real matching `]]` right
   next to it, or a later, unrelated `]]` will get swallowed into a bogus
-  "broken link". `unclosed_wikilink_start(line, cursor_col)` is the
-  separate, single-line-scoped scanner backing the body editor's
+  "broken link". One exception it *does* know about: `code_ranges(body)`
+  runs a `pulldown-cmark` parse first (same `Options::ENABLE_TABLES` as
+  `markdown.rs`/`outline.rs`) to collect the byte ranges of fenced code
+  blocks and inline code spans, and both `extract_wikilink_titles` and
+  `rewrite_wikilink_title` skip any `[[...]]` whose start falls inside
+  one — otherwise TOML's array-of-tables syntax (`[[campaign.steps]]`)
+  or similar shown as a code example inside a note reads as a broken
+  wikilink on every reindex. `unclosed_wikilink_start(line, cursor_col)`
+  is the separate, single-line-scoped scanner backing the body editor's
   autocomplete popup (`App::refresh_link_autocomplete` in `app.rs`) —
   character-indexed to match `ratatui-textarea`'s own cursor addressing,
-  not byte offsets. `rewrite_wikilink_title(body, old_title, new_title)`
-  is the same bracket-scanning idiom used to *rewrite* rather than
-  extract — every `[[old_title]]` occurrence becomes `[[new_title]]`,
-  backing `mycora repair --apply`'s retargeting (see `repair.rs` below).
+  not byte offsets, and *not* code-block-aware (it has no whole-body
+  Markdown context to parse mid-keystroke). `rewrite_wikilink_title(body,
+  old_title, new_title)` is the same bracket-scanning idiom used to
+  *rewrite* rather than extract — every `[[old_title]]` occurrence
+  outside a code range becomes `[[new_title]]`, backing `mycora repair
+  --apply`'s retargeting (see `repair.rs` below).
 - **`outline.rs`**: heading/section geometry for the `t` table-of-contents
   overlay — a separate lexical concern from `markdown.rs`'s styling, so
   it's its own small module (same shape as `link.rs`) rather than bolted

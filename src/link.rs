@@ -1,5 +1,37 @@
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+use std::ops::Range;
+
+/// Byte ranges of `body` that Markdown treats as code — fenced code blocks
+/// and inline `code spans` — computed via the same parser/options as
+/// `markdown::render`/`outline::headings` so the three agree on what
+/// counts as code. Backs `extract_wikilink_titles`/`rewrite_wikilink_title`
+/// ignoring a `[[...]]` that's actually TOML/JSON array-of-tables syntax
+/// (`[[campaign.steps]]`) shown as a code example in a note body, not a
+/// real wikilink — the naive bracket scan below has no Markdown structure
+/// of its own to tell the two apart.
+fn code_ranges(body: &str) -> Vec<Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut depth = 0usize;
+    for (event, range) in Parser::new_ext(body, Options::ENABLE_TABLES).into_offset_iter() {
+        match event {
+            Event::Start(Tag::CodeBlock(_)) => depth += 1,
+            Event::End(TagEnd::CodeBlock) => depth = depth.saturating_sub(1),
+            Event::Code(_) => ranges.push(range),
+            _ if depth > 0 => ranges.push(range),
+            _ => {}
+        }
+    }
+    ranges
+}
+
+fn in_code_range(offset: usize, ranges: &[Range<usize>]) -> bool {
+    ranges.iter().any(|r| r.contains(&offset))
+}
+
 /// Extracts the raw title text inside every `[[title]]` occurrence in
-/// `body`, in order. Resolving those titles to actual notes (and deciding
+/// `body`, in order — except one sitting inside a fenced code block or
+/// inline code span (see `code_ranges`), which is left alone as the code
+/// example it is. Resolving surviving titles to actual notes (and deciding
 /// what to do with ambiguous or missing targets) is `Index::reindex`'s job
 /// — this function only does syntax extraction, no lookup.
 ///
@@ -7,18 +39,22 @@
 /// parsing at that point rather than erroring: malformed wikilink syntax
 /// in a note body should never break indexing.
 pub fn extract_wikilink_titles(body: &str) -> Vec<String> {
+    let code = code_ranges(body);
     let mut titles = Vec::new();
     let mut rest = body;
+    let mut base = 0usize;
     while let Some(start) = rest.find("[[") {
         let after_open = &rest[start + 2..];
         let Some(end) = after_open.find("]]") else {
             break;
         };
         let title = after_open[..end].trim();
-        if !title.is_empty() {
+        if !title.is_empty() && !in_code_range(base + start, &code) {
             titles.push(title.to_string());
         }
-        rest = &after_open[end + 2..];
+        let consumed = start + 2 + end + 2;
+        base += consumed;
+        rest = &rest[consumed..];
     }
     titles
 }
@@ -56,15 +92,18 @@ pub fn unclosed_wikilink_start(line: &str, cursor_col: usize) -> Option<usize> {
 }
 
 /// Rewrites every `[[old_title]]` occurrence in `body` to `[[new_title]]`
-/// — same trimmed-title matching `extract_wikilink_titles` uses, so this
-/// only ever touches a link that function would also report. Backs
-/// `mycora repair --apply`'s retargeting of a broken link to its resolved
-/// title. Same naive scan-and-rebuild idiom as `extract_wikilink_titles`
-/// itself: an unclosed `[[` stops rewriting and passes the rest of the
-/// body through unchanged rather than erroring.
+/// — same trimmed-title matching, and the same code-block/inline-code
+/// exclusion, `extract_wikilink_titles` uses, so this only ever touches a
+/// link that function would also report. Backs `mycora repair --apply`'s
+/// retargeting of a broken link to its resolved title. Same naive
+/// scan-and-rebuild idiom as `extract_wikilink_titles` itself: an unclosed
+/// `[[` stops rewriting and passes the rest of the body through unchanged
+/// rather than erroring.
 pub fn rewrite_wikilink_title(body: &str, old_title: &str, new_title: &str) -> String {
+    let code = code_ranges(body);
     let mut out = String::with_capacity(body.len());
     let mut rest = body;
+    let mut base = 0usize;
     loop {
         let Some(start) = rest.find("[[") else {
             out.push_str(rest);
@@ -77,10 +116,13 @@ pub fn rewrite_wikilink_title(body: &str, old_title: &str, new_title: &str) -> S
             break;
         };
         let title = after_open[..end].trim();
+        let matches = title == old_title && !in_code_range(base + start, &code);
         out.push_str("[[");
-        out.push_str(if title == old_title { new_title } else { title });
+        out.push_str(if matches { new_title } else { title });
         out.push_str("]]");
-        rest = &after_open[end + 2..];
+        let consumed = start + 2 + end + 2;
+        base += consumed;
+        rest = &rest[consumed..];
     }
     out
 }
@@ -153,6 +195,34 @@ mod tests {
         assert_eq!(
             extract_wikilink_titles("[[Outer [[Inner]] tail]]"),
             vec!["Outer [[Inner"]
+        );
+    }
+
+    #[test]
+    fn ignores_a_wikilink_shaped_sequence_inside_a_fenced_code_block() {
+        let body = "See [[Real Note]] for details.\n\n\
+             ```toml\n[[campaign.steps]]\nname = \"a\"\n```\n\n\
+             And [[Another Note]] after.";
+        assert_eq!(
+            extract_wikilink_titles(body),
+            vec!["Real Note", "Another Note"]
+        );
+    }
+
+    #[test]
+    fn ignores_a_wikilink_shaped_sequence_inside_inline_code() {
+        assert_eq!(
+            extract_wikilink_titles("Use `[[steps]]` for TOML arrays, see [[Real Note]]."),
+            vec!["Real Note"]
+        );
+    }
+
+    #[test]
+    fn rewrite_wikilink_title_leaves_a_code_block_occurrence_untouched() {
+        let body = "[[commandes]] then\n\n```toml\n[[commandes]]\n```\n";
+        assert_eq!(
+            rewrite_wikilink_title(body, "commandes", "Commandes"),
+            "[[Commandes]] then\n\n```toml\n[[commandes]]\n```\n"
         );
     }
 

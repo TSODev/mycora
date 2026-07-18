@@ -16,6 +16,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   recompute from a blank buffer; this does the same without needing to
   touch the window.
 
+### Fixed
+- **Wikilink detection no longer flags `[[...]]`-shaped text inside a
+  fenced code block or inline code span as a broken link** — TOML's
+  array-of-tables syntax (`[[campaign.steps]]`) and similar, shown as a
+  code example inside a note, used to trigger a bogus `BrokenLink` on
+  every reindex since the wikilink scanner had no notion of Markdown
+  structure. `link.rs` now computes code byte-ranges via the same
+  `pulldown-cmark` parse `outline.rs`/`markdown.rs` already use, and
+  both `extract_wikilink_titles` and `rewrite_wikilink_title` skip any
+  match that falls inside one.
+
 ## [0.14.0] — 2026-07-17
 
 ### Added
