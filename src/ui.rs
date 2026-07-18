@@ -108,7 +108,7 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
     draw_body_preview(frame, panes[1], app);
     draw_backlinks_pane(frame, panes[2], app);
 
-    if app.mode == Mode::Command {
+    if app.mode == Mode::Command && app.command_help_open() {
         draw_command_help(frame, area, app);
     }
 }

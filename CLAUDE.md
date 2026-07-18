@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (229 tests, all in-crate, no external deps)
+cargo test                # all unit tests (231 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -465,16 +465,25 @@ directly and guarantee its synthetic output matches the real on-disk format.
   backlinks) for every mode except the full-pane overlays (`Search`,
   `EditBody`, `TagResults`), which take over the whole area instead.
   `Mode::Command` additionally overlays a small `Clear`-first help popup
-  (`draw_command_help`, anchored bottom-center via `popup_rect`) listing
-  `Lang::command_reference()` (in `app.lang`'s language) for as long as
-  the `:` prompt is open, with a reversed-style cursor
-  (`App::command_help_selected`) on one row — `Up`/`Down`
-  (`App::move_command_help_selection`) move it and overwrite
+  (`draw_command_help`, anchored bottom-center via `popup_rect`, drawn
+  only while `App::command_help_open()`) listing `Lang::command_reference()`
+  (in `app.lang`'s language) for as long as the `:` prompt is open, with a
+  reversed-style cursor (`App::command_help_selected`) on one row —
+  `Up`/`Down` (`App::move_command_help_selection`) move it, overwrite
   `command_input` with that entry's syntax each time (leading `:` and any
-  `<placeholder>` stripped by `command_help_fill_text`), so arrowing to a
-  command is a shortcut for typing it rather than firing it immediately —
-  the prompt stays open and editable, since several commands still need
-  an argument typed in by hand. Every string rendered here — titles, hints,
+  `<placeholder>` stripped by `command_help_fill_text`), and arm
+  `command_help_navigated`, so arrowing to a command is a shortcut for
+  typing it rather than firing it immediately. The next `Enter`
+  (`App::execute_command`) checks that flag first: if set, it just hides
+  the popup (`command_help_open = false`) and clears the flag rather than
+  running the picked syntax as-is — which would fail outright for
+  anything still missing a `<placeholder>`'s worth of argument, e.g.
+  `:export ` — leaving `command_input` and `Mode::Command` untouched so
+  the rest can still be typed; arrowing again (even after a dismiss)
+  reopens the popup and re-arms the flag, and a command typed by hand
+  without ever touching the list (`command_help_navigated` never set)
+  still runs on a single `Enter`, unchanged from before this existed.
+  Every string rendered here — titles, hints,
   prompts, markers — reads `app.lang` rather than a literal, which is
   also the entire mechanism behind `:lang` switching live (see
   `lang.rs`): nothing here caches or needs invalidating. Every color is

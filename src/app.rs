@@ -310,6 +310,20 @@ pub struct App {
     /// by `begin_command`, same as every other `_selected` field is reset
     /// by its own mode's `begin_*`.
     command_help_selected: usize,
+    /// Whether `draw_command_help`'s popup is currently drawn — starts
+    /// `true` (same as before this field existed: the popup showed for as
+    /// long as `Mode::Command` was active) but `execute_command` hides it
+    /// (without executing) on the first `Enter` after a pick, so the `:`
+    /// prompt stays open underneath for the rest of the command to be
+    /// typed in. `move_command_help_selection` sets it back to `true`, so
+    /// arrowing again after a dismiss reopens it.
+    command_help_open: bool,
+    /// Whether `Up`/`Down` picked a row since the popup was last opened or
+    /// dismissed — the actual gate on `execute_command`'s special first-
+    /// `Enter`-just-closes-the-popup behavior, so plainly typing a whole
+    /// command by hand (never touching the list) still runs on a single
+    /// `Enter` like before this feature existed.
+    command_help_navigated: bool,
     tag_results: Vec<IndexedNote>,
     tag_results_selected: usize,
     /// `(tag, note count)` pairs while `mode == Mode::TagList`.
@@ -617,6 +631,8 @@ impl App {
             pane_widths,
             command_input: String::new(),
             command_help_selected: 0,
+            command_help_open: true,
+            command_help_navigated: false,
             tag_results: Vec::new(),
             tag_results_selected: 0,
             tag_list: Vec::new(),
@@ -688,6 +704,8 @@ impl App {
             pane_widths: Self::DEFAULT_PANE_WIDTHS,
             command_input: String::new(),
             command_help_selected: 0,
+            command_help_open: true,
+            command_help_navigated: false,
             tag_results: Vec::new(),
             tag_results_selected: 0,
             tag_list: Vec::new(),
@@ -2558,6 +2576,8 @@ impl App {
     pub fn begin_command(&mut self) {
         self.command_input.clear();
         self.command_help_selected = 0;
+        self.command_help_open = true;
+        self.command_help_navigated = false;
         self.mode = Mode::Command;
     }
 
@@ -2577,6 +2597,10 @@ impl App {
         self.command_help_selected
     }
 
+    pub fn command_help_open(&self) -> bool {
+        self.command_help_open
+    }
+
     /// `Up`/`Down` while `mode == Mode::Command` — moves the highlighted
     /// row in `draw_command_help`'s popup (cyclically, same convention as
     /// every other `move_*_selection`) and overwrites `command_input`
@@ -2585,7 +2609,11 @@ impl App {
     /// preview you then have to confirm. Whatever was typed before this
     /// move is discarded — deliberately, since this *is* the "pick one
     /// from the list" action the cursor exists for; typing further
-    /// afterward still just appends normally.
+    /// afterward still just appends normally. Also (re)opens the popup and
+    /// arms `command_help_navigated`, so `execute_command`'s next `Enter`
+    /// dismisses it rather than running whatever was just picked — even
+    /// after a previous dismiss, arrowing again means "let me pick a
+    /// different one instead."
     pub fn move_command_help_selection(&mut self, delta: isize) {
         let len = self.lang.command_reference().len() as isize;
         if len == 0 {
@@ -2595,6 +2623,8 @@ impl App {
         self.command_help_selected = new_pos;
         let (syntax, _) = self.lang.command_reference()[new_pos];
         self.command_input = command_help_fill_text(syntax);
+        self.command_help_open = true;
+        self.command_help_navigated = true;
     }
 
     pub fn cancel_command(&mut self) {
@@ -2655,7 +2685,22 @@ impl App {
     /// Kept in sync with `Lang::command_reference` (which `ui.rs`'s help
     /// popup renders, in the configured language) by hand — not worth
     /// generating one from the other at this size.
+    ///
+    /// `Enter` right after picking a row from the help popup
+    /// (`command_help_navigated`) is special-cased: rather than running
+    /// the picked syntax as-is (which would fail outright for anything
+    /// with a `<placeholder>` still left to fill in, e.g. `:export `),
+    /// this first `Enter` just hides the popup and clears the flag,
+    /// leaving `Mode::Command` and `command_input` untouched so the rest
+    /// of the command can still be typed — a *second* `Enter` then runs
+    /// it for real, same as if the whole thing had been typed by hand.
     pub fn execute_command(&mut self) {
+        if self.command_help_navigated {
+            self.command_help_open = false;
+            self.command_help_navigated = false;
+            return;
+        }
+
         let input = std::mem::take(&mut self.command_input);
         self.mode = Mode::Normal;
 
@@ -3289,6 +3334,71 @@ mod tests {
         app.move_command_help_selection(-2);
         assert_eq!(app.command_help_selected(), reference.len() - 1);
         assert_eq!(app.command_input(), last);
+
+        cleanup_scratch_db(&db_path);
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    /// The exact flow from the request this feature was built for: arrow
+    /// to `:export <path>`, `Enter` should just hide the popup and leave
+    /// the prompt open with `export ` still in it, *not* try (and fail)
+    /// to run `export` with no path — then typing the rest and pressing
+    /// `Enter` again should run it for real.
+    #[test]
+    fn enter_after_a_help_pick_dismisses_the_popup_instead_of_running_it() {
+        let (mut app, vault_dir, db_path) = app_with_a_broken_and_a_real_link();
+        let export_index = app
+            .lang
+            .command_reference()
+            .iter()
+            .position(|(syntax, _)| syntax.starts_with(":export"))
+            .unwrap();
+        app.begin_command();
+        app.move_command_help_selection(export_index as isize);
+        assert!(app.command_help_open());
+        assert_eq!(app.command_input(), "export ");
+
+        app.execute_command();
+
+        assert_eq!(app.mode, Mode::Command, "first Enter must not leave Command mode");
+        assert!(!app.command_help_open(), "first Enter must hide the popup");
+        assert_eq!(
+            app.command_input(),
+            "export ",
+            "first Enter must not touch what was picked"
+        );
+
+        // A second Enter with no path typed yet still counts as "run it
+        // for real" — `command_export` reports its own usage error
+        // (no file gets written), but the point here is that this Enter
+        // no longer gets intercepted by the popup-dismiss special case.
+        app.execute_command();
+
+        assert_eq!(
+            app.mode,
+            Mode::Normal,
+            "second Enter must run the command like normal"
+        );
+        assert_eq!(app.command_input(), "");
+
+        cleanup_scratch_db(&db_path);
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    /// The unchanged fast path: typing a whole command by hand, never
+    /// touching the help list, still runs on a single `Enter` — this
+    /// feature must not add friction to the common case.
+    #[test]
+    fn enter_runs_immediately_when_the_help_list_was_never_navigated() {
+        let (mut app, vault_dir, db_path) = app_with_a_broken_and_a_real_link();
+        app.begin_command();
+        for c in "reindex".chars() {
+            app.command_input_push(c);
+        }
+
+        app.execute_command();
+
+        assert_eq!(app.mode, Mode::Normal);
 
         cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();

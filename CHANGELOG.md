@@ -31,7 +31,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   colon and any `<placeholder>` stripped) so picking one is a shortcut
   for typing it — the prompt stays editable afterward rather than
   firing immediately, since several commands still need an argument
-  typed in by hand.
+  typed in by hand. `Enter` right after a pick hides the popup instead
+  of trying (and failing) to run an incomplete command like `:export `
+  — the prompt stays open with the picked text still in it, ready for
+  the rest to be typed in, and a second `Enter` runs it for real.
+  Typing a whole command by hand without ever touching the list still
+  runs on a single `Enter`, same as always.
 
 ### Fixed
 - **Wikilink detection no longer flags `[[...]]`-shaped text inside a
