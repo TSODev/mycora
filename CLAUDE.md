@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (219 tests, all in-crate, no external deps)
+cargo test                # all unit tests (224 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -54,14 +54,21 @@ mycora repair [--apply] [--create-stubs] [--vault <name>]
   not exist), no Cursor/Copilot instruction files in this repo.
 - **Tests are all `#[cfg(test)] mod tests` unit tests**, spread across
   `tree.rs`, `vault.rs`, `config.rs`, `index.rs`, `link.rs`, `lang.rs`,
-  `markdown.rs`, `outline.rs`, `import.rs`, `repair.rs`, and
-  `session.rs` — there is no `tests/` integration directory. None of
+  `markdown.rs`, `outline.rs`, `import.rs`, `repair.rs`, `session.rs`,
+  and `app.rs` — there is no `tests/` integration directory. None of
   them need an external service, network, or env var: `vault.rs`/`index.rs`
   tests build a scratch directory under `std::env::temp_dir()` per test
   (unique via a fresh UUID) and clean it up at the end. The only place
   `std::env::var` matters at all is `Config::load()` reading `HOME` at
   runtime (not in tests). No test is `#[ignore]`d or skipped based on
-  environment.
+  environment. `app.rs`'s own tests are the newest and sparsest of the
+  bunch: `App::new()` isn't test-friendly on its own (it always reads
+  the real user config/session/index paths via `Config::load`/
+  `Session::default_path`/`Index::default_path`), so a `#[cfg(test)]`-
+  only `App::new_for_test(tree, vault, index, vault_id)` builds one from
+  already-in-memory pieces instead, the same scratch-`Tree`/`Vault`/
+  `Index` construction `vault.rs`/`index.rs`'s own tests already use,
+  just assembled into a full `App` rather than exercised piece by piece.
 
 ## Architecture
 

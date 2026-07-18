@@ -602,6 +602,73 @@ impl App {
         Ok((app, warnings))
     }
 
+    /// Test-only counterpart to `App::new()` that skips every bit of global
+    /// filesystem state (`Config::load`, `Session::default_path`, ...) —
+    /// `App::new()` isn't test-friendly since it always reads the real
+    /// user config/session/index paths. Fills every field `App::new()`
+    /// would with a scratch-appropriate default (single vault, no
+    /// read-only mounted ones, English, empty session paths) so a test
+    /// only has to hand in what it actually cares about.
+    #[cfg(test)]
+    fn new_for_test(tree: Tree, vault: Vault, index: Index, vault_id: &str) -> Self {
+        let mut expanded = HashSet::new();
+        let selected = tree.roots().first().copied();
+        if let Some(id) = selected {
+            expanded.insert(id);
+        }
+        Self {
+            tree,
+            vault,
+            expanded,
+            selected,
+            mode: Mode::Normal,
+            lang: Lang::En,
+            input: String::new(),
+            should_quit: false,
+            last_error: None,
+            last_message: None,
+            confirm_quit: false,
+            force_redraw: false,
+            pending_delete: None,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            nav_history: Vec::new(),
+            index,
+            vault_id: vault_id.to_string(),
+            search_query: String::new(),
+            search_results: Vec::new(),
+            search_selected: 0,
+            backlinks_selected: 0,
+            other_vaults: Vec::new(),
+            unmounted_vaults: Vec::new(),
+            archived_vaults: Vec::new(),
+            selected_unmounted_vault: None,
+            selected_archived_vault: None,
+            show_unmounted: true,
+            show_archived: true,
+            tags_limit: None,
+            body_editor: None,
+            session_path: PathBuf::new(),
+            config_path: PathBuf::new(),
+            pane_widths: Self::DEFAULT_PANE_WIDTHS,
+            command_input: String::new(),
+            tag_results: Vec::new(),
+            tag_results_selected: 0,
+            tag_list: Vec::new(),
+            tag_list_selected: 0,
+            body_scroll: 0,
+            link_autocomplete: None,
+            links_results: Vec::new(),
+            links_selected: 0,
+            broken_wikilinks_results: Vec::new(),
+            broken_wikilinks_selected: 0,
+            toc_headings: Vec::new(),
+            toc_selected: 0,
+            pending_clipboard: None,
+            attach_prompt: None,
+        }
+    }
+
     /// Saves this vault's current selection/expand state, for the next
     /// `App::new()` to restore. Called once at shutdown (see `main.rs`),
     /// not write-through — see `Session`'s doc comment for why.
@@ -3010,5 +3077,92 @@ impl App {
 
     pub fn tag_list_selected(&self) -> usize {
         self.tag_list_selected
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    fn scratch_db_path() -> PathBuf {
+        std::env::temp_dir().join(format!("mycora-app-test-{}.sqlite3", Uuid::new_v4()))
+    }
+
+    fn cleanup_scratch_db(db_path: &Path) {
+        std::fs::remove_file(db_path).ok();
+        std::fs::remove_file(db_path.with_extension("sqlite3-wal")).ok();
+        std::fs::remove_file(db_path.with_extension("sqlite3-shm")).ok();
+    }
+
+    fn temp_vault_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("mycora-app-test-vault-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// A note with one real wikilink and one broken one — the shared setup
+    /// for both tests below, which follow that broken link two different
+    /// ways (`f`'s outgoing-links list, `:brokenlinks`'s jump-to-source).
+    fn app_with_a_broken_and_a_real_link() -> (App, PathBuf, PathBuf) {
+        let mut tree = Tree::new();
+        let source = tree.create_note("Source Note", None);
+        tree.set_body(
+            source,
+            "See [[Real Target]] and also [[Missing Target]].",
+        );
+        tree.create_note("Real Target", None);
+
+        let vault_dir = temp_vault_dir();
+        let vault = Vault::open(vault_dir.clone()).unwrap();
+        let db_path = scratch_db_path();
+        let index = Index::open(&db_path).unwrap();
+
+        let mut app = App::new_for_test(tree, vault, index, "default");
+        app.selected = Some(source);
+        (app, vault_dir, db_path)
+    }
+
+    /// The `f` follow path: a broken wikilink can never even appear in
+    /// `outgoing_links` (`Index::outgoing_links` inner-joins against the
+    /// `notes` table), so "following" one this way isn't a matter of
+    /// tolerating a bad jump — there's structurally nothing to jump to.
+    #[test]
+    fn begin_links_never_lists_a_broken_wikilink_as_an_outgoing_link() {
+        let (mut app, vault_dir, db_path) = app_with_a_broken_and_a_real_link();
+
+        app.begin_links();
+
+        assert_eq!(app.mode, Mode::Links);
+        assert_eq!(app.links_results().len(), 1);
+        assert_eq!(app.links_results()[0].title, "Real Target");
+
+        cleanup_scratch_db(&db_path);
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    /// The `:brokenlinks` follow path: `Enter` on a broken link jumps to
+    /// its *source* note (guaranteed to exist) rather than the missing
+    /// target, and must not panic doing it.
+    #[test]
+    fn confirm_broken_wikilinks_jumps_to_the_source_note_without_panicking() {
+        let (mut app, vault_dir, db_path) = app_with_a_broken_and_a_real_link();
+        let source = app.selected.unwrap();
+
+        app.begin_broken_wikilinks();
+        assert_eq!(app.mode, Mode::BrokenWikilinks);
+        assert_eq!(app.broken_wikilinks_results().len(), 1);
+        assert_eq!(
+            app.broken_wikilinks_results()[0].broken_title,
+            "Missing Target"
+        );
+
+        app.confirm_broken_wikilinks();
+
+        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.selected, Some(source));
+
+        cleanup_scratch_db(&db_path);
+        std::fs::remove_dir_all(&vault_dir).ok();
     }
 }
