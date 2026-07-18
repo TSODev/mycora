@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (231 tests, all in-crate, no external deps)
+cargo test                # all unit tests (232 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -263,6 +263,43 @@ directly and guarantee its synthetic output matches the real on-disk format.
   except tables (width-sensitive), gracefully approximate otherwise, the
   same accepted imprecision as `App::scroll_body_down`'s own doc
   comment.
+- **`export.rs`**: `flatten_subtree(tree, root)` walks a subtree
+  depth-first into one Markdown document (each note's title becomes a
+  heading at a depth-matching level, its own ATX headings shifted
+  deeper to nest under it rather than compete with it) — shared by
+  `:export`/`mycora export` (see `showcase-vault`'s
+  `pdf-export-renders-through-a-pure-rust-crate.md` for the original
+  `markdown2pdf` choice). `write_output(content, path)` is the single
+  place both call to actually write it: a `.pdf` path renders through
+  `markdown2pdf::parse_into_file`, anything else is written verbatim as
+  Markdown. Passes a `FontConfig` pointing at an embedded DejaVu
+  Sans/Sans Mono (`assets/fonts/`, Bitstream Vera License, ~1.1MB in
+  the binary) rather than leaving it `None` — `markdown2pdf`'s own
+  default with no font configured falls back to the 14 standard PDF
+  fonts, which (per its own `to_win1252` doc comment) only transliterate
+  a curated set of punctuation and replace *everything* else —
+  accented Latin included — with a literal `?`; DejaVu covers Latin
+  Extended/Greek/Cyrillic (not CJK/emoji, which would need a much
+  bigger font — out of scope, see the `Unreleased` `CHANGELOG.md`
+  entry). Embedded via `include_bytes!` rather than
+  `FontSource::System` specifically to keep PDF export self-contained,
+  same reasoning as choosing `markdown2pdf` over shelling out to
+  `pandoc`/`wkhtmltopdf` in the first place. Bold text (every heading,
+  since `flatten_subtree` makes note titles into headings) renders in
+  the same regular weight instead of a true bold face —
+  `markdown2pdf` only auto-discovers a bold sibling file next to an
+  on-disk font (`FontSource::File`/`System`, by filename convention),
+  and an embedded `FontSource::Bytes` has no path for that; falling
+  back to the *regular* embedded font rather than a *builtin* bold one
+  keeps Unicode correct at the cost of true boldness, which is the
+  actual bug this exists to fix. `write_output_embeds_a_unicode_font_
+  for_pdf_paths`'s test can't assert the rendered glyphs without a
+  PDF-parsing dependency (`markdown2pdf` compresses object streams, so
+  even the font dictionary isn't visible to a plain byte search), so it
+  compares output size against the same content rendered through the
+  crate's own builtin-font path directly — a subsetted embedded font
+  adds several KB, a signal that would go quiet if `write_output` ever
+  stopped passing a font config through.
 - **`clipboard.rs`**: `copy_to_system_clipboard(text)` (backing `Y`) writes
   an OSC 52 escape sequence straight to stdout rather than depending on an
   OS-level clipboard crate (`arboard` and similar need direct X11/Wayland

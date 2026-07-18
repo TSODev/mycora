@@ -48,6 +48,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `pulldown-cmark` parse `outline.rs`/`markdown.rs` already use, and
   both `extract_wikilink_titles` and `rewrite_wikilink_title` skip any
   match that falls inside one.
+- **PDF export (`:export`/`mycora export`, a `.pdf` output path) no
+  longer mangles non-ASCII text into `?`** — accented Latin (French
+  included), Greek, and Cyrillic now render correctly, in headings, body
+  text, and code blocks alike. `markdown2pdf`'s own default (no font
+  configured) falls back to the 14 standard PDF fonts, which only cover
+  a curated set of Win-1252 punctuation and replace everything else,
+  accented letters included, with a literal `?` — by its own admission,
+  in its `to_win1252` doc comment. `export::write_output` now passes a
+  `FontConfig` pointing at an embedded DejaVu Sans/Sans Mono (Bitstream
+  Vera License, `assets/fonts/`, ~1.1MB added to the binary), keeping
+  PDF export self-contained rather than depending on what's installed
+  on the host. CJK and emoji are still out of range — a font with that
+  coverage is a much bigger asset — and bold text renders in the same
+  regular weight rather than a true bold face, since `markdown2pdf`
+  only auto-discovers a bold sibling font next to an on-disk file, not
+  an embedded one; both are open follow-ups, not restored bugs.
 
 ## [0.14.0] — 2026-07-17
 

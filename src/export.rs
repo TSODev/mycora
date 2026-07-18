@@ -1,6 +1,41 @@
 use crate::note::NoteId;
 use crate::tree::Tree;
+use markdown2pdf::fonts::{FontConfig, FontSource};
 use std::path::Path;
+
+/// Embedded so PDF export stays self-contained (see
+/// `pdf-export-renders-through-a-pure-rust-crate.md` in the showcase
+/// vault) rather than depending on whatever's installed on the host —
+/// `markdown2pdf`'s own default (no font configured) falls back to the
+/// 14 standard PDF fonts, which only support WinAnsi/Latin-1-ish
+/// punctuation and replace *everything* else, accented Latin letters
+/// included, with a literal `?` (see its own `to_win1252` doc comment).
+/// DejaVu Sans/Sans Mono (Bitstream Vera License, `assets/fonts/`) cover
+/// Latin Extended, Greek, and Cyrillic — not CJK or emoji, which would
+/// need a much larger font; picked as the point covering the common
+/// case (French/European accented text, the actual bug report this
+/// fixes) without ballooning the binary.
+static DEJAVU_SANS: &[u8] = include_bytes!("../assets/fonts/DejaVuSans.ttf");
+static DEJAVU_SANS_MONO: &[u8] = include_bytes!("../assets/fonts/DejaVuSansMono.ttf");
+
+/// `markdown2pdf` only auto-discovers a bold sibling file next to an
+/// on-disk font (`FontSource::File`/`System`) by filename convention —
+/// an embedded `FontSource::Bytes` has no path for that, so bold text
+/// (every heading, since `flatten_subtree` turns note titles into
+/// headings, plus any `**bold**` in a note body) falls back to this
+/// same regular-weight font rather than a bold one. Visually flatter
+/// than true bold, but still correctly-rendered Unicode text — the
+/// actual bug this exists to fix — rather than reintroducing the `?`
+/// problem for every heading by falling back further to a builtin bold
+/// font. Not worth the added complexity of writing embedded bytes out
+/// to a temp file just to hand `markdown2pdf` a path to discover a
+/// sibling `-Bold.ttf` from, unless bold fidelity turns out to matter
+/// in practice.
+fn unicode_font_config() -> FontConfig {
+    FontConfig::new()
+        .with_default_font_source(FontSource::bytes(DEJAVU_SANS))
+        .with_code_font_source(FontSource::bytes(DEJAVU_SANS_MONO))
+}
 
 /// Flattens `root`'s subtree (itself and every descendant, depth-first,
 /// respecting sibling order) into a single Markdown document. Each note's
@@ -27,11 +62,12 @@ pub fn flatten_subtree(tree: &Tree, root: NoteId) -> String {
 /// picking a format explicitly.
 pub fn write_output(content: &str, path: &Path) -> Result<(), String> {
     if is_pdf_path(path) {
+        let font_config = unicode_font_config();
         markdown2pdf::parse_into_file(
             content.to_string(),
             path,
             markdown2pdf::config::ConfigSource::Default,
-            None,
+            Some(&font_config),
         )
         .map_err(|err| err.to_string())
     } else {
@@ -204,6 +240,47 @@ mod tests {
         write_output("# Hello\n\nBody.\n\n", &path).unwrap();
         let bytes = std::fs::read(&path).unwrap();
         assert!(bytes.starts_with(b"%PDF-"));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Regression test for the bug this font config exists to fix: without
+    /// it, non-ASCII text (accented Latin, Cyrillic, ...) rendered as a
+    /// literal `?` in the PDF (`markdown2pdf`'s builtin-font fallback only
+    /// transliterates a curated set of punctuation, see `to_win1252` in
+    /// its own source). Can't easily assert the *rendered glyphs* without
+    /// a PDF-parsing dependency — `markdown2pdf` compresses object
+    /// streams, so even the font dictionary isn't visible to a plain byte
+    /// search — but an embedded font subset makes the file meaningfully
+    /// bigger than the builtin-only path for the same content, which is
+    /// exactly the signal that would go quiet if `write_output` ever
+    /// stopped passing a font config through.
+    #[test]
+    fn write_output_embeds_a_unicode_font_for_pdf_paths() {
+        let dir = std::env::temp_dir().join(format!("mycora-export-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let content = "# Café à Zürich\n\nAccents : é è à ç ù ê î ô. Cyrillique : Привет мир.\n";
+
+        let builtin_path = dir.join("builtin.pdf");
+        markdown2pdf::parse_into_file(
+            content.to_string(),
+            &builtin_path,
+            markdown2pdf::config::ConfigSource::Default,
+            None,
+        )
+        .unwrap();
+
+        let unicode_path = dir.join("unicode.pdf");
+        write_output(content, &unicode_path).unwrap();
+
+        let builtin_len = std::fs::metadata(&builtin_path).unwrap().len();
+        let unicode_len = std::fs::metadata(&unicode_path).unwrap().len();
+        assert!(
+            unicode_len > builtin_len + 1000,
+            "expected the embedded-font PDF ({unicode_len} bytes) to be \
+             meaningfully bigger than the builtin-font one ({builtin_len} \
+             bytes) — a subsetted TrueType font adds several KB"
+        );
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
