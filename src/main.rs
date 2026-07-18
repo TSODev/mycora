@@ -956,6 +956,9 @@ fn perform_repair(
 
 fn run(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> anyhow::Result<()> {
     while !app.should_quit {
+        if app.take_force_redraw() {
+            terminal.clear()?;
+        }
         terminal.draw(|frame| ui::draw(frame, app))?;
         event::poll_and_handle(app)?;
     }

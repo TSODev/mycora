@@ -190,6 +190,13 @@ pub struct App {
     /// Set by a first `q` press; a second press actually quits, any other
     /// key resets it. Mirrors Terapi's q/q confirm dance.
     pub confirm_quit: bool,
+    /// Set by `Ctrl+L`, consumed by `main.rs`'s `run` loop right before the
+    /// next `terminal.draw` — a manual escape hatch for stray terminal
+    /// artifacts (seen with some terminal/multiplexer combinations losing
+    /// part of a diff-based repaint) that a normal redraw doesn't clear on
+    /// its own. `App` doesn't own the `Terminal`, so it can only request
+    /// the clear, not perform it.
+    force_redraw: bool,
     /// Note pending a delete confirmation (`Mode::ConfirmDelete`).
     pending_delete: Option<NoteId>,
     undo_stack: Vec<UndoAction>,
@@ -552,6 +559,7 @@ impl App {
             last_error: None,
             last_message: None,
             confirm_quit: false,
+            force_redraw: false,
             pending_delete: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -1186,6 +1194,17 @@ impl App {
 
     pub fn reset_quit_confirmation(&mut self) {
         self.confirm_quit = false;
+    }
+
+    /// `Ctrl+L` — arms a full terminal clear before the next draw.
+    pub fn request_redraw(&mut self) {
+        self.force_redraw = true;
+    }
+
+    /// Consumed by `main.rs`'s `run` loop: `true` at most once per request,
+    /// clearing the flag so the same `Ctrl+L` doesn't re-clear every frame.
+    pub fn take_force_redraw(&mut self) -> bool {
+        std::mem::take(&mut self.force_redraw)
     }
 
     /// Clears `last_error`/`last_message` — called once per keypress,

@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **`Ctrl+L`**: forces a full terminal redraw. Works unconditionally
+  from any mode, same as `Ctrl+C` — an escape hatch for stray leftover
+  characters some terminal/GPU-compositor combinations occasionally
+  leave on screen after a partial repaint (seen under kitty), which a
+  window resize already happened to clear by forcing ratatui to
+  recompute from a blank buffer; this does the same without needing to
+  touch the window.
+
 ## [0.14.0] — 2026-07-17
 
 ### Added

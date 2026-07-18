@@ -24,6 +24,15 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             return Ok(());
         }
 
+        // Unconditional and mode-independent for the same reason as
+        // Ctrl+C above: a terminal/multiplexer that lost part of a
+        // diff-based repaint needs an escape hatch that works no matter
+        // what's on screen, not just from Normal mode. Vim/htop convention.
+        if key.code == KeyCode::Char('l') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            app.request_redraw();
+            return Ok(());
+        }
+
         if key.code != KeyCode::Char('q') {
             app.reset_quit_confirmation();
         }

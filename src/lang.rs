@@ -261,6 +261,7 @@ impl Lang {
                 ("?", "this help"),
                 ("q q", "quit (press twice)"),
                 ("Ctrl+C", "quit immediately"),
+                ("Ctrl+L", "force a full screen redraw"),
             ],
             Lang::Fr => &[
                 ("j/k, ↑/↓", "déplacer la sélection"),
@@ -292,6 +293,7 @@ impl Lang {
                 ("?", "cette aide"),
                 ("q q", "quitter (appuyer deux fois)"),
                 ("Ctrl+C", "quitter immédiatement"),
+                ("Ctrl+L", "forcer un redessin complet de l'écran"),
             ],
             Lang::Es => &[
                 ("j/k, ↑/↓", "mover la selección"),
@@ -323,6 +325,7 @@ impl Lang {
                 ("?", "esta ayuda"),
                 ("q q", "salir (pulsar dos veces)"),
                 ("Ctrl+C", "salir de inmediato"),
+                ("Ctrl+L", "forzar un redibujado completo de la pantalla"),
             ],
             Lang::De => &[
                 ("j/k, ↑/↓", "Auswahl bewegen"),
@@ -354,6 +357,7 @@ impl Lang {
                 ("?", "diese Hilfe"),
                 ("q q", "beenden (zweimal drücken)"),
                 ("Ctrl+C", "sofort beenden"),
+                ("Ctrl+L", "vollständigen Bildschirmneuaufbau erzwingen"),
             ],
         }
     }
