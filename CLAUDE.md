@@ -32,7 +32,7 @@ a working example of the on-disk file format. Published on crates.io as
 ```sh
 cargo build              # debug build
 cargo run                # run the TUI against the configured vault
-cargo test                # all unit tests (224 tests, all in-crate, no external deps)
+cargo test                # all unit tests (227 tests, all in-crate, no external deps)
 cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/module name
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
@@ -55,7 +55,8 @@ mycora repair [--apply] [--create-stubs] [--vault <name>]
 - **Tests are all `#[cfg(test)] mod tests` unit tests**, spread across
   `tree.rs`, `vault.rs`, `config.rs`, `index.rs`, `link.rs`, `lang.rs`,
   `markdown.rs`, `outline.rs`, `import.rs`, `repair.rs`, `session.rs`,
-  and `app.rs` — there is no `tests/` integration directory. None of
+  `app.rs`, and `clipboard.rs` — there is no `tests/` integration
+  directory. None of
   them need an external service, network, or env var: `vault.rs`/`index.rs`
   tests build a scratch directory under `std::env::temp_dir()` per test
   (unique via a fresh UUID) and clean it up at the end. The only place
@@ -262,6 +263,26 @@ directly and guarantee its synthetic output matches the real on-disk format.
   except tables (width-sensitive), gracefully approximate otherwise, the
   same accepted imprecision as `App::scroll_body_down`'s own doc
   comment.
+- **`clipboard.rs`**: `copy_to_system_clipboard(text)` (backing `Y`) writes
+  an OSC 52 escape sequence straight to stdout rather than depending on an
+  OS-level clipboard crate (`arboard` and similar need direct X11/Wayland
+  access) — works over SSH too, since it's the *client*-side terminal that
+  intercepts the sequence, not the remote shell. Includes its own tiny
+  base64 encoder (RFC 4648, padded) rather than a dependency for
+  something this small and stable; a known-vector test backs it.
+  Tmux-aware: `osc52_sequence(text, in_tmux)` — split out as a pure
+  function so the exact wrapped byte layout can be asserted in a test
+  without a real tmux session — wraps the sequence in tmux's DCS
+  passthrough (`ESC P tmux ; ESC <sequence> ESC \`, with the sequence's
+  own leading `ESC` doubled, since tmux's DCS parser strips one layer)
+  whenever the `TMUX` env var is set, the same detection every other
+  OSC 52 tool uses; tmux otherwise swallows an arbitrary escape sequence
+  from the program it's running rather than forwarding it to the real
+  terminal underneath. `App` can't perform the write itself (it doesn't
+  own stdout/the `Terminal`), so `copy_body_to_clipboard` only queues the
+  text into `clipboard_copy`; `main.rs`'s `run` loop drains it with
+  `take_clipboard_copy` right after each event, same request/consume
+  shape as `Ctrl+L`'s `force_redraw`.
 - **`repair.rs`**: pure suggestion logic shared by `mycora repair` (CLI)
   and `:brokenlinks` (TUI) — no I/O, no `Tree`/`Vault`, same split as
   `outline.rs` (logic here, orchestration in the caller: `main.rs`'s

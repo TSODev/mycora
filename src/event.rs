@@ -108,6 +108,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         KeyCode::Char('o') => app.create_sibling(),
         KeyCode::Char('a') => app.create_child(),
         KeyCode::Char('y') => app.copy_selected(),
+        KeyCode::Char('Y') => app.copy_body_to_clipboard(),
         KeyCode::Char('x') => app.mark_pending_move(),
         KeyCode::Char('c') => app.mark_pending_copy(),
         KeyCode::Char('p') => app.paste_pending(),

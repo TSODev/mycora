@@ -15,6 +15,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   window resize already happened to clear by forcing ratatui to
   recompute from a blank buffer; this does the same without needing to
   touch the window.
+- **`Y`**: copies the selected note's raw body (Markdown source) to the
+  system clipboard, via an OSC 52 escape sequence written straight to
+  stdout — no OS clipboard crate, and it works over SSH too, since it's
+  the client-side terminal that intercepts the sequence. Sidesteps
+  having to mouse-drag a rectangular selection across just the body
+  preview column without also grabbing the tree/backlinks panes next
+  to it. Tmux-aware: the sequence is wrapped in tmux's own DCS
+  passthrough (detected via the `TMUX` env var) when running inside a
+  session, since tmux otherwise swallows an arbitrary escape sequence
+  instead of forwarding it to the real terminal underneath.
 
 ### Fixed
 - **Wikilink detection no longer flags `[[...]]`-shaped text inside a

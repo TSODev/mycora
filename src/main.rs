@@ -15,6 +15,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 
 use mycora::app::App;
 use mycora::archive;
+use mycora::clipboard;
 use mycora::config::Config;
 use mycora::index::Index;
 use mycora::link;
@@ -961,6 +962,9 @@ fn run(app: &mut App, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> 
         }
         terminal.draw(|frame| ui::draw(frame, app))?;
         event::poll_and_handle(app)?;
+        if let Some(text) = app.take_clipboard_copy() {
+            clipboard::copy_to_system_clipboard(&text)?;
+        }
     }
     Ok(())
 }

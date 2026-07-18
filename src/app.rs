@@ -197,6 +197,12 @@ pub struct App {
     /// its own. `App` doesn't own the `Terminal`, so it can only request
     /// the clear, not perform it.
     force_redraw: bool,
+    /// Set by `Y` (`request_clipboard_copy`), consumed by `main.rs`'s `run`
+    /// loop right after each event — same request/consume shape as
+    /// `force_redraw` and for the same reason: writing the OSC 52 escape
+    /// sequence is a raw stdout write, not something `App` can do without
+    /// owning the terminal/stdout handle.
+    clipboard_copy: Option<String>,
     /// Note pending a delete confirmation (`Mode::ConfirmDelete`).
     pending_delete: Option<NoteId>,
     undo_stack: Vec<UndoAction>,
@@ -560,6 +566,7 @@ impl App {
             last_message: None,
             confirm_quit: false,
             force_redraw: false,
+            clipboard_copy: None,
             pending_delete: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -629,6 +636,7 @@ impl App {
             last_message: None,
             confirm_quit: false,
             force_redraw: false,
+            clipboard_copy: None,
             pending_delete: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -1272,6 +1280,32 @@ impl App {
     /// clearing the flag so the same `Ctrl+L` doesn't re-clear every frame.
     pub fn take_force_redraw(&mut self) -> bool {
         std::mem::take(&mut self.force_redraw)
+    }
+
+    /// `Y` — queues the selected note's raw body (Markdown source, not the
+    /// rendered preview) for a system-clipboard copy via OSC 52; see
+    /// `clipboard_copy`'s doc comment for why `App` only requests rather
+    /// than performs the actual write. A no-op with nothing selected (an
+    /// unmounted/archived vault placeholder) or an empty body — nothing
+    /// useful to put on the clipboard either way.
+    pub fn copy_body_to_clipboard(&mut self) {
+        let Some(note) = self.selected_note() else {
+            return;
+        };
+        if note.body.is_empty() {
+            self.last_error = None;
+            self.last_message = Some(self.lang.nothing_to_copy().to_string());
+            return;
+        }
+        self.clipboard_copy = Some(note.body.clone());
+        self.last_error = None;
+        self.last_message = Some(self.lang.copied_to_clipboard().to_string());
+    }
+
+    /// Consumed by `main.rs`'s `run` loop right after each event — see
+    /// `clipboard_copy`'s doc comment.
+    pub fn take_clipboard_copy(&mut self) -> Option<String> {
+        self.clipboard_copy.take()
     }
 
     /// Clears `last_error`/`last_message` — called once per keypress,

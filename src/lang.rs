@@ -257,6 +257,7 @@ impl Lang {
                 ("{ / }", "shrink / grow backlinks pane"),
                 ("Ctrl+D / Ctrl+U", "scroll body preview down / up"),
                 ("Ctrl+O", "jump back to your previous note"),
+                ("Y", "copy the note's body to the system clipboard"),
                 (":", "command palette"),
                 ("?", "this help"),
                 ("q q", "quit (press twice)"),
@@ -289,6 +290,7 @@ impl Lang {
                 ("{ / }", "réduire / agrandir le panneau rétroliens"),
                 ("Ctrl+D / Ctrl+U", "faire défiler l'aperçu du corps"),
                 ("Ctrl+O", "revenir à la note précédente"),
+                ("Y", "copier le corps de la note dans le presse-papier"),
                 (":", "palette de commandes"),
                 ("?", "cette aide"),
                 ("q q", "quitter (appuyer deux fois)"),
@@ -321,6 +323,7 @@ impl Lang {
                 ("{ / }", "encoger / agrandar el panel de retroenlaces"),
                 ("Ctrl+D / Ctrl+U", "desplazar la vista previa arriba/abajo"),
                 ("Ctrl+O", "volver a la nota anterior"),
+                ("Y", "copiar el cuerpo de la nota al portapapeles"),
                 (":", "paleta de comandos"),
                 ("?", "esta ayuda"),
                 ("q q", "salir (pulsar dos veces)"),
@@ -353,6 +356,7 @@ impl Lang {
                 ("{ / }", "Rückverweisbereich verkleinern / vergrößern"),
                 ("Ctrl+D / Ctrl+U", "Vorschau runter-/hochscrollen"),
                 ("Ctrl+O", "zur vorherigen Notiz zurückspringen"),
+                ("Y", "Notizinhalt in die Zwischenablage kopieren"),
                 (":", "Befehlspalette"),
                 ("?", "diese Hilfe"),
                 ("q q", "beenden (zweimal drücken)"),
@@ -1017,6 +1021,28 @@ impl Lang {
             Lang::Fr => "aucun lien cassé",
             Lang::Es => "sin enlaces rotos",
             Lang::De => "keine defekten Links",
+        }
+    }
+
+    /// `Y`'s success message — the selected note's body was queued for a
+    /// system-clipboard copy.
+    pub fn copied_to_clipboard(self) -> &'static str {
+        match self {
+            Lang::En => "copied to clipboard",
+            Lang::Fr => "copié dans le presse-papier",
+            Lang::Es => "copiado al portapapeles",
+            Lang::De => "in die Zwischenablage kopiert",
+        }
+    }
+
+    /// `Y`'s no-op message — the selected note's body is empty, nothing to
+    /// copy.
+    pub fn nothing_to_copy(self) -> &'static str {
+        match self {
+            Lang::En => "nothing to copy — this note's body is empty",
+            Lang::Fr => "rien à copier — le corps de cette note est vide",
+            Lang::Es => "nada que copiar — el cuerpo de esta nota está vacío",
+            Lang::De => "nichts zu kopieren — der Inhalt dieser Notiz ist leer",
         }
     }
 
