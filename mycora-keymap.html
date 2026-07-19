@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>mycora — Keyboard Reference</title>
+<style>
+  /* ── Reset & base ────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /*
+    Modeled directly on terapi's own reference card
+    (terapi-keymap.html, sibling Rust TUI project) — same print-first,
+    A4-landscape, one-mode-per-section layout. Deliberate single-theme
+    choice for the same reason: a sheet meant to be printed and pinned
+    next to a keyboard, not a browsed web page, so a light/dark toggle
+    nobody will use mid-print isn't worth the complexity.
+  */
+  :root {
+    --bg:        #ffffff;
+    --paper:     #fbfcfd;
+    --text:      #1e293b;
+    --muted:     #64748b;
+    --key-bg:    #1e293b;
+    --key-fg:    #f8fafc;
+    --border:    #e2e8f0;
+
+    /* accents reused from Mycora's own in-app color coding — ui.rs uses
+       exactly these named ratatui colors, not arbitrary RGB, so reusing
+       them here keeps the sheet in the app's own visual language:
+       blue = tree pane border, magenta = body pane border,
+       cyan = focus/jump (backlinks focus, search, links, TOC),
+       yellow = tag badges, red = delete/quit, slate = everything
+       cross-cutting or global. */
+    --c-slate:   #475569;
+    --c-blue:    #1d4ed8;
+    --c-magenta: #a21caf;
+    --c-cyan:    #0e7490;
+    --c-yellow:  #b45309;
+    --c-red:     #b91c1c;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 6mm 11mm;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 7.3pt;
+    color: var(--text);
+    background: var(--paper);
+    line-height: 1.4;
+  }
+
+  .mono {
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", ui-monospace, Menlo, monospace;
+  }
+
+  /* ── Page ────────────────────────────────────────────────────────────── */
+  .page {
+    background: var(--bg);
+    max-width: 297mm;
+    margin: 0 auto 14px;
+    padding: 2px;
+  }
+  .page + .page {
+    border-top: 3px dashed var(--border);
+    padding-top: 16px;
+  }
+  @media print {
+    .page + .page { border-top: none; padding-top: 0; break-before: page; }
+  }
+  .page-label {
+    display: none;
+  }
+  @media screen {
+    .page-label {
+      display: block;
+      font-size: 7.5pt;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+  }
+
+  /* ── Header ──────────────────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 2px solid var(--text);
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+  }
+  header h1 {
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", ui-monospace, Menlo, monospace;
+    font-size: 15pt;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+  header h1 span {
+    color: var(--c-cyan);
+  }
+  header .meta {
+    font-size: 6.8pt;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.6;
+  }
+  header .tagline {
+    font-size: 8.2pt;
+    color: var(--muted);
+    font-style: italic;
+    align-self: center;
+  }
+
+  /* ── Layout ──────────────────────────────────────────────────────────── */
+  .columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 9px;
+    align-items: start;
+  }
+
+  /* ── Section ─────────────────────────────────────────────────────────── */
+  .section {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+    break-inside: avoid;
+    margin-bottom: 7px;
+  }
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3.5px 7px;
+    font-size: 7.2pt;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: #ffffff;
+  }
+  .section-title .icon { font-size: 8.5pt; }
+
+  /* colour variants, grounded in Mycora's own pane/badge colors */
+  .slate   .section-title { background: var(--c-slate);   }
+  .blue    .section-title { background: var(--c-blue);    }
+  .magenta .section-title { background: var(--c-magenta); }
+  .cyan    .section-title { background: var(--c-cyan);    }
+  .yellow  .section-title { background: var(--c-yellow);  }
+  .red     .section-title { background: var(--c-red);     }
+
+  /* ── Key table ───────────────────────────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  tr:nth-child(even) td { background: #f8fafc; }
+  td {
+    padding: 2px 7px;
+    vertical-align: middle;
+  }
+  td:first-child {
+    width: 36%;
+    white-space: nowrap;
+  }
+  td:last-child {
+    color: var(--muted);
+  }
+
+  /* wider first column for the Command Palette's own tables (long syntax) */
+  .wide-key td:first-child { width: 46%; }
+
+  /* ── Key badge ───────────────────────────────────────────────────────── */
+  kbd {
+    display: inline-block;
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace;
+    font-size: 6.5pt;
+    font-weight: 600;
+    background: var(--key-bg);
+    color: var(--key-fg);
+    border-radius: 3px;
+    padding: 1px 4px;
+    margin: 0 1px;
+    white-space: nowrap;
+    letter-spacing: 0.2px;
+  }
+
+  /* sub-row for indent / nested context */
+  .sub td { padding-left: 16px; color: var(--muted); font-style: italic; }
+  .sub td:first-child { color: var(--muted); }
+  .sub kbd { background: #94a3b8; }
+
+  /* separator row */
+  .sep td { padding-top: 3.5px; border-top: 1px solid var(--border); }
+
+  /* ── Footer ──────────────────────────────────────────────────────────── */
+  footer {
+    margin-top: 2px;
+    border-top: 1px solid var(--border);
+    padding-top: 2px;
+    font-size: 6.3pt;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ PAGE 1 — MAIN TUI ═══════════════════════════ -->
+<div class="page">
+  <div class="page-label">Page 1 of 2 — Main TUI</div>
+  <header>
+    <div>
+      <h1>⌨ <span>mycora</span></h1>
+      <div class="tagline">Tree-native, mycelium-linked note-taking TUI</div>
+    </div>
+    <div class="meta">
+      v0.15.0 &nbsp;·&nbsp; MIT OR Apache-2.0<br>
+      crates.io/crates/mycora<br>
+      github.com/TSODev/mycora
+    </div>
+  </header>
+
+  <div class="columns">
+
+    <!-- ═══════════════════ COLUMN 1 ═══════════════════ -->
+    <div>
+
+      <!-- Global -->
+      <div class="section slate">
+        <div class="section-title"><span class="icon">⌨</span> Global (Normal mode)</div>
+        <table>
+          <tr><td><kbd>q</kbd> <kbd>q</kbd></td><td>Quit — press twice, any other key cancels</td></tr>
+          <tr><td><kbd>Ctrl+C</kbd></td><td>Quit immediately — bypasses any prompt</td></tr>
+          <tr><td><kbd>?</kbd></td><td>Full keybinding reference — any key closes it and still fires</td></tr>
+          <tr><td><kbd>Ctrl+L</kbd></td><td>Force a full terminal redraw (stray-character escape hatch)</td></tr>
+          <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>Shrink / grow the tree pane</td></tr>
+          <tr><td><kbd>{</kbd> <kbd>}</kbd></td><td>Shrink / grow the backlinks pane</td></tr>
+        </table>
+      </div>
+
+      <!-- Tree navigation -->
+      <div class="section blue">
+        <div class="section-title"><span class="icon">🌲</span> Tree Navigation</div>
+        <table>
+          <tr><td><kbd>j</kbd> <kbd>↓</kbd></td><td>Move down</td></tr>
+          <tr><td><kbd>k</kbd> <kbd>↑</kbd></td><td>Move up</td></tr>
+          <tr><td><kbd>l</kbd> <kbd>→</kbd> <kbd>Enter</kbd></td><td>Expand</td></tr>
+          <tr><td><kbd>h</kbd> <kbd>←</kbd></td><td>Collapse</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>Toggle expand/collapse</td></tr>
+          <tr class="sep"><td><kbd>Tab</kbd></td><td>Indent — reparent under previous sibling</td></tr>
+          <tr><td><kbd>Shift+Tab</kbd></td><td>Outdent — reparent as sibling of parent</td></tr>
+          <tr><td><kbd>K</kbd> <kbd>J</kbd></td><td>Reorder up / down among siblings</td></tr>
+        </table>
+      </div>
+
+      <!-- Create / rename / delete / undo -->
+      <div class="section blue">
+        <div class="section-title"><span class="icon">✏</span> Create · Rename · Delete · Undo</div>
+        <table>
+          <tr><td><kbd>a</kbd></td><td>New child note</td></tr>
+          <tr><td><kbd>o</kbd></td><td>New sibling note</td></tr>
+          <tr><td><kbd>i</kbd></td><td>Rename selected note</td></tr>
+          <tr><td><kbd>d</kbd></td><td>Delete — asks for confirmation</td></tr>
+          <tr class="sub"><td><kbd>y</kbd>/<kbd>Enter</kbd> · <kbd>n</kbd>/<kbd>Esc</kbd></td><td>Confirm / cancel the delete</td></tr>
+          <tr class="sep"><td><kbd>u</kbd></td><td>Undo</td></tr>
+          <tr><td><kbd>Ctrl+R</kbd></td><td>Redo</td></tr>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ═══════════════════ COLUMN 2 ═══════════════════ -->
+    <div>
+
+      <!-- Editing a note's body -->
+      <div class="section magenta">
+        <div class="section-title"><span class="icon">📝</span> Editing a Note's Body</div>
+        <table>
+          <tr><td><kbd>e</kbd></td><td>Open the body editor</td></tr>
+          <tr><td>Any key</td><td>Type / edit — <kbd>Enter</kbd> inserts a newline</td></tr>
+          <tr><td><kbd>Ctrl+A</kbd></td><td>Attach a file (copies into the vault, links it)</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Save and return to Normal mode</td></tr>
+          <tr class="sep"><td colspan="2" style="font-style:italic;color:var(--muted);padding-top:4px;">While the <span class="mono">[[wikilink]]</span> autocomplete popup is open:</td></tr>
+          <tr class="sub"><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Move the popup's selection</td></tr>
+          <tr class="sub"><td><kbd>Tab</kbd>/<kbd>Enter</kbd></td><td>Accept the selected title</td></tr>
+          <tr class="sub"><td><kbd>Esc</kbd></td><td>Dismiss just the popup, editor stays open</td></tr>
+        </table>
+      </div>
+
+      <!-- Copy / cut / paste / clipboard -->
+      <div class="section magenta">
+        <div class="section-title"><span class="icon">📋</span> Copy · Cut · Paste · Clipboard</div>
+        <table>
+          <tr><td><kbd>y</kbd></td><td>Duplicate selected note in place (deep-copy)</td></tr>
+          <tr><td><kbd>x</kbd></td><td>Mark for move — <kbd>p</kbd> elsewhere completes it</td></tr>
+          <tr><td><kbd>c</kbd></td><td>Mark for copy — works across vaults</td></tr>
+          <tr><td><kbd>p</kbd></td><td>Paste (move/copy) as the target's last child</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Clear a pending move/copy mark</td></tr>
+          <tr class="sep"><td><kbd>Y</kbd></td><td>Copy the note's raw body to the system clipboard</td></tr>
+        </table>
+      </div>
+
+      <!-- Search, backlinks, links -->
+      <div class="section cyan">
+        <div class="section-title"><span class="icon">🔍</span> Search · Backlinks · Links</div>
+        <table>
+          <tr><td><kbd>/</kbd></td><td>Open search — type to filter</td></tr>
+          <tr class="sub"><td><kbd>↑</kbd> <kbd>↓</kbd> · <kbd>Enter</kbd> · <kbd>Esc</kbd></td><td>Move results · jump · cancel</td></tr>
+          <tr class="sep"><td><kbd>b</kbd></td><td>Focus the backlinks pane</td></tr>
+          <tr class="sub"><td><kbd>j</kbd>/<kbd>k</kbd> · <kbd>Enter</kbd> · <kbd>Esc</kbd>/<kbd>b</kbd></td><td>Move · jump · return focus to tree</td></tr>
+          <tr class="sep"><td><kbd>f</kbd></td><td>Follow the note's outgoing links</td></tr>
+          <tr class="sub"><td><kbd>j</kbd>/<kbd>k</kbd> · <kbd>Enter</kbd> · <kbd>Esc</kbd></td><td>Move · jump · cancel</td></tr>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ═══════════════════ COLUMN 3 ═══════════════════ -->
+    <div>
+
+      <!-- Table of contents -->
+      <div class="section cyan">
+        <div class="section-title"><span class="icon">📑</span> Table of Contents</div>
+        <table>
+          <tr><td><kbd>t</kbd></td><td>List the note's Markdown headings</td></tr>
+          <tr><td><kbd>j</kbd> <kbd>k</kbd></td><td>Move between headings</td></tr>
+          <tr><td><kbd>Enter</kbd></td><td>Jump to the selected heading</td></tr>
+          <tr><td><kbd>x</kbd></td><td>Extract section into a new linked child note</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Cancel, keeping the current selection</td></tr>
+        </table>
+      </div>
+
+      <!-- Broken links + navigation history -->
+      <div class="section cyan">
+        <div class="section-title"><span class="icon">🔗</span> Broken Links &amp; Navigation History</div>
+        <table>
+          <tr><td colspan="2" style="font-style:italic;color:var(--muted);"><span class="mono">:brokenlinks</span> — see Command Palette, page 2</td></tr>
+          <tr class="sub"><td><kbd>j</kbd> <kbd>k</kbd></td><td>Move between broken links</td></tr>
+          <tr class="sub"><td><kbd>Enter</kbd></td><td>Jump to the link's source, scroll to it</td></tr>
+          <tr class="sub"><td><kbd>Esc</kbd></td><td>Cancel, keeping the current selection</td></tr>
+          <tr class="sep"><td><kbd>Ctrl+O</kbd></td><td>Jump back before your last search/backlinks/<br>links/tags/broken-links jump</td></tr>
+        </table>
+      </div>
+
+      <!-- Tags -->
+      <div class="section yellow">
+        <div class="section-title"><span class="icon">🏷</span> Tags</div>
+        <table>
+          <tr><td colspan="2" style="font-style:italic;color:var(--muted);"><span class="mono">:tags</span> / <span class="mono">:tags list</span> — see Command Palette, page 2</td></tr>
+          <tr class="sub"><td><kbd>j</kbd>/<kbd>k</kbd> · <kbd>Enter</kbd> · <kbd>Esc</kbd></td><td>Move · filter/jump · cancel</td></tr>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    <span>mycora v0.15.0 &nbsp;·&nbsp; <strong class="mono">cargo install mycora</strong></span>
+    <span class="mono">:</span>&nbsp;→ full command palette, see page 2</span>
+  </footer>
+</div>
+
+<!-- ═══════════════════════════ PAGE 2 — COMMAND PALETTE ═══════════════════════════ -->
+<div class="page">
+  <div class="page-label">Page 2 of 2 — Command Palette</div>
+  <header>
+    <div>
+      <h1>⌨ <span>mycora</span> <span style="color:var(--muted); font-weight:400; font-size:11pt;">:</span></h1>
+      <div class="tagline">The command prompt — every command mycora recognizes, in one place</div>
+    </div>
+    <div class="meta">
+      v0.15.0 &nbsp;·&nbsp; MIT OR Apache-2.0<br>
+      crates.io/crates/mycora<br>
+      github.com/TSODev/mycora
+    </div>
+  </header>
+
+  <div class="columns">
+
+    <!-- ═══════════════════ COLUMN 1 ═══════════════════ -->
+    <div>
+
+      <!-- How the prompt itself works -->
+      <div class="section slate">
+        <div class="section-title"><span class="icon">⌨</span> The Prompt Itself</div>
+        <table class="wide-key">
+          <tr><td><kbd>:</kbd></td><td>Open the command prompt from Normal mode</td></tr>
+          <tr><td><em>(type)</em></td><td>Edit the command by hand</td></tr>
+          <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Move a cursor through the popup below, filling the prompt with the highlighted entry's syntax</td></tr>
+          <tr><td><kbd>Enter</kbd></td><td>Run the command — <em>or</em>, right after arrowing to a pick, just hide the popup and leave the text to finish typing; a second <kbd>Enter</kbd> then runs it</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Cancel without running anything</td></tr>
+        </table>
+      </div>
+
+      <!-- Reindex & links -->
+      <div class="section cyan">
+        <div class="section-title"><span class="icon">🔗</span> Reindex &amp; Broken Links</div>
+        <table class="wide-key">
+          <tr><td><span class="mono">:reindex</span></td><td>Rebuild the search index for every mounted vault</td></tr>
+          <tr><td><span class="mono">:brokenlinks</span></td><td>List every broken wikilink across every mounted vault, with a best-guess fix; jump to one to fix it by hand</td></tr>
+        </table>
+      </div>
+
+      <!-- Import / export / language / quit -->
+      <div class="section slate">
+        <div class="section-title"><span class="icon">🔀</span> Import · Export · Language · Quit</div>
+        <table class="wide-key">
+          <tr><td><span class="mono">:export &lt;path&gt;</span></td><td>Flatten the selected note's subtree to Markdown or PDF (by extension)</td></tr>
+          <tr><td><span class="mono">:import &lt;path&gt;</span></td><td>Create a child note from an external Markdown file</td></tr>
+          <tr><td><span class="mono">:lang &lt;en|fr|es|de&gt;</span></td><td>Switch the interface language — persists to config.toml</td></tr>
+          <tr><td><span class="mono">:q</span>, <span class="mono">:quit</span></td><td>Quit — same as <kbd>q</kbd> <kbd>q</kbd> in Normal mode</td></tr>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ═══════════════════ COLUMN 2 ═══════════════════ -->
+    <div>
+
+      <!-- Tags -->
+      <div class="section yellow">
+        <div class="section-title"><span class="icon">🏷</span> Tags</div>
+        <table class="wide-key">
+          <tr><td><span class="mono">:tags &lt;t1,t2,...&gt;</span></td><td>Notes matching <em>any</em> of the given tags, across every mounted vault</td></tr>
+          <tr><td><span class="mono">:tags list</span></td><td>Every distinct tag, alphabetically, note counts summed — <kbd>Enter</kbd> filters by one</td></tr>
+          <tr><td><span class="mono">:tags limit &lt;vault&gt;</span></td><td>Restrict <span class="mono">:tags</span>/<span class="mono">:tags list</span> to one mounted vault</td></tr>
+          <tr><td><span class="mono">:tags unlimit</span></td><td>Lift a <span class="mono">:tags limit</span>, back to every vault</td></tr>
+          <tr class="sep"><td><span class="mono">:tag add &lt;tag&gt;</span></td><td>Add a tag to the selected note</td></tr>
+          <tr><td><span class="mono">:tag del &lt;tag&gt;</span></td><td>Remove a tag from the selected note</td></tr>
+        </table>
+      </div>
+
+      <!-- Vaults & layout -->
+      <div class="section blue">
+        <div class="section-title"><span class="icon">🗂</span> Vaults &amp; Layout</div>
+        <table class="wide-key">
+          <tr><td><span class="mono">:panes reset</span></td><td>Reset the split layout to the default 40/40/20</td></tr>
+          <tr><td><span class="mono">:config unmount &lt;show|hide&gt;</span></td><td>Show/hide unmounted-vault placeholder rows in the tree</td></tr>
+          <tr><td><span class="mono">:config archive &lt;show|hide&gt;</span></td><td>Show/hide archived-vault placeholder rows in the tree</td></tr>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ═══════════════════ COLUMN 3 ═══════════════════ -->
+    <div>
+
+      <!-- CLI equivalents -->
+      <div class="section slate">
+        <div class="section-title"><span class="icon">💻</span> Headless / CLI Equivalents</div>
+        <table class="wide-key">
+          <tr><td><span class="mono">mycora reindex [--watch]</span></td><td>Same as <span class="mono">:reindex</span>, outside the TUI; <span class="mono">--watch</span> keeps running</td></tr>
+          <tr><td><span class="mono">mycora repair [--apply]<br>[--create-stubs] [--vault &lt;n&gt;]</span></td><td>Batch report/fix for broken wikilinks — <span class="mono">:brokenlinks</span>' headless, all-at-once sibling</td></tr>
+          <tr><td><span class="mono">mycora export &lt;title&gt; &lt;out&gt;</span></td><td>Same as <span class="mono">:export</span>, by exact title instead of selection</td></tr>
+          <tr><td><span class="mono">mycora vault ...</span></td><td>add · mount · unmount · archive · unarchive ·<br>import · sync-filenames</td></tr>
+        </table>
+      </div>
+
+      <!-- Tips -->
+      <div class="section slate">
+        <div class="section-title"><span class="icon">💡</span> Tips</div>
+        <table class="wide-key">
+          <tr><td>Unknown command</td><td>Reports an error in the status bar — never silently a no-op</td></tr>
+          <tr><td>Popup pick shortcut</td><td>Arrowing to <span class="mono">:tags &lt;tag1,...&gt;</span> fills in <span class="mono">tags </span> — placeholders are stripped, not inserted</td></tr>
+          <tr><td>Config file</td><td><span class="mono">~/.config/mycora/config.toml</span> (Linux/macOS),<br><span class="mono">%APPDATA%\mycora\config.toml</span> (Windows)</td></tr>
+          <tr><td>Index</td><td>Disposable SQLite at <span class="mono">~/.local/share/mycora/</span> — safe to delete, rebuilt on demand</td></tr>
+          <tr><td>PDF export font</td><td>Embedded DejaVu Sans/Mono — Latin/Greek/Cyrillic render correctly, CJK/emoji don't yet</td></tr>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    <span>mycora v0.15.0 &nbsp;·&nbsp; <strong class="mono">cargo install mycora</strong></span>
+    <span>github.com/TSODev/mycora &nbsp;·&nbsp; USAGE.md for the full reference</span>
+  </footer>
+</div>
+
+</body>
+</html>
