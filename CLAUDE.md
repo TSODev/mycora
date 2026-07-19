@@ -37,6 +37,9 @@ cargo test <substring>    # e.g. `cargo test deep_copy` — matches by test/modu
 cargo test -p mycora vault::tests::save_then_load_round_trips_a_note  # single test
 cargo clippy
 cargo run --example generate-test-vault [output_dir] [leaf_note_count]
+cargo run --release --example benchmark -- 100 1000 5000 10000
+                           # timed load/reindex/search/visible_rows passes
+                           # at each given vault size — see BENCHMARK.md
 mycora reindex [--watch]  # CLI subcommand, not a cargo command — rebuilds
                            # the SQLite index for every mounted vault; --watch
                            # keeps running and reindexes on file changes
@@ -50,13 +53,20 @@ mycora repair [--apply] [--create-stubs] [--vault <name>]
   see `vault.rs`/`app.rs`) which need a recent-enough edition 2024 compiler —
   if a build fails with a parse error on those `&&`-chained `let`s, suspect
   an old toolchain first.
-- No `rustfmt.toml`/`clippy.toml`, no CI workflow (`.github/workflows` does
-  not exist), no Cursor/Copilot instruction files in this repo.
+- No `rustfmt.toml`/`clippy.toml`, no Cursor/Copilot instruction files in
+  this repo. `.github/workflows/windows-release.yml` is the one CI
+  workflow that does exist (see ROADMAP.md's Windows support entry) —
+  not a test/lint gate on every push, just a release-time job: on every
+  `v*` tag push (which `PUBLISH.md`'s own release flow ends with) it
+  builds a native Windows binary on `windows-latest` (not cross-compiled
+  from Linux, specifically so `rusqlite`'s `bundled` feature has a real
+  MSVC toolchain to compile SQLite's C source against) and attaches it
+  to the matching GitHub Release.
 - **Tests are all `#[cfg(test)] mod tests` unit tests**, spread across
   `tree.rs`, `vault.rs`, `config.rs`, `index.rs`, `link.rs`, `lang.rs`,
   `markdown.rs`, `outline.rs`, `import.rs`, `repair.rs`, `session.rs`,
-  `app.rs`, and `clipboard.rs` — there is no `tests/` integration
-  directory. None of
+  `app.rs`, `clipboard.rs`, `archive.rs`, and `export.rs` — there is no
+  `tests/` integration directory. None of
   them need an external service, network, or env var: `vault.rs`/`index.rs`
   tests build a scratch directory under `std::env::temp_dir()` per test
   (unique via a fresh UUID) and clean it up at the end. The only place
@@ -125,6 +135,20 @@ directly and guarantee its synthetic output matches the real on-disk format.
   sync-filenames <name>` (`main.rs`) is the retroactive fixer for notes
   that already drifted before this existed — just every note re-saved
   through the same path.
+- **`archive.rs`**: `archive_vault_dir`/`unarchive_vault_dir` gzip-tar a
+  vault directory to a single `.tar.gz` and back (`tar` + `flate2`, paths
+  inside relative to the vault dir itself, not prefixed with its own
+  directory name, so the round trip works regardless of what either end
+  is named) — backing `mycora vault archive <name> [output]`/`vault
+  unarchive <name>` in `main.rs`, the "make an unmounted vault's
+  directory stop existing on disk without deleting it" pair
+  (`TreeRow::ArchivedVault` in `app.rs` is the tree pane's placeholder
+  for one). Archiving refuses a still-mounted vault (unmount first) and
+  calls `verify_archive` right after writing — reads every entry's
+  header (no extraction) and counts regular files, failing loudly on a
+  corrupt/truncated archive or an accidentally-empty one — *before*
+  `main.rs`'s caller removes the original directory, so a bad archive is
+  never the last copy of the vault's notes.
 - **`import.rs`**: reads *foreign* Markdown into a `Tree`, mirroring
   `Vault::load`'s `(Tree, warnings)` shape for sources that aren't
   Mycora's own format. `import_obsidian_vault(dir)` (bulk, `mycora vault
