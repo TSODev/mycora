@@ -7,7 +7,7 @@ tags:
 - export
 - v0.8
 created: 2026-07-11T11:30:00Z
-updated: 2026-07-11T11:30:00Z
+updated: 2026-07-19T09:00:00Z
 ---
 
 # PDF export renders through a pure-Rust crate
@@ -43,3 +43,23 @@ to document and remember instead of two that do almost the same thing.
 `export::write_output` is the one place both the TUI and CLI export
 paths call to actually write the file, so the extension check lives in
 exactly one place rather than being duplicated at each call site.
+
+**Unicode fix (2026-07-18).** Non-ASCII text was rendering as a literal
+`?` — confirmed by actually exporting accented/Cyrillic/CJK/emoji
+content and reading the PDF back: "Café à Zürich" round-tripped as
+"Caf? ? Z?rich". Root cause was in `markdown2pdf` itself, not
+unreasonable code here: leaving its `FontConfig` as `None` falls back
+to the 14 standard PDF fonts, which — by the crate's own doc comment —
+only transliterate a curated set of punctuation and replace everything
+else, accented Latin included, with `?`. Fix: embed DejaVu Sans/Sans
+Mono (Bitstream Vera License, `assets/fonts/`, ~1.1MB) via
+`include_bytes!` and pass them as the font config, rather than
+`FontSource::System` — keeping export self-contained, the same
+reasoning that picked `markdown2pdf` over shelling out to `pandoc`/
+`wkhtmltopdf` in the first place (above). Covers Latin
+Extended/Greek/Cyrillic; CJK and emoji are still out of range (a font
+with that coverage is a much bigger asset), and bold text renders in
+the same regular weight rather than true bold, since `markdown2pdf`
+only auto-discovers a bold sibling font next to an on-disk file, not
+an embedded one — both open follow-ups, not silently accepted
+regressions.

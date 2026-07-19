@@ -7,7 +7,7 @@ tags:
 - links
 - cli
 created: 2026-07-17T09:00:00Z
-updated: 2026-07-17T10:30:00Z
+updated: 2026-07-19T09:00:00Z
 ---
 
 # Repairing broken links
@@ -65,3 +65,13 @@ preview near the broken text itself (not just the top of the note), so
 manual edit, no special mechanism, then `Esc` saves like any other
 change. `Ctrl+O` afterward returns to wherever the jump started from,
 same as [[Navigation history]] everywhere else.
+
+**Code blocks don't count (2026-07-18).** A `[[...]]`-shaped sequence
+inside a fenced code block or inline code span — TOML's array-of-tables
+syntax (`[[campaign.steps]]`), say, shown as a code example inside a
+note — used to trigger a bogus broken-link warning on every reindex,
+since the wikilink scanner had no notion of Markdown structure. Fixed
+by computing code byte-ranges via a `pulldown-cmark` parse first (the
+same one [[Table of contents and section extraction]] already uses for
+its own heading scanning) and skipping any `[[...]]` match that falls
+inside one.

@@ -37,6 +37,7 @@
 - [Backlinks](#backlinks)
 - [Following links](#following-links)
 - [Navigation history](#navigation-history)
+- [Copying a note's body to the clipboard](#copying-a-notes-body-to-the-clipboard)
 - [Table of contents and extracting sections](#table-of-contents-and-extracting-sections)
 - [Command palette](#command-palette)
 - [Exporting a subtree](#exporting-a-subtree)
@@ -486,6 +487,13 @@ A `[[wikilink]]` whose title matches no note is a **broken link** —
 actually fix one: `mycora repair`, a CLI, headless, and batch-oriented
 tool, for fixing many at once without opening the TUI at all; and
 `:brokenlinks` (below), the TUI's own review-one-at-a-time equivalent.
+
+`[[...]]`-shaped text inside a fenced code block or inline code span
+is never treated as a wikilink in the first place — useful for showing
+TOML's array-of-tables syntax (`[[campaign.steps]]`) or similar as a
+code example inside a note without it showing up as a bogus broken
+link on every reindex.
+
 `mycora repair` has three tiers from safest to most invasive:
 
 ```sh
@@ -722,6 +730,23 @@ to indent, at the terminal level); with nothing left to go back to,
 `Ctrl+O` is a no-op. Session-only, like [undo and
 redo](#undo-and-redo) — not persisted across restarts.
 
+## Copying a note's body to the clipboard
+
+`Y` copies the selected note's raw body (the Markdown source, not the
+rendered preview) to the system clipboard — a shortcut for when a
+mouse-drag selection would also grab the tree/backlinks panes next to
+the body preview column, since a plain terminal selection works by row
+across the whole terminal width, not by pane.
+
+Implemented via an OSC 52 escape sequence written straight to the
+terminal, not an OS-level clipboard library — this also means it works
+over a bare SSH session, since it's the terminal on your end that
+intercepts the sequence, not the remote shell. Works from inside tmux
+too (detected automatically), wrapped in tmux's own passthrough
+sequence so it reaches the real terminal underneath rather than being
+swallowed. A status message confirms the copy; copying an empty body
+reports that there's nothing to copy instead.
+
 ## Table of contents and extracting sections
 
 `t` opens a full-pane overlay listing the selected note's Markdown
@@ -770,6 +795,18 @@ just the status bar's hint row (the breadcrumb above it stays visible).
 A popup listing every recognized command also appears, above the prompt,
 for as long as it's open — no need to remember the command set. Type a
 command, `Enter` to run it, `Esc` to cancel without doing anything.
+
+The popup also has a cursor: `↑`/`↓` move a highlighted row through it,
+each move filling the prompt with that command's syntax (e.g. arrowing
+to `:tags <tag1,tag2,...>` fills in `:tags `, ready to type tag names
+straight after — the `<placeholder>` part is dropped rather than
+inserted literally, since that would just be more to delete by hand).
+`Enter` right after a pick doesn't run it immediately — for a command
+that still needs an argument, that would just fail — it hides the popup
+instead and leaves the picked text in the prompt to finish typing; a
+*second* `Enter` then runs whatever's there for real. Typing a whole
+command by hand without ever touching the list still runs on a single
+`Enter`, exactly as if the popup weren't there at all.
 
 - `:reindex` — manually reindexes the mounted vaults (the same reindex
   search already triggers automatically), reporting how many notes were
@@ -848,6 +885,16 @@ The output **format is inferred from the path's extension**: `.pdf`
 renders a paginated PDF (headings, bold/italic, code blocks, and lists
 all styled); anything else is written as plain Markdown. Same command
 either way — nothing else about `:export`/`mycora export` changes.
+
+PDF export embeds its own Unicode font (DejaVu Sans/Sans Mono) rather
+than depending on whatever's installed on the machine, so accented
+Latin (French included), Greek, and Cyrillic text render correctly in
+headings, body text, and code blocks alike. Two known limits: CJK
+(Chinese/Japanese/Korean) and emoji aren't covered — a font with that
+range would be a much bigger asset — and bold text renders in the same
+regular weight rather than a true bold face, a small trade-off for
+keeping every character correct rather than reintroducing the old
+`?`-for-everything-non-ASCII bug for something as common as a heading.
 
 From the TUI:
 
@@ -1097,12 +1144,14 @@ changes, for the rest of the session. Not persisted across restarts.
 | `t` | Open the table of contents (see [Table of contents and extracting sections](#table-of-contents-and-extracting-sections)) |
 | `Ctrl+d` / `Ctrl+u` | Scroll the body preview down / up |
 | `Ctrl+o` | Jump back to before your last search/backlinks/links/tags jump (see [Navigation history](#navigation-history)) |
+| `Y` | Copy the selected note's body (raw Markdown) to the system clipboard |
 | `[` / `]` | Shrink / grow the tree pane (see [Layout](#layout)) |
 | `{` / `}` | Shrink / grow the backlinks pane |
 | `:` | Open the command palette (see [Command palette](#command-palette)) |
 | `?` | Open this reference — any key closes it, and if that key does something in Normal mode, it does it too (e.g. `?` then `f` opens outgoing links in one step) |
 | `q` `q` | Quit (press twice — any other key cancels) |
 | `Ctrl+C` | Quit immediately — bypasses any prompt or confirmation |
+| `Ctrl+L` | Force a full terminal redraw — a manual escape hatch for stray leftover characters some terminal/GPU-compositor combinations occasionally leave on screen after a partial repaint, the same fix a window resize already happens to give you |
 
 This table is the same reference `?` opens in the TUI itself — Normal
 mode's own status-bar hint row only shows a short, curated subset of
@@ -1181,7 +1230,8 @@ apply to the popup instead of the rows above:
 | Key | Action |
 |---|---|
 | *(type)* | Edit the command (see [Command palette](#command-palette)) |
-| `Enter` | Run the command |
+| `↑` / `↓` | Move the cursor through the command reference popup, filling the prompt with the highlighted entry's syntax |
+| `Enter` | Run the command — or, right after arrowing to an entry, just hide the popup and leave the picked text in the prompt to finish typing (a second `Enter` then runs it) |
 | `Esc` | Cancel without running anything |
 
 ### Tags (`:tags list`)

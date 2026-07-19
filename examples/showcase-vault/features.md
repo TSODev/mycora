@@ -5,7 +5,7 @@ order: 2
 tags:
 - features
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-17T10:30:00Z
+updated: 2026-07-19T09:00:00Z
 ---
 
 # Features
@@ -38,5 +38,7 @@ What's actually built, grouped by area:
   wikilinks
 - [[Navigation history]] — `Ctrl+O` jumps back through your last few
   search/backlinks/links/tag-results/broken-links jumps
+- [[Copying a note's body to the clipboard]] — `Y` copies the selected
+  note's raw body to the system clipboard, tmux/SSH-aware
 
 See [[Roadmap]] for what's still ahead.

@@ -7,14 +7,25 @@ tags:
 - command-palette
 - v0.7
 created: 2026-07-10T09:00:00Z
-updated: 2026-07-17T10:30:00Z
+updated: 2026-07-19T09:00:00Z
 ---
 
 # Command palette
 
 `:` in Normal mode opens a vim/helix-style command prompt,
 replacing only the [[Status bar]]'s hint row. A popup listing every
-command also appears above the prompt for as long as it's open.
+command also appears above the prompt for as long as it's open, with a
+selectable cursor: `↑`/`↓` move a highlighted row through it, each
+move filling the prompt with that entry's syntax (leading `:` and any
+`<placeholder>` stripped — arrowing to `:tags <tag1,tag2,...>` fills in
+`tags `, ready to type tag names straight after, rather than inserting
+a template that's just more to delete by hand). `Enter` right after a
+pick doesn't run it — several commands still need an argument typed
+in, and running `:export ` with nothing after it would just fail — it
+hides the popup instead, leaving the picked text in the prompt to
+finish; a second `Enter` then runs it for real. Typing a whole command
+by hand without ever touching the list still runs on a single `Enter`,
+unaffected by any of this.
 
 - `:reindex` — manually rebuilds the [[Search and indexing]] index,
   reporting how many notes were indexed
