@@ -1830,6 +1830,194 @@ Goal: stability before a public release.
       everything else). 193 tests, clippy clean, on the platform this
       was actually tested on.
 
+- [x] **`Ctrl+L` — force a full terminal redraw** (2026-07-18,
+      user-reported) — raised as "some terminals leave stray characters
+      on screen": confirmed live in tmux under kitty (`$TERM
+      xterm-kitty`) that leftover glyphs from a previous note's body
+      preview sometimes survive a redraw, and that a manual window
+      resize reliably clears them (ratatui's `autoresize` forces a full
+      repaint on a size change) — pointing at a terminal/GPU-compositor
+      diff-repaint desync, not an app-side data or logic bug, since
+      switching notes redraws from a freshly-reset `Buffer` every frame
+      regardless. No code fix for the root cause (outside this app's
+      control), but no existing way to *manually* force the same
+      recovery a resize gives you either — vim/htop's `Ctrl+L`
+      convention filled that gap. `App` gained `force_redraw: bool` +
+      `request_redraw`/`take_force_redraw` (request/consume, since `App`
+      doesn't own the `Terminal` to call `.clear()` itself); `event.rs`
+      checks it unconditionally before mode dispatch, same as `Ctrl+C`,
+      so it works regardless of what's on screen; `main.rs`'s `run` loop
+      calls `terminal.clear()` when consumed. Added to `?`'s
+      `help_reference` in all four languages (same index-parity test
+      that already guards `command_reference`). Verified in tmux: no
+      crash, clean `q q` exit, `EXITCODE=0`.
+
+- [x] **Wikilink detection ignores `[[...]]` inside code blocks/inline
+      code** (2026-07-18, user-reported) — TOML's array-of-tables syntax
+      (`[[campaign.steps]]`), shown as a code example inside a note
+      documenting a Terapi campaign config, was tripping `:brokenlinks`/
+      `mycora repair` as a bogus broken link on every reindex —
+      `link.rs`'s hand-rolled `[[title]]` bracket scanner has no
+      Markdown structure of its own, so code and prose look identical to
+      it. Fix: `code_ranges(body)` runs a `pulldown-cmark` parse first
+      (same `Options::ENABLE_TABLES` as `markdown.rs`/`outline.rs`, for
+      the three to agree on what counts as code) to collect the byte
+      ranges of fenced code blocks and inline code spans; both
+      `extract_wikilink_titles` and `rewrite_wikilink_title` skip any
+      `[[...]]` whose start falls inside one, rather than teaching the
+      scanner Markdown structure directly. `unclosed_wikilink_start`
+      (the editor's live autocomplete popup) deliberately left
+      untouched — it works line-by-line mid-keystroke with no whole-body
+      Markdown context to parse. Verified against the real showcase
+      vault: temporarily added a genuine broken `[[wikilink]]` to
+      `repairing-broken-links.md` (git-tracked, reverted after), then
+      confirmed live in tmux that `f` never lists it as an outgoing link
+      and `:brokenlinks` → `Enter` jumps to the *source* note without
+      crashing (see the `app.rs` test-coverage entry just below — this
+      is what prompted it). Re-ran `mycora repair` against the user's
+      own "default" vault afterward: the ~30 false-positive
+      `[[steps]]`/`[[params]]`/etc. hits from "Campaign runner" all
+      disappeared, down to 0 broken links. 3 new tests in `link.rs` (222
+      total), clippy clean.
+
+- [x] **`app.rs` test coverage: following a broken wikilink can't
+      crash or misdirect** (2026-07-18, user-asked "can we make sure of
+      it?") — `app.rs` (3000+ lines) had zero unit tests before this,
+      unlike every other module (see the Commands section above). Static
+      read confirmed both "follow" paths are safe by construction:
+      `Index::outgoing_links` inner-joins against `notes`, so a broken
+      title can never appear in `f`'s results at all; `:brokenlinks`'s
+      `confirm_broken_wikilinks` jumps to the link's *source* note
+      (guaranteed indexed) rather than the missing target, and `reveal`/
+      `set_selected` are total functions over any `NoteId`, existing or
+      not. Verified live too (see the wikilink-code-block entry above)
+      before writing it down as a regression test: added a
+      `#[cfg(test)]`-only `App::new_for_test(tree, vault, index,
+      vault_id)` constructor, bypassing `App::new()`'s dependence on
+      real `~/.config`/`~/.local/share` paths (same scratch-`Tree`/
+      `Vault`/`Index`-under-`temp_dir()` convention `vault.rs`/
+      `index.rs`'s own tests already use, just assembled into a full
+      `App`), plus two tests confirming `f` never lists a broken
+      wikilink as an outgoing link, and `:brokenlinks`'s `Enter` jumps
+      to the source note without panicking. 224 tests total (up from
+      222), clippy clean.
+
+- [x] **`Y` — copy the selected note's body to the system clipboard**
+      (2026-07-18, user-requested) — asked for a way to copy just the
+      body preview pane's text without a mouse drag also grabbing the
+      tree/backlinks panes next to it (a plain terminal click-drag
+      selects whole rows across all three columns, pane boundaries
+      aside). Two options raised: a terminal-side workaround (most
+      terminals, kitty included, support rectangular/column selection
+      via a modifier-held drag) needing no code at all, or a native
+      keybinding. Went with both — the terminal trick as an immediate
+      answer, the keybinding as the durable fix. Implementation: OSC 52
+      escape sequence written straight to stdout rather than an
+      OS-clipboard crate (`arboard` and similar need direct X11/Wayland
+      access, and don't work over a bare SSH session the way OSC 52
+      does, since it's the *client*-side terminal that intercepts the
+      sequence). New `clipboard.rs` — its own hand-rolled base64
+      encoder (RFC 4648, padded; a known-vector test backs it) rather
+      than a new dependency for something this small and stable — plus
+      `osc52_sequence(text, in_tmux)`, split out as a pure function so
+      the exact tmux-wrapped byte layout — `ESC P tmux ;` then the
+      sequence itself with its own leading `ESC` doubled (tmux's DCS
+      parser strips one layer), then `ESC` and a backslash to close —
+      can be asserted in a test without a real tmux session; detected
+      via the `TMUX` env var, the same check
+      every other OSC 52 tool uses — tmux otherwise swallows an
+      arbitrary escape sequence instead of forwarding it to the real
+      terminal underneath. Same request/consume shape as `Ctrl+L`'s
+      `force_redraw` (`App::copy_body_to_clipboard` queues into
+      `clipboard_copy`, `main.rs`'s `run` loop drains it right after
+      each event) since `App` doesn't own stdout either. Verified live
+      in tmux both outside and inside a session (`$TMUX` set): status
+      message shown, clean exit, no panic either way. 227 tests, clippy
+      clean.
+
+- [x] **Command palette: selectable cursor on the help popup, `Enter`
+      dismisses after a pick instead of running it** (2026-07-18,
+      user-requested, two related asks back to back) — first ask: put a
+      cursor on `:`'s command-reference popup and let arrowing to an
+      entry auto-fill the prompt. `App` gained `command_help_selected:
+      usize` + `move_command_help_selection(delta)` (`Up`/`Down`,
+      cyclic like every other `move_*_selection`), which overwrites
+      `command_input` with `command_help_fill_text(syntax)` — the
+      entry's syntax with the leading `:` and any `<placeholder>`
+      dropped (e.g. `:tags <tag1,tag2,...>` → `tags `, ready to type
+      tag names straight after) rather than inserting a template that's
+      more to delete by hand than typing the command name was. `ui.rs`'s
+      `draw_command_help` reverses the selected row's style, same
+      convention as `draw_backlinks_pane`'s focused entry. Verified in
+      tmux, including raw-ANSI capture (`tmux capture-pane -e`)
+      confirming the `[1;7m` reverse-video code actually lands on the
+      right row.
+
+      **Since extended** (same day, follow-up ask): "can `Enter` on a
+      selected entry clear the popup and let me keep typing, e.g. pick
+      `:export`, `Enter`, then type the path?" Running the picked syntax
+      immediately would just fail for anything still missing a
+      `<placeholder>`'s worth of argument. Added `command_help_open: bool`
+      (does the popup render at all) and `command_help_navigated: bool`
+      (armed by `move_command_help_selection`, so only an *actual* list
+      pick triggers this — typing a whole command by hand, e.g. `:q`,
+      still runs on a single `Enter` exactly as before this feature
+      existed). `execute_command`'s first line now checks
+      `command_help_navigated`: if set, hide the popup and clear the
+      flag without executing, leaving `Mode::Command` and
+      `command_input` untouched; arrowing again (even after a dismiss)
+      reopens the popup and re-arms the flag. Verified the exact
+      scenario end to end in tmux: `:` → 7×`Down` to `:export` →
+      `Enter` (popup gone, `:export ` still in the prompt, pane
+      restored underneath) → typed a scratchpad path → `Enter` → real
+      21KB file written, "exported to ..." message shown. 2 more tests
+      (confirming a pick-then-`Enter` dismisses rather than runs, and
+      that typing a whole command by hand still runs on one `Enter`) —
+      231 tests total, clippy clean.
+
+- [x] **PDF export: fix non-ASCII text rendering as literal `?`**
+      (2026-07-18, user-asked "does PDF export handle Unicode?") —
+      confirmed by actually exporting accented/Cyrillic/CJK/emoji
+      content to a real PDF and reading it back with `pdftotext`: every
+      non-ASCII character came out as a literal `?` — "Café à Zürich"
+      round-tripped as "Caf? ? Z?rich". Root cause found in
+      `markdown2pdf`'s own source, not
+      Mycora's: `export::write_output` passed `None` for the crate's
+      `FontConfig`, so it fell back to the 14 standard PDF fonts, which
+      — by the crate's own `to_win1252` doc comment — only transliterate
+      a curated set of punctuation and replace *everything* else,
+      accented Latin letters included, with `?`. `markdown2pdf` does
+      support a real Unicode TTF via `FontSource`, just never wired up
+      here. Scope question (Latin/Cyrillic/Greek-only vs. full CJK/emoji
+      coverage, a much bigger font asset) put to the user via
+      `AskUserQuestion`; picked the smaller scope. Vendored DejaVu Sans
+      + DejaVu Sans Mono (`assets/fonts/`, Bitstream Vera License,
+      ~1.1MB combined, copied from the locally-installed
+      `fonts-dejavu-core` package with its license text preserved
+      alongside) and embedded both via `include_bytes!` rather than
+      `FontSource::System` — keeps PDF export self-contained, the same
+      reasoning that picked `markdown2pdf` over shelling out to
+      `pandoc`/`wkhtmltopdf` in the first place (see the v0.8 entry
+      above). Known, documented limitation kept rather than chased:
+      `markdown2pdf` only auto-discovers a bold sibling font next to an
+      on-disk file (`FontSource::File`/`System`, by filename
+      convention) — an embedded `FontSource::Bytes` has no path for
+      that, so bold text (every heading, since `flatten_subtree` turns
+      note titles into headings) falls back to
+      the same *regular*-weight embedded font rather than a *builtin*
+      bold one, trading true boldness for keeping Unicode correct
+      rather than reintroducing the `?` bug for every heading. Verified
+      against real accented/Cyrillic/code-block content (all render
+      correctly now) and against a real showcase-vault note end to end.
+      New test `write_output_embeds_a_unicode_font_for_pdf_paths`
+      compares output size against the same content through
+      `markdown2pdf`'s own builtin-font path directly, since
+      `markdown2pdf` compresses object streams — even the font
+      dictionary isn't visible to a plain byte search, so a subsetted
+      embedded font's several extra KB is the signal used instead. 232
+      tests total, clippy clean. Released as 0.15.0 the next day
+      (2026-07-19), alongside every entry above.
+
 ---
 
 ## Open design questions
