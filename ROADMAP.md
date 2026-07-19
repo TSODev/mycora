@@ -1830,6 +1830,209 @@ Goal: stability before a public release.
       everything else). 193 tests, clippy clean, on the platform this
       was actually tested on.
 
+- [x] **Render GFM tables in the Markdown preview pane** (2026-07-16;
+      backfilled 2026-07-19, see the note on the `mycora repair` entry
+      below for why). Tables previously fell through to literal pipe-
+      and-dash text since `Options::ENABLE_TABLES` wasn't passed to
+      `pulldown-cmark`'s parser at all. First pass: render them as a
+      bordered grid (box-drawing characters, dimmed) with a bold header
+      row and per-column alignment honoring GFM's alignment markers
+      (left/right/center-justified columns) — 3 new tests. Immediate
+      follow-up, same day:
+      the body preview pane wraps every rendered line with ratatui's
+      `Wrap` widget for ordinary prose reflow, but a table line at its
+      natural, unconstrained width was often much wider than the pane,
+      so `Wrap` broke it at arbitrary points, slicing straight through
+      the box-drawing borders mid-character. `markdown::render` gained
+      a `width: u16` parameter (the pane's inner width, from `ui.rs`)
+      used *only* by the table path: `allocate_column_widths` shrinks
+      columns to fit it first (each column's floor-divided share of the
+      budget, proportional to its ideal content width) and `wrap_cell`
+      greedily word-wraps each cell into that column, hard-breaking at
+      the character level as a last resort for a single word too long
+      to fit at all — so every line a table emits is already exactly
+      `width` columns wide and `Wrap` has nothing left to do to it.
+      Everything else (prose, headings, lists, code) still relies on
+      `Wrap` exactly as before — 2 more tests. Second follow-up, same
+      day: every one of those width/padding calculations was using
+      `str::chars().count()`, which undercounts anything the terminal
+      renders double-wide (emoji like `❌`/`✅`, CJK text — one `char`,
+      two columns) — a table's right border drifted out of alignment
+      starting on the first double-wide row even with the fix above
+      already in place. Column sizing, cell padding, and wrapping all
+      moved to the `unicode-width` crate instead — promoted to an
+      explicit direct dependency even though `ratatui-core` already
+      pulls it in transitively, specifically so relying on that
+      transitive edge silently couldn't break the moment ratatui's own
+      dependency graph changed — matching how ratatui's own `Wrap`
+      widget measures text in the first place. 1 more test. 6 new tests
+      total across the three commits, all in `markdown.rs`.
+
+- [x] **Table of contents overlay with section extraction (`t`/`x`)**
+      (2026-07-16; backfilled 2026-07-19 — see the `mycora repair`
+      entry a few items below for why this file is being backfilled at
+      all). `t` opens a full-pane list of the selected
+      note's Markdown headings, indented by level; `Enter` scrolls the
+      body preview to the chosen one. `x` extracts that heading's whole
+      section into a new child note, replacing it in the source body
+      with a `[[wikilink]]` — turning an in-body heading into the app's
+      two existing structural primitives (a tree child + a live
+      wikilink) rather than inventing a third kind of thing. Extraction
+      is deliberately non-recursive: a sub-heading nested inside the
+      extracted section stays as plain Markdown text in the new note's
+      body rather than cascading into its own note in turn, keeping
+      each `x` press one small, cleanly undoable step. New
+      `src/outline.rs` does the heading/section byte-range scanning —
+      `pulldown-cmark`'s `into_offset_iter()`, unused anywhere else in
+      the crate until this — kept independent of `markdown.rs`'s
+      styling concerns, the same logic/rendering split as elsewhere in
+      this codebase. The jump/extraction target's on-screen line is
+      computed by re-rendering the body prefix up to that byte offset
+      at a fixed constant width and counting the lines produced, since
+      `App` never actually knows the live body-preview pane width
+      (`ui.rs` stays pure rendering, nothing added there to expose it)
+      — exact for every block type except tables (width-sensitive),
+      gracefully approximate otherwise. `UndoAction` gained a
+      `Compound(Vec<UndoAction>)` variant so extraction's two mutations
+      (create the child note, rewrite the source body) undo and redo
+      together as one stack entry instead of two. 9 new tests, split
+      across `outline.rs` and `app.rs`.
+
+      **Since fixed, twice, same week**: extraction is guaranteed to
+      both add a `[[wikilink]]` *and* create the exact note it resolves
+      to — unlike an ordinary body edit (which merely *might* add a
+      link) or `create_child` (which never does). The initial `x` press
+      reindexed immediately after for exactly this reason (2026-07-17
+      morning) — without it, jumping straight to the new note and
+      pressing `b` (which doesn't reindex on its own) showed an empty
+      backlinks pane until some unrelated later action happened to
+      trigger one, the same staleness `begin_links` already avoids by
+      reindexing before showing outgoing links. That reindex only
+      covered the forward `x` press, though — undoing removes the same
+      link+note pair, redoing recreates it, and neither went through
+      the same fix, so the identical staleness could reappear right
+      after `u`/`Ctrl+R`. Fixed the same day by moving the reindex into
+      `apply_undo_action`'s `Compound` arm itself rather than
+      `extract_toc_selection` alone, so it fires uniformly on the
+      original action, undo, and redo — and for free on any future
+      `Compound` user, not just this one.
+
+- [x] **`:import <path>` — create a note from a single external
+      Markdown file** (2026-07-17; backfilled 2026-07-19, see the note
+      on the entry just below). The v0.8 entry above reasoned that
+      TUI-side import didn't make sense — `mycora import` (bulk,
+      whole-Obsidian-vault) always creates a *new* vault, with no
+      analogous "current selection" for a single-file `:import` to
+      import *into*. That reasoning held for whole-vault import
+      specifically, not for a single file: `:import <path>` creates the
+      new note as a *child of the selected note* in the active vault,
+      which does have an obvious target once you frame it as "add this
+      one file here" rather than "recreate a whole foreign vault."
+      Reuses the exact per-file parsing the bulk importer already had —
+      extracted out into a shared `import::parse_foreign_note` function
+      so a file means the same thing whichever door it comes in
+      through: title from the filename, tags
+      from optional YAML frontmatter (best-effort — unparseable
+      frontmatter becomes a warning, not a failed import), every
+      `[[Title|Alias]]`/`[[Title#Heading]]` rewritten down to plain
+      `[[Title]]` since `link.rs`'s scanner only understands the bare
+      form. Gated by the same `require_editable` check as every other
+      mutating command. 2 new tests in `import.rs`.
+
+- [x] **`mycora repair` — detect and fix broken `[[wikilink]]`s**
+      (2026-07-17; backfilled into this file 2026-07-19, reconstructed
+      from the commit's own message/diff and `CLAUDE.md`'s existing
+      `repair.rs` writeup rather than live session notes, since this
+      predates the conversation that's been keeping this file current
+      since). `reindex` already *warned* about a wikilink title matching
+      no note; nothing did anything about it. Three tiers, safest to
+      most invasive: report-only by default — every broken link across
+      every mounted vault, with a best-guess suggestion where one
+      exists (a case-insensitive exact-title match, since Mycora's own
+      matching is case-sensitive and that's judged the single most
+      likely real cause of a broken link; otherwise a close-enough
+      `strsim::jaro_winkler` fuzzy match, refusing to guess below a
+      confidence threshold or when two candidates are too close to call)
+      — changing nothing, which is also exactly the preview of what
+      `--apply` would do. `--create-stubs` creates an empty note for
+      every broken link with no plausible suggestion, one per distinct
+      missing title per vault, always safe since it only ever adds a
+      note. `--apply` is the one tier that edits an existing note — it
+      rewrites a confidently-matched broken link's text in place, with
+      no undo outside the user's own backups/version control, since a
+      CLI run never touches the TUI's undo stack. `--vault <name>`
+      narrows *reporting*/fixing to one vault, while detection still
+      checks every mounted vault's titles as match candidates either
+      way, for accurate cross-vault suggestions. New `src/repair.rs`
+      holds the pure suggestion logic — `suggest(title, candidates)
+      -> Option<Suggestion>`, no I/O, no `Tree`/`Vault` — the same
+      logic-vs-orchestration split already established by
+      `outline.rs`, and the exact function `:brokenlinks` (below) later
+      reuses verbatim rather than duplicating the matching. `link.rs`
+      gained `rewrite_wikilink_title(body, old_title, new_title)` to
+      back the actual retargeting — same bracket-scanning idiom as
+      `extract_wikilink_titles`, used to rewrite instead of extract.
+      `main.rs`'s `perform_reindex` was refactored to share its
+      vault-loading logic (`load_and_reindex_mounted`) with the new
+      `perform_repair`, with no observable change to `reindex`/
+      `--watch`'s own output. `strsim` was already a transitive
+      dependency (`clap`'s own "did you mean" argument suggestions) —
+      promoted to direct rather than hand-rolling similarity scoring
+      from scratch, since it added no new compiled code. 9 new tests in
+      `repair.rs`.
+
+- [x] **`:brokenlinks` — the TUI-side companion to `mycora repair`**
+      (2026-07-17; backfilled 2026-07-19, see the note on the entry
+      above) — a full-pane list of every broken wikilink across every
+      mounted vault, each with the same best-guess suggestion the CLI
+      shows (`repair::suggest`, reused verbatim, no duplicated matching
+      logic between the two). Rather than trusting an automated
+      `--apply`, this is for reviewing and fixing them one at a time by
+      hand: `Enter` jumps to the link's source note *and* scrolls the
+      body preview near the broken text itself (not just the top of the
+      note, via `outline::scroll_offset_for` — despite the name and
+      module, not actually heading-specific, just renders a prefix and
+      counts lines for any byte offset), so `e` opens the body editor
+      already at the right spot on a note of any real length — an
+      ordinary manual edit needing no new mechanism, then `Esc` saves
+      like any other change. Integrates with `Ctrl+O`'s navigation
+      history (below) as a fifth jump source. `App::reindex_mounted`
+      (private) changed to return each vault's full `ReindexReport`
+      instead of a summed note count, since `begin_broken_wikilinks`
+      needs `broken_links` out of it — `command_reindex` (the one
+      caller that still wants a total) sums `report.note_count` itself
+      now; the other four call sites only ever branched on `Err`/`Ok(_)`
+      and needed no changes. No new tests landed with this commit —
+      `app.rs` had (and, until 2026-07-18's test-coverage pass a day
+      later, kept) zero unit tests of its own; this shipped on manual
+      verification alone.
+
+- [x] **Backlinks pane shows a parent hint, `Ctrl+O` navigation
+      history** (2026-07-17; backfilled 2026-07-19, see the note two
+      entries above) — two related UX additions in one commit. Backlinks
+      pane entries now name their parent, dimmed, in parentheses,
+      alongside their own title — several notes can easily share a
+      similarly worded title (more than one "Introduction" is a common
+      real case), and the parent name is usually enough to tell them
+      apart before actually jumping to one. New `App::parent_title_of`,
+      resolved the same cross-vault-aware way as every other backlinks
+      read. Separately, `Ctrl+O` jumps back to the note selected just
+      before the last search/backlinks/outgoing-links/tag-results jump,
+      vim's jumplist convention — a new session-only `nav_history`
+      stack (`Vec<NoteId>`, same shape as `undo_stack`, no redo side, no
+      inverses to compute) pushed by `record_nav_jump` right before each
+      of the four (later five, once `:brokenlinks` joined) `confirm_*`
+      jump methods reveals+selects its target. Deliberately *not* wired
+      into `set_selected` itself or plain `j`/`k` movement — that would
+      turn "walk back through your last few jumps" into "walk back
+      through your last few keystrokes." No forward counterpart
+      (`Ctrl+I`) yet — indistinguishable from `Tab` at the terminal
+      level, and `Tab` already means indent; with nothing left to go
+      back to, `Ctrl+O` is a no-op rather than an error. Session-only,
+      not persisted across restarts, same as undo/redo. No new tests
+      landed with this commit either, same `app.rs`-had-zero-tests
+      caveat as `:brokenlinks` above.
+
 - [x] **`Ctrl+L` — force a full terminal redraw** (2026-07-18,
       user-reported) — raised as "some terminals leave stray characters
       on screen": confirmed live in tmux under kitty (`$TERM
