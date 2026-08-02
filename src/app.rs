@@ -109,6 +109,16 @@ pub enum Mode {
     /// you can pick a tag to filter by without having to already know and
     /// type its exact spelling.
     TagList,
+    /// Every registered vault — active, read-only mounted, unmounted, and
+    /// archived — with its state and note count (`:vaults`/`:vaults
+    /// list`). Exists so `:tags limit <vault-name>` doesn't require
+    /// already remembering a vault's exact registry name: same full-pane
+    /// shape as `TagList`, but `Enter` on a mounted row fills `:tags limit
+    /// <name>` into the command prompt rather than acting immediately
+    /// (unmounted/archived vaults aren't valid `:tags limit` targets, so
+    /// `Enter` on those just closes the overlay). See
+    /// `App::command_vaults_list`/`confirm_vault_list`.
+    VaultList,
     /// Browsing the notes the note selected when `f` was pressed links
     /// *to* — `Backlinks`' mirror image (who this note points at, rather
     /// than who points at it), same full-pane shape as `TagResults`
@@ -355,6 +365,10 @@ pub struct App {
     /// valid for `confirm_toc`). See `App::begin_toc`.
     toc_headings: Vec<crate::outline::HeadingRef>,
     toc_selected: usize,
+    /// Every registered vault, while `mode == Mode::VaultList` — see
+    /// `App::command_vaults_list`.
+    vault_list: Vec<VaultListEntry>,
+    vault_list_selected: usize,
     /// A note/subtree marked by `x` (move) or `c` (copy), awaiting a `p`
     /// on some destination note to complete it — see
     /// `mark_pending_move`/`mark_pending_copy`/`paste_pending`. `None`
@@ -391,6 +405,37 @@ pub struct BrokenWikilinkHit {
     pub broken_title: String,
     pub vault_id: String,
     pub suggestion: Option<crate::repair::Suggestion>,
+}
+
+/// A vault's status as shown by `:vaults`/`:vaults list` — see
+/// `VaultListEntry`. Distinct from `TreeRow`'s vault-adjacent variants:
+/// this describes a vault as a whole (one row per registry entry), where
+/// `TreeRow` describes rows *within* the tree pane (a vault separator
+/// plus each of its notes, or a single placeholder row for an unmounted/
+/// archived one).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VaultState {
+    /// The sole editable, currently-mounted vault (`App::vault_id`).
+    Active,
+    /// A mounted vault other than the active one — read-only in the TUI.
+    Mounted,
+    /// Registered but not currently mounted (`mounted = false` in
+    /// `config.toml`, not archived) — nothing loaded for it.
+    Unmounted,
+    /// Registered and archived (`mycora vault archive`) — nothing on disk
+    /// to load at all, just a compressed file elsewhere.
+    Archived,
+}
+
+/// One row in `Mode::VaultList` (`:vaults`/`:vaults list`) — every
+/// registered vault, active and read-only mounted ones carrying a live
+/// note count (cheap: both already hold a fully loaded `Tree`), unmounted
+/// and archived ones carrying `None` since nothing is loaded for them to
+/// count. See `App::command_vaults_list`.
+pub struct VaultListEntry {
+    pub name: String,
+    pub state: VaultState,
+    pub note_count: Option<usize>,
 }
 
 /// One row in the tree pane, as returned by `App::visible_rows`: a note
@@ -645,6 +690,8 @@ impl App {
             broken_wikilinks_selected: 0,
             toc_headings: Vec::new(),
             toc_selected: 0,
+            vault_list: Vec::new(),
+            vault_list_selected: 0,
             pending_clipboard: None,
             attach_prompt: None,
         };
@@ -718,6 +765,8 @@ impl App {
             broken_wikilinks_selected: 0,
             toc_headings: Vec::new(),
             toc_selected: 0,
+            vault_list: Vec::new(),
+            vault_list_selected: 0,
             pending_clipboard: None,
             attach_prompt: None,
         }
@@ -2657,6 +2706,11 @@ impl App {
     ///   spanning all of them, until lifted. Errors if `<vault-name>`
     ///   isn't currently mounted. Deliberately *not* persisted in
     ///   `Session` — a temporary working focus, not a display preference
+    /// - `vaults` / `vaults list` — every registered vault (active,
+    ///   read-only mounted, unmounted, archived) with its state and note
+    ///   count, in `Mode::VaultList`; `Enter` on a mounted row fills
+    ///   `tags limit <name>` into the command prompt, so `tags limit`
+    ///   never requires already remembering a vault's exact registry name
     /// - `panes reset` — resets the split layout to `DEFAULT_PANE_WIDTHS`;
     ///   the only way back to it now that widths persist across restarts,
     ///   short of hand-editing or deleting `session.toml`
@@ -2718,6 +2772,7 @@ impl App {
             "reindex" => self.command_reindex(),
             "brokenlinks" => self.begin_broken_wikilinks(),
             "tags" => self.command_tags(args),
+            "vaults" => self.command_vaults(args),
             "panes" => self.command_panes(args),
             "export" => self.command_export(args),
             "import" => self.command_import(args),
@@ -2849,6 +2904,109 @@ impl App {
                 self.last_error = Some(self.lang.tag_list_failed(&err));
             }
         }
+    }
+
+    /// `:vaults` / `:vaults list` — both spellings run the same listing,
+    /// unlike `:tags` where a bare `:tags <name>` means something else
+    /// entirely; `:vaults` has no such competing meaning yet, so there's
+    /// no reason to make the shorter form an error. Any other argument is
+    /// a usage error, same "don't silently ignore a typo" instinct as
+    /// `:tags limit` with no name.
+    fn command_vaults(&mut self, args: &str) {
+        let trimmed = args.trim();
+        if trimmed.is_empty() || trimmed == "list" {
+            self.command_vaults_list();
+            return;
+        }
+        self.last_message = None;
+        self.last_error = Some(self.lang.vaults_usage().to_string());
+    }
+
+    /// Builds `vault_list` fresh from `self` and every registered
+    /// vault — active, other mounted, unmounted, archived, in that order
+    /// (same order `visible_rows` walks them in, for a consistent mental
+    /// map between the tree pane and this overlay). Unlike
+    /// `visible_rows`, always includes unmounted/archived rows regardless
+    /// of `show_unmounted`/`show_archived`: those flags declutter passive
+    /// tree browsing, but this is an explicit query where hiding a
+    /// registered vault would defeat the point. Note counts for the
+    /// active/mounted rows are `tree.iter().count()` — already
+    /// fully loaded in memory, no extra I/O — while unmounted/archived
+    /// rows get `None` since nothing is loaded for them to count.
+    fn command_vaults_list(&mut self) {
+        let mut entries = vec![VaultListEntry {
+            name: self.vault_id.clone(),
+            state: VaultState::Active,
+            note_count: Some(self.tree.iter().count()),
+        }];
+        entries.extend(self.other_vaults.iter().map(|v| VaultListEntry {
+            name: v.id.clone(),
+            state: VaultState::Mounted,
+            note_count: Some(v.tree.iter().count()),
+        }));
+        entries.extend(self.unmounted_vaults.iter().map(|entry| VaultListEntry {
+            name: entry.name.clone(),
+            state: VaultState::Unmounted,
+            note_count: None,
+        }));
+        entries.extend(self.archived_vaults.iter().map(|entry| VaultListEntry {
+            name: entry.name.clone(),
+            state: VaultState::Archived,
+            note_count: None,
+        }));
+
+        self.last_error = None;
+        self.last_message = None;
+        self.vault_list = entries;
+        self.vault_list_selected = 0;
+        self.mode = Mode::VaultList;
+    }
+
+    pub fn move_vault_list_selection(&mut self, delta: isize) {
+        if self.vault_list.is_empty() {
+            return;
+        }
+        let len = self.vault_list.len() as isize;
+        let new_pos = (self.vault_list_selected as isize + delta).rem_euclid(len) as usize;
+        self.vault_list_selected = new_pos;
+    }
+
+    /// `Enter` in `Mode::VaultList`. On the active vault or a read-only
+    /// mounted one — the only two states `:tags limit` actually accepts —
+    /// fills `tags limit <name>` into the command prompt and reopens
+    /// `Mode::Command` so a second `Enter` runs it, same "pick from a list
+    /// instead of typing it by hand" shortcut `draw_command_help`'s own
+    /// picker uses. An unmounted/archived row isn't a valid `:tags limit`
+    /// target, so `Enter` there just closes the overlay instead of
+    /// setting up a command that would only fail.
+    pub fn confirm_vault_list(&mut self) {
+        let Some(entry) = self.vault_list.get(self.vault_list_selected) else {
+            self.mode = Mode::Normal;
+            return;
+        };
+        match entry.state {
+            VaultState::Active | VaultState::Mounted => {
+                self.command_input = format!("tags limit {}", entry.name);
+                self.command_help_open = false;
+                self.command_help_navigated = false;
+                self.mode = Mode::Command;
+            }
+            VaultState::Unmounted | VaultState::Archived => {
+                self.mode = Mode::Normal;
+            }
+        }
+    }
+
+    pub fn cancel_vault_list(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    pub fn vault_list(&self) -> &[VaultListEntry] {
+        &self.vault_list
+    }
+
+    pub fn vault_list_selected(&self) -> usize {
+        self.vault_list_selected
     }
 
     /// Filters by `tags` (OR) and opens `Mode::TagResults` on a match —
@@ -3399,6 +3557,46 @@ mod tests {
         app.execute_command();
 
         assert_eq!(app.mode, Mode::Normal);
+
+        cleanup_scratch_db(&db_path);
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    /// `:vaults`/`:vaults list` against a fixture with no other mounted
+    /// vaults still has to surface the one it does have — active, with a
+    /// live note count read straight off the in-memory tree.
+    #[test]
+    fn vaults_list_shows_the_active_vault_with_its_note_count() {
+        let (mut app, vault_dir, db_path) = app_with_a_broken_and_a_real_link();
+
+        app.command_input = "vaults".to_string();
+        app.execute_command();
+
+        assert_eq!(app.mode, Mode::VaultList);
+        assert_eq!(app.vault_list().len(), 1);
+        let entry = &app.vault_list()[0];
+        assert_eq!(entry.name, "default");
+        assert_eq!(entry.state, VaultState::Active);
+        assert_eq!(entry.note_count, Some(2));
+
+        cleanup_scratch_db(&db_path);
+        std::fs::remove_dir_all(&vault_dir).ok();
+    }
+
+    /// The whole point of `:vaults`: picking a row hands you a ready-to-run
+    /// `:tags limit <name>` instead of requiring you to already know and
+    /// type the vault's exact registry name.
+    #[test]
+    fn enter_on_a_vault_list_row_fills_tags_limit_into_the_command_prompt() {
+        let (mut app, vault_dir, db_path) = app_with_a_broken_and_a_real_link();
+        app.command_input = "vaults".to_string();
+        app.execute_command();
+        assert_eq!(app.mode, Mode::VaultList);
+
+        app.confirm_vault_list();
+
+        assert_eq!(app.mode, Mode::Command);
+        assert_eq!(app.command_input(), "tags limit default");
 
         cleanup_scratch_db(&db_path);
         std::fs::remove_dir_all(&vault_dir).ok();

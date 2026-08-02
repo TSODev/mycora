@@ -1,4 +1,4 @@
-use crate::app::Mode;
+use crate::app::{Mode, VaultState};
 
 /// Which language the TUI renders its interface in — labels, hints,
 /// prompts, and status messages. Keybindings and command names (`:tags`,
@@ -83,6 +83,10 @@ impl Lang {
                     "restrict :tags/:tags list to one mounted vault",
                 ),
                 (":tags unlimit", "lift a :tags limit, back to every mounted vault"),
+                (
+                    ":vaults, :vaults list",
+                    "list every vault (active, mounted, unmounted, archived) with note counts",
+                ),
                 (":panes reset", "reset pane widths to the default 40/40/20"),
                 (
                     ":export <path>",
@@ -121,6 +125,10 @@ impl Lang {
                     "restreint :tags/:tags list à un seul vault monté",
                 ),
                 (":tags unlimit", "lève la limite de :tags, retour à tous les vaults"),
+                (
+                    ":vaults, :vaults list",
+                    "liste tous les vaults (actif, monté, non monté, archivé) avec le nombre de notes",
+                ),
                 (":panes reset", "réinitialise les largeurs de panneaux à 40/40/20"),
                 (
                     ":export <path>",
@@ -159,6 +167,10 @@ impl Lang {
                     "restringe :tags/:tags list a un solo vault montado",
                 ),
                 (":tags unlimit", "quita el límite de :tags, vuelve a todos los vaults"),
+                (
+                    ":vaults, :vaults list",
+                    "lista todos los vaults (activo, montado, no montado, archivado) con el número de notas",
+                ),
                 (":panes reset", "restablece los anchos de panel a 40/40/20"),
                 (
                     ":export <path>",
@@ -197,6 +209,10 @@ impl Lang {
                     "beschränkt :tags/:tags list auf einen gemounteten Vault",
                 ),
                 (":tags unlimit", "hebt die :tags-Beschränkung auf, zurück zu allen Vaults"),
+                (
+                    ":vaults, :vaults list",
+                    "listet alle Vaults (aktiv, gemountet, ausgehängt, archiviert) mit Notizanzahl",
+                ),
                 (":panes reset", "setzt die Feldbreiten auf 40/40/20 zurück"),
                 (
                     ":export <path>",
@@ -753,6 +769,18 @@ impl Lang {
             (Lang::Fr, Mode::TagList) => ("TAGS", "j/k: bouger  Enter: filtrer  Esc: annuler"),
             (Lang::Es, Mode::TagList) => ("TAGS", "j/k: mover  Enter: filtrar  Esc: cancelar"),
             (Lang::De, Mode::TagList) => ("TAGS", "j/k: bewegen  Enter: filtern  Esc: abbrechen"),
+            (Lang::En, Mode::VaultList) => {
+                ("VAULTS", "j/k: move  Enter: tags limit  Esc: cancel")
+            }
+            (Lang::Fr, Mode::VaultList) => {
+                ("VAULTS", "j/k: bouger  Enter: tags limit  Esc: annuler")
+            }
+            (Lang::Es, Mode::VaultList) => {
+                ("VAULTS", "j/k: mover  Enter: tags limit  Esc: cancelar")
+            }
+            (Lang::De, Mode::VaultList) => {
+                ("VAULTS", "j/k: bewegen  Enter: tags limit  Esc: abbrechen")
+            }
             (Lang::En, Mode::Links) => ("LINKS", "j/k: move  Enter: jump  Esc: cancel"),
             (Lang::Fr, Mode::Links) => ("LIENS", "j/k: bouger  Enter: sauter  Esc: annuler"),
             (Lang::Es, Mode::Links) => ("ENLACES", "j/k: mover  Enter: saltar  Esc: cancelar"),
@@ -822,6 +850,40 @@ impl Lang {
             Lang::Fr => "ARCHIVÉ",
             Lang::Es => "ARCHIVADO",
             Lang::De => "ARCHIVIERT",
+        }
+    }
+
+    /// The state column in `:vaults`/`:vaults list` (`draw_vault_list`).
+    /// Reuses `marker_read_only`/`marker_unmounted`/`marker_archived`
+    /// rather than separate strings — a read-only/unmounted/archived
+    /// vault is the exact same fact whether it's shown as a breadcrumb
+    /// marker for the selected note or as a row in this list.
+    pub fn vault_state_label(self, state: VaultState) -> &'static str {
+        match state {
+            VaultState::Active => match self {
+                Lang::En => "ACTIVE",
+                Lang::Fr => "ACTIF",
+                Lang::Es => "ACTIVO",
+                Lang::De => "AKTIV",
+            },
+            VaultState::Mounted => self.marker_read_only(),
+            VaultState::Unmounted => self.marker_unmounted(),
+            VaultState::Archived => self.marker_archived(),
+        }
+    }
+
+    pub fn vault_list_title(self) -> &'static str {
+        match self {
+            Lang::En | Lang::Fr | Lang::Es | Lang::De => "Vaults",
+        }
+    }
+
+    pub fn vaults_usage(self) -> &'static str {
+        match self {
+            Lang::En => "usage: :vaults or :vaults list",
+            Lang::Fr => "usage : :vaults ou :vaults list",
+            Lang::Es => "uso: :vaults o :vaults list",
+            Lang::De => "Verwendung: :vaults oder :vaults list",
         }
     }
 
@@ -1530,6 +1592,7 @@ mod tests {
                 Mode::EditBody,
                 Mode::TagResults,
                 Mode::TagList,
+                Mode::VaultList,
                 Mode::Links,
                 Mode::BrokenWikilinks,
                 Mode::Toc,

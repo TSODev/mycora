@@ -53,6 +53,7 @@ pub fn poll_and_handle(app: &mut App) -> anyhow::Result<()> {
             Mode::Command => handle_command(app, key.code),
             Mode::TagResults => handle_tag_results(app, key.code),
             Mode::TagList => handle_tag_list(app, key.code),
+            Mode::VaultList => handle_vault_list(app, key.code),
             Mode::Links => handle_links(app, key.code),
             Mode::BrokenWikilinks => handle_broken_wikilinks(app, key.code),
             Mode::Toc => handle_toc(app, key.code),
@@ -269,6 +270,16 @@ fn handle_tag_list(app: &mut App, code: KeyCode) {
         KeyCode::Esc => app.cancel_tag_list(),
         KeyCode::Char('j') | KeyCode::Down => app.move_tag_list_selection(1),
         KeyCode::Char('k') | KeyCode::Up => app.move_tag_list_selection(-1),
+        _ => {}
+    }
+}
+
+fn handle_vault_list(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Enter => app.confirm_vault_list(),
+        KeyCode::Esc => app.cancel_vault_list(),
+        KeyCode::Char('j') | KeyCode::Down => app.move_vault_list_selection(1),
+        KeyCode::Char('k') | KeyCode::Up => app.move_vault_list_selection(-1),
         _ => {}
     }
 }

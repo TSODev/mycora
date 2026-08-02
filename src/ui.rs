@@ -75,6 +75,10 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
             draw_tag_list(frame, area, app);
             return;
         }
+        Mode::VaultList => {
+            draw_vault_list(frame, area, app);
+            return;
+        }
         Mode::Links => {
             draw_links(frame, area, app);
             return;
@@ -586,6 +590,48 @@ fn draw_tag_list(frame: &mut Frame, area: Rect, app: &App) {
     let title = app.lang.tag_list_title(&tags_scope_label(app));
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
     let mut state = ListState::default().with_selected(Some(app.tag_list_selected()));
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
+/// `:vaults`/`:vaults list` (`Mode::VaultList`) — every registered
+/// vault, its state (active/read-only mounted/unmounted/archived, via
+/// `Lang::vault_state_label`) right-aligned same as the breadcrumb's own
+/// markers, and a note count badge (`Lang::notes_badge`, reused from
+/// `draw_tag_list`) where one is known. `Enter`'s "fill `:tags limit
+/// <name>`" behavior lives in `App::confirm_vault_list`, not here — this
+/// only renders.
+fn draw_vault_list(frame: &mut Frame, area: Rect, app: &App) {
+    let items: Vec<ListItem> = app
+        .vault_list()
+        .iter()
+        .enumerate()
+        .map(|(i, entry)| {
+            let style = if i == app.vault_list_selected() {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            let count = match entry.note_count {
+                Some(count) => app.lang.notes_badge(count as i64),
+                None => String::new(),
+            };
+            // `marker_width()` (per-language, sized for the widest of
+            // `marker_read_only`/`marker_unmounted`/`marker_archived` —
+            // see its own doc comment) doubles as this column's width too,
+            // since `vault_state_label` reuses those exact strings.
+            let state_width = app.lang.marker_width() as usize;
+            let label = format!(
+                "{:<20} {:<state_width$} {count}",
+                entry.name,
+                app.lang.vault_state_label(entry.state)
+            );
+            ListItem::new(Line::from(Span::styled(label, style)))
+        })
+        .collect();
+
+    let title = app.lang.vault_list_title();
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
+    let mut state = ListState::default().with_selected(Some(app.vault_list_selected()));
     frame.render_stateful_widget(list, area, &mut state);
 }
 
