@@ -688,22 +688,22 @@ impl Lang {
             (Lang::En, Mode::Normal) => (
                 "NORMAL",
                 "j/k: move  a/o: new  e: edit  d: delete  u: undo  b: backlinks  \
-                 /: search  ?: help  q: quit",
+                 Ctrl+d/u: scroll  /: search  ?: help  q: quit",
             ),
             (Lang::Fr, Mode::Normal) => (
                 "NORMAL",
                 "j/k: bouger  a/o: nouvelle  e: éditer  d: supprimer  u: annuler  \
-                 b: rétroliens  /: rechercher  ?: aide  q: quitter",
+                 b: rétroliens  Ctrl+d/u: défiler  /: rechercher  ?: aide  q: quitter",
             ),
             (Lang::Es, Mode::Normal) => (
                 "NORMAL",
                 "j/k: mover  a/o: nueva  e: editar  d: eliminar  u: deshacer  \
-                 b: retroenlaces  /: buscar  ?: ayuda  q: salir",
+                 b: retroenlaces  Ctrl+d/u: desplazar  /: buscar  ?: ayuda  q: salir",
             ),
             (Lang::De, Mode::Normal) => (
                 "NORMAL",
                 "j/k: bewegen  a/o: neu  e: bearbeiten  d: löschen  u: rückgängig  \
-                 b: Rückverweise  /: suchen  ?: Hilfe  q: beenden",
+                 b: Rückverweise  Ctrl+d/u: scrollen  /: suchen  ?: Hilfe  q: beenden",
             ),
             (Lang::En, Mode::Insert) => ("INSERT", "Enter: confirm  Esc: cancel"),
             (Lang::Fr, Mode::Insert) => ("INSERTION", "Enter: valider  Esc: annuler"),
