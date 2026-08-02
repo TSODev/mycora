@@ -258,6 +258,7 @@ impl Lang {
                 ("x", "mark for move"),
                 ("c", "mark for copy"),
                 ("p", "paste (move/copy) as last child"),
+                ("Esc", "cancel a pending move/copy mark"),
                 ("i", "rename"),
                 ("e", "edit body"),
                 ("d", "delete (asks to confirm)"),
@@ -291,6 +292,7 @@ impl Lang {
                 ("x", "marquer pour déplacer"),
                 ("c", "marquer pour copier"),
                 ("p", "coller (déplacer/copier) comme dernier enfant"),
+                ("Esc", "annuler une marque de déplacement/copie en attente"),
                 ("i", "renommer"),
                 ("e", "éditer le corps"),
                 ("d", "supprimer (demande confirmation)"),
@@ -324,6 +326,7 @@ impl Lang {
                 ("x", "marcar para mover"),
                 ("c", "marcar para copiar"),
                 ("p", "pegar (mover/copiar) como última hija"),
+                ("Esc", "cancelar una marca de mover/copiar pendiente"),
                 ("i", "renombrar"),
                 ("e", "editar cuerpo"),
                 ("d", "eliminar (pide confirmación)"),
@@ -357,6 +360,7 @@ impl Lang {
                 ("x", "zum Verschieben markieren"),
                 ("c", "zum Kopieren markieren"),
                 ("p", "einfügen (verschieben/kopieren) als letztes Kind"),
+                ("Esc", "eine ausstehende Verschieben-/Kopieren-Markierung abbrechen"),
                 ("i", "umbenennen"),
                 ("e", "Inhalt bearbeiten"),
                 ("d", "löschen (fragt nach Bestätigung)"),
@@ -683,23 +687,23 @@ impl Lang {
             // short even as more keys are added later.
             (Lang::En, Mode::Normal) => (
                 "NORMAL",
-                "j/k: move  a/o: new  e: edit  d: delete  u: undo  \
+                "j/k: move  a/o: new  e: edit  d: delete  u: undo  b: backlinks  \
                  /: search  ?: help  q: quit",
             ),
             (Lang::Fr, Mode::Normal) => (
                 "NORMAL",
                 "j/k: bouger  a/o: nouvelle  e: éditer  d: supprimer  u: annuler  \
-                 /: rechercher  ?: aide  q: quitter",
+                 b: rétroliens  /: rechercher  ?: aide  q: quitter",
             ),
             (Lang::Es, Mode::Normal) => (
                 "NORMAL",
                 "j/k: mover  a/o: nueva  e: editar  d: eliminar  u: deshacer  \
-                 /: buscar  ?: ayuda  q: salir",
+                 b: retroenlaces  /: buscar  ?: ayuda  q: salir",
             ),
             (Lang::De, Mode::Normal) => (
                 "NORMAL",
                 "j/k: bewegen  a/o: neu  e: bearbeiten  d: löschen  u: rückgängig  \
-                 /: suchen  ?: Hilfe  q: beenden",
+                 b: Rückverweise  /: suchen  ?: Hilfe  q: beenden",
             ),
             (Lang::En, Mode::Insert) => ("INSERT", "Enter: confirm  Esc: cancel"),
             (Lang::Fr, Mode::Insert) => ("INSERTION", "Enter: valider  Esc: annuler"),
