@@ -7,6 +7,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-08-03
+
+### Added
+- **`:vaults` / `:vaults list`**: lists every registered vault — active,
+  read-only mounted, unmounted, archived — with its state and note count,
+  so `:tags limit <vault-name>` no longer requires already remembering a
+  vault's exact registry name. `Enter` on a mounted row fills `tags limit
+  <name>` into the command prompt rather than acting immediately,
+  mirroring `:tags list`'s own pick-to-fill flow.
+- **A printable keyboard reference card** (`mycora-keymap.html`/`.pdf`, at
+  the repo root): an A4-landscape sheet modeled on terapi's own reference
+  card, recolored to Mycora's in-app palette. Page 1 covers Normal-mode
+  keybindings grouped by area (navigation, create/rename/delete, editing,
+  clipboard, search/backlinks/links, TOC, broken links, tags); page 2 is a
+  full command-palette reference with descriptions, the popup's pick-then-
+  Enter behavior, headless CLI equivalents, and quick tips.
+- **`examples/rust-vault/`**: a second demo vault (25 notes, in French)
+  covering Rust's core language features and tooling — ownership/
+  borrowing, traits, error handling, Cargo/rustup/Clippy — cross-linked
+  with `[[wikilinks]]`, same shape as `examples/showcase-vault/`. A
+  second real vault to test multi-vault mounting against, not just one.
+
+### Fixed
+- **The Normal-mode hint bar was missing `b` (Backlinks mode)** and
+  `Ctrl+d`/`Ctrl+u` (scroll the body preview) — both now show alongside
+  the rest of the curated key subset.
+- **`Esc` (cancel a pending move/copy mark) had no entry anywhere** in the
+  full help reference (`?`) — auditing every `handle_normal` key against
+  `Lang::help_reference` turned up the gap; it's now documented in all
+  four languages.
+
 ## [0.15.0] — 2026-07-19
 
 ### Added
