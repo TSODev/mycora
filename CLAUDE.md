@@ -24,8 +24,15 @@ non-obvious decision along the way.
 `examples/showcase-vault/` is a real, committed Mycora vault documenting
 Mycora itself (philosophy, interface, features, design decisions, as
 interlinked notes) — a good first thing to open when getting oriented, and
-a working example of the on-disk file format. Published on crates.io as
-`mycora`.
+a working example of the on-disk file format. `examples/rust-vault/` is a
+second, smaller (25-note, French) demo vault about Rust itself — ownership/
+borrowing, traits, error handling, Cargo/rustup/Clippy — same cross-linked
+shape, useful as a second real vault when testing multi-vault mounting
+rather than a single one. `mycora-keymap.html`/`.pdf` (repo root) is a
+printable A4-landscape keyboard/command reference card, modeled on
+terapi's own `terapi-keymap.html`; regenerate by hand if keybindings or
+commands change, it isn't derived from `lang.rs` at build time. Published
+on crates.io as `mycora`.
 
 ## Commands
 
@@ -414,7 +421,8 @@ directly and guarantee its synthetic output matches the real on-disk format.
   `Tree` + `Vault`, every other mounted-but-read-only vault
   (`ReadOnlyVault { id, tree, vault }`), and the shared `Index`. `Mode` is
   `Normal | Insert | ConfirmDelete | Search | Backlinks | EditBody |
-  Command | TagResults | TagList | Links | BrokenWikilinks | Toc | Help` — dispatch lives in `event.rs`, rendering in
+  Command | TagResults | TagList | VaultList | Links | BrokenWikilinks |
+  Toc | Help` — dispatch lives in `event.rs`, rendering in
   `ui.rs` (see those files' notes on which modes are full-pane overlays vs.
   status-bar-only prompts vs. in-place pane focus). Every mutating method
   (`create_child`, `commit_rename`, `confirm_delete`, `indent_selected`,
@@ -499,6 +507,13 @@ directly and guarantee its synthetic output matches the real on-disk format.
   either — and `require_editable(id)` is the guard every mutating
   method checks first, refusing with `last_error` rather than silently
   no-oping or acting on the wrong vault if `id` isn't in the active tree.
+  `:vaults`/`:vaults list` (`Mode::VaultList`, `command_vaults_list`) lists
+  every registered vault — active, other mounted, unmounted, archived, in
+  the same order `visible_rows` walks them — with its state and a note
+  count where one's loaded, so `:tags limit <vault-name>` doesn't require
+  already remembering a vault's exact registry name; `Enter` on a mounted
+  row fills `tags limit <name>` into the command prompt rather than acting
+  immediately, mirroring `:tags list`'s own pick-to-fill flow.
   `Lang::command_reference()` (`&[(syntax, description)]`, in `lang.rs`)
   is the single source both `execute_command`'s dispatch and `ui.rs`'s
   command-palette help popup read from — keep the two in sync by hand
