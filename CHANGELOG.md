@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.16.1] — 2026-08-17
+
 ### Fixed
 - **The Windows release binary failed to launch on a fresh machine** with
   "The code execution cannot proceed because VCRUNTIME140.dll was not
