@@ -22,6 +22,15 @@ No Rust, no C compiler, nothing else to install.
 That's it — Mycora creates its config and a starter vault on first run
 (see [Where things live](#where-things-live) below).
 
+If Windows refuses to launch `mycora.exe` with "The code execution
+cannot proceed because VCRUNTIME140.dll was not found", you've got a
+release built before 0.16.1 — the C++ runtime is statically linked into
+the binary as of that release, so re-downloading the latest one fixes
+it with nothing else to install. For an older release, installing the
+[Visual C++
+Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) works
+too.
+
 To run `mycora` from any directory without typing the full path each
 time, move `mycora.exe` somewhere already on your `PATH` (e.g.
 `%USERPROFILE%\bin`, adding that folder to `PATH` via *Edit environment
@@ -84,8 +93,9 @@ configured font and code page.
 Windows support is new as of this writing: the code paths above
 (`dirs`-based config/data/vault-path resolution) work correctly on
 Linux and macOS today, and have been reasoned through carefully for
-Windows, but haven't yet been exercised on a real Windows machine by
-the people building Mycora. If something above doesn't work as
-described, please [open an
+Windows, but are only lightly exercised so far on a real Windows
+machine by the people building Mycora — the missing-`VCRUNTIME140.dll`
+issue above is the first real-world report and is already fixed. If
+something above doesn't work as described, please [open an
 issue](https://github.com/TSODev/mycora/issues) — Windows-specific bug
 reports are especially useful right now.

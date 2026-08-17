@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **The Windows release binary failed to launch on a fresh machine** with
+  "The code execution cannot proceed because VCRUNTIME140.dll was not
+  found" — `windows-release.yml` now builds with
+  `RUSTFLAGS=-C target-feature=+crt-static`, statically linking the MSVC
+  C/C++ runtime into `mycora.exe` instead of depending on the Visual C++
+  Redistributable being installed on the target machine. First real-world
+  Windows report since Windows support shipped in 0.16.0.
+
 ## [0.16.0] — 2026-08-03
 
 ### Added

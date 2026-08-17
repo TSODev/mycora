@@ -28,6 +28,14 @@ jobs:
         run: rustup update stable --no-self-update
 
       - name: Build
+        # Statically link the MSVC C/C++ runtime (vcruntime140.dll,
+        # msvcp140.dll, ...) into mycora.exe instead of depending on it
+        # being present on the target machine. Without this, a fresh
+        # Windows install without the Visual C++ Redistributable fails to
+        # launch the binary with "VCRUNTIME140.dll was not found" —
+        # confirmed on a real Windows 11 machine, see INSTALL-WINDOWS.md.
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
         run: cargo build --release --locked
 
       - name: Package
