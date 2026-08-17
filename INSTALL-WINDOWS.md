@@ -26,10 +26,10 @@ If Windows refuses to launch `mycora.exe` with "The code execution
 cannot proceed because VCRUNTIME140.dll was not found", you've got a
 release built before 0.16.1 — the C++ runtime is statically linked into
 the binary as of that release, so re-downloading the latest one fixes
-it with nothing else to install. For an older release, installing the
-[Visual C++
-Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) works
-too.
+it with nothing else to install. **Confirmed fixed on a real Windows 11
+machine as of 0.16.1.** For an older release, installing the [Visual
+C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+works too.
 
 To run `mycora` from any directory without typing the full path each
 time, move `mycora.exe` somewhere already on your `PATH` (e.g.
@@ -94,8 +94,9 @@ Windows support is new as of this writing: the code paths above
 (`dirs`-based config/data/vault-path resolution) work correctly on
 Linux and macOS today, and have been reasoned through carefully for
 Windows, but are only lightly exercised so far on a real Windows
-machine by the people building Mycora — the missing-`VCRUNTIME140.dll`
-issue above is the first real-world report and is already fixed. If
-something above doesn't work as described, please [open an
+machine by the people building Mycora. The missing-`VCRUNTIME140.dll`
+issue above was the first real-world report — fixed in 0.16.1 and
+**confirmed working on a real Windows 11 machine**. If something above
+doesn't work as described, please [open an
 issue](https://github.com/TSODev/mycora/issues) — Windows-specific bug
 reports are especially useful right now.
